@@ -1,0 +1,5 @@
+cmake-build-debug/
+__pycache__/
+/out/
+.vscode/
+.idea/

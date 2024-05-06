@@ -1,0 +1,50 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+cat <<HERE
+usage: $0 [options] FILE
+
+options:
+  -h,--help  Show this help
+  -o FILE    Output file
+HERE
+}
+
+script_dir=$(dirname "$0")
+cd "$script_dir/.."
+
+while test $# -gt 0 ; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -o)
+      shift
+      output_file="$1"
+      ;;
+    *)
+      if [ -n "$input_file" ] ; then
+        echo "Unexpected argument: $1"
+        usage
+        exit 1
+      fi
+      input_file="$1"
+      ;;
+  esac
+  shift
+done
+
+if [ -z "$input_file" ] ; then
+  echo "No input file specified"
+  exit 1
+fi
+
+exe_file="${output_file:-a.out}"
+
+scripts/compile -o "$exe_file" "$input_file"
+
+echo "Running $exe_file"
+./"$exe_file"

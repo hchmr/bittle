@@ -1,0 +1,33 @@
+//# exit = 8
+
+func printf(fmt: *Char, ...);
+
+func binary_search(xs: *Int, n: Int, key: Int): Int {
+    var lo = 0;
+    var hi = n;
+    while (lo < hi) {
+        var mid = (hi - lo) / 2 + lo;
+        if (xs[mid] < key) {
+            lo = mid + 1;
+        } else if (xs[mid] > key) {
+            hi = mid;
+        } else {
+            return mid;
+        }
+    }
+    return -lo;
+}
+
+func main(): Int {
+    var xs: [Int; 10];
+
+    // Fill the array
+    var i = 0;
+    while (i < 10) {
+        xs[i] = i + 1;
+        i = i + 1;
+    }
+
+    var key = 9;
+    return binary_search(&xs[0], 11, key);
+}

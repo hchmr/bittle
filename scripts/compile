@@ -1,0 +1,82 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+  CAT <<HERE
+usage: $0 [options] FILE
+
+options:
+  -h,--help  Show this help
+  -o FILE    Output file
+  -S         Only run compile step
+  -c         Only run compile and assemble steps
+HERE
+}
+
+script_dir=$(dirname "$0")
+cd "$script_dir/.."
+
+while test $# -gt 0; do
+  case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -o)
+    shift
+    output_file="$1"
+    ;;
+  -S)
+    compile_only=1
+    ;;
+  -c)
+    compile_and_assemble_only=1
+    ;;
+  *)
+    if [ -n "$input_file" ]; then
+      echo "Unexpected argument: $1"
+      usage
+      exit 1
+    fi
+    input_file="$1"
+    ;;
+  esac
+  shift
+done
+
+if [ -z "$input_file" ]; then
+  echo "No input file specified"
+  exit 1
+fi
+
+exe_file="${output_file:-a.out}"
+
+out_dir=$(dirname "$exe_file")
+
+asm_file="$out_dir/$(basename "$input_file" .cog).s"
+obj_file="$out_dir/$(basename "$input_file" .cog).o"
+
+# Compile compiler
+
+echo "Compiling compiler"
+cmake --build bootstrap/cmake-build-debug
+
+# Compile
+
+echo "Compiling $input_file to $asm_file"
+bootstrap/cmake-build-debug/cog0 <"$input_file" >"$asm_file"
+
+if [ -n "$compile_only" ]; then
+  exit 0
+fi
+
+echo "Assembling $asm_file to $obj_file"
+as -g -o "$obj_file" "$asm_file"
+
+if [ -n "$compile_and_assemble_only" ]; then
+  exit 0
+fi
+
+echo "Linking $obj_file to $exe_file"
+ld -lSystem -syslibroot "$(xcrun -sdk macosx --show-sdk-path)" -o "$exe_file" "$obj_file"

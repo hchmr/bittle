@@ -1,0 +1,492 @@
+func printf(fmt: *Char, ...): Int32;
+func getchar(): Int32;
+func strcmp(a: *Char, b: *Char): Int32;
+func realloc(ptr: *Void, size: Int64): *Void;
+func strlen(s: *Char): Int64;
+func sprintf(s: *Char, fmt: *Char, ...): Int32;
+func memcpy(dst: *Void, src: *Void, size: Int64): *Void;
+func exit(code: Int32): Void;
+func atoi(s: *Char): Int32;
+func strdup(s: *Char): *Char;
+
+//= Misc
+
+struct Pos {
+    line: Int,
+    col: Int,
+}
+
+func error_at(pos: *Pos, fmt: *Char, ...) {
+    printf("%d:%d: Error: \n", pos.line, pos.col);
+    printf("Raw message: %s\n", fmt); // TODO: Variadic arguments
+    exit(1);
+}
+
+func str_eq(a: *Char, b: *Char): Bool {
+    return strcmp(a, b) == 0;
+}
+
+func align_up(size: Int , align: Int): Int {
+    return (size + align - 1) / align * align;
+}
+
+func ilog2(n: Int): Int {
+    var i = 0;
+    while (n > 1) {
+        n = n >> 1;
+        i += 1;
+    }
+    return i;
+}
+
+func sb_push(buf_p: *(*Char), c: Char): Void {
+    var len = *buf_p ? strlen(*buf_p) : 0;
+    *buf_p = realloc(*buf_p, len + 2);
+    (*buf_p)[len] = c;
+    (*buf_p)[len + 1] = '\0';
+}
+
+func sb_append(buf_p: *(*Char), str: *Char): Void {
+    while (*str != '\0') {
+        sb_push(buf_p, *str);
+        str = &str[1];
+    }
+}
+
+func sb_append_int(buf_p: *(*Char), n: Int): Void {
+    var s: [Char; 22]; // sign + 20 digits + \0
+    sprintf(&s[0], "%d", n);
+    sb_append(buf_p, &s[0]);
+}
+
+//= Characters
+
+var chr: Char;
+var chr_pos: Pos;
+
+func next_char() {
+    if (chr_pos.line == 0) {
+        chr_pos.line = 1;
+    }
+    if (chr == '\n') {
+        chr_pos.line += 1;
+        chr_pos.col = 1;
+    } else {
+        chr_pos.col += 1;
+    }
+    chr = getchar() as Char;
+}
+
+func is_space(c: Char): Bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+func is_print(c: Char): Bool {
+    return c >= 32 as Char && c <= 126 as Char;
+}
+
+func is_digit(c: Char): Bool {
+    return c >= '0' && c <= '9';
+}
+
+func is_alpha(c: Char): Bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+func is_operator(c: Char): Bool {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '=' || c == '!' || c == '<' || c == '>' ||
+           c == '&' || c == '|' || c == '.';
+}
+
+//= Tokens
+
+enum {
+    Tok_Eof,
+    Tok_Int,
+    Tok_Chr,
+    Tok_Str,
+    Tok_Wrd,
+    Tok_Sym,
+}
+
+var tok: Int;
+var tok_pos: Pos;
+var lexeme: *Char;
+
+func scan_char() {
+    var c: Char;
+    if (chr == '\\') {
+        next_char();
+        if (chr == '0') {
+            c = '\0';
+        } else if (chr == 'n') {
+            c = '\n';
+        } else if (chr == 'r') {
+            c = '\r';
+        } else if (chr == 't') {
+            c = '\t';
+        } else if (chr == '\\') {
+            c = '\\';
+        } else if (chr == '\'') {
+            c = '\'';
+        } else if (chr == '\"') {
+            c = '\"';
+        } else {
+            error_at(&chr_pos, "Invalid escape sequence.");
+        }
+    } else if (is_print(chr)) {
+        c = chr;
+    } else {
+        error_at(&chr_pos, "Illegal character.");
+    }
+    sb_push(&lexeme, c);
+    next_char();
+}
+
+func next_tok() {
+    tok_pos = chr_pos;
+    lexeme = null;
+    if (chr == -1) {
+        tok = Tok_Eof;
+    } else if (is_space(chr)) {
+        next_char();
+        return next_tok();
+    } else if (is_digit(chr)) {
+        while (is_digit(chr)) {
+            sb_push(&lexeme, chr);
+            next_char();
+        }
+        tok = Tok_Int;
+    } else if (chr == '\'') {
+        next_char();
+        if (chr == '\'') {
+            error_at(&chr_pos, "Empty character.");
+        }
+        scan_char();
+        if (chr != '\'') {
+            error_at(&chr_pos, "Expected closing quote.");
+        }
+        next_char();
+        tok = Tok_Chr;
+    } else if (chr == '\"') {
+        next_char();
+        while (chr != -1 && chr != '\"') {
+            scan_char();
+        }
+        if (chr != '\"') {
+            error_at(&chr_pos, "Expected closing quote.");
+        }
+        next_char();
+        tok = Tok_Str;
+    } else if (is_alpha(chr) || chr == '_') {
+        while (is_alpha(chr) || is_digit(chr) || chr == '_') {
+            sb_push(&lexeme, chr);
+            next_char();
+        }
+        tok = Tok_Wrd;
+    } else if (is_operator(chr)) {
+        while (is_operator(chr)) {
+            sb_push(&lexeme, chr);
+            next_char();
+            if (str_eq(lexeme, "//")) {
+                while (chr != '\n' && chr != -1) {
+                    next_char();
+                }
+                return next_tok();
+            }
+        }
+        tok = Tok_Sym;
+    } else {
+        sb_push(&lexeme, chr);
+        next_char();
+        tok = Tok_Sym;
+    }
+    sb_push(&lexeme, '\0');
+    printf("tok = \"%s\"\n", lexeme);
+}
+
+//= Parsing
+
+func at(str: *Char): Bool {
+    return (tok == Tok_Sym || tok == Tok_Wrd) && str_eq(lexeme, str);
+}
+
+func eat(str: *Char): Bool {
+    if (!at(str))
+        return false;
+    next_tok();
+    return true;
+}
+
+func expect(str: *Char) {
+    printf("expect(\"%s\")\n", str);
+    if (!eat(str)) {
+        error_at(&tok_pos, "'%s' expected.", str);
+    }
+}
+
+func p_lexeme(): *Char {
+    var prev_lexeme = strdup(lexeme);
+    next_tok();
+    return prev_lexeme;
+}
+
+func p_ident(): *Char {
+    if (tok != Tok_Wrd) {
+        error_at(&tok_pos, "Identifier expected.");
+    }
+    return p_lexeme();
+}
+
+func p_comma(end: *Char) {
+    if (!eat(",") && !at(end)) {
+        error_at(&tok_pos, "',' or '%s' expected.", end);
+    }
+}
+
+func p_const_expr();
+
+func p_type() {
+    printf("p_type()\n");
+    if (eat("(")) {
+        p_type();
+        expect(")");
+    } else if (tok == Tok_Wrd) {
+        p_ident();
+    } else if (eat("*")) {
+        p_type();
+    } else if (eat("[")) {
+        p_type();
+        expect(";");
+        p_const_expr();
+        expect("]");
+    } else {
+        error_at(&tok_pos, "Type expected.");
+    }
+}
+
+enum {
+    Prec_Assign,
+    Prec_Cond,
+    Prec_CondOr,
+    Prec_CondAnd,
+    Prec_BitOr,
+    Prec_BitXor,
+    Prec_BitAnd,
+    Prec_Cmp,
+    Prec_Shift,
+    Prec_Add,
+    Prec_Mul,
+    Prec_Cast,
+    Prec_Unary,
+    Prec_Postfix,
+}
+
+func p_expr(max_prec: Int) {
+    printf("p_expr(%d)\n", max_prec);
+    if (eat("(")) {
+        p_expr(0);
+        expect(")");
+    } else if (at("null")) {
+        next_tok();
+    } else if (at("true") || at("false")) {
+        next_tok();
+    } else if (tok == Tok_Int) {
+        next_tok();
+    } else if (tok == Tok_Chr) {
+        next_tok();
+    } else if (tok == Tok_Str) {
+        next_tok();
+    } else if (eat("sizeof")) {
+        expect("(");
+        p_type();
+        expect(")");
+    } else if (tok == Tok_Wrd) {
+        p_ident();
+        if (eat("(")) {
+            while (!eat(")")) {
+                p_expr(0);
+                p_comma(")");
+            }
+        }
+    } else if (eat("*")) {
+        p_expr(Prec_Unary);
+    } else if (eat("&")) {
+        p_expr(Prec_Unary);
+    } else if ((eat("!"))) {
+        p_expr(Prec_Unary);
+    } else if (eat("~")) {
+        p_expr(Prec_Unary);
+    } else if (eat("-")) {
+        p_expr(Prec_Unary);
+    } else {
+        error_at(&tok_pos, "Expression expected.");
+    }
+
+    while (true) {
+        if (max_prec <= Prec_Assign && eat("=")) {
+            p_expr(Prec_Assign + 1);
+        } else if (max_prec <= Prec_Assign && eat("+=")) {
+            p_expr(Prec_Assign + 1);
+        } else if (max_prec <= Prec_Assign && eat("-=")) {
+            p_expr(Prec_Assign + 1);
+        } else if (max_prec <= Prec_Cond && eat("?")) {
+            p_expr(Prec_Cond);
+            expect(":");
+            p_expr(Prec_Cond);
+        } else if (max_prec <= Prec_CondOr && eat("||")) {
+            p_expr(Prec_CondOr + 1);
+        } else if (max_prec <= Prec_CondAnd && eat("&&")) {
+            p_expr(Prec_CondAnd + 1);
+        } else if (max_prec <= Prec_BitOr && eat("|")) {
+            p_expr(Prec_BitOr + 1);
+        } else if (max_prec <= Prec_BitXor && eat("^")) {
+            p_expr(Prec_BitXor + 1);
+        } else if (max_prec <= Prec_BitAnd && eat("&")) {
+            p_expr(Prec_BitAnd + 1);
+        } else if (max_prec <= Prec_Cmp && eat("==")) {
+            p_expr(Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat("!=")) {
+            p_expr(Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat("<")) {
+            p_expr(Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat("<=")) {
+            p_expr(Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(">")) {
+            p_expr(Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(">=")) {
+            p_expr(Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Shift && eat("<<")) {
+            p_expr(Prec_Shift + 1);
+        } else if (max_prec <= Prec_Shift && eat(">>")) {
+            p_expr(Prec_Shift + 1);
+        } else if (max_prec <= Prec_Add && eat("+")) {
+            p_expr(Prec_Add + 1);
+        } else if (max_prec <= Prec_Add && eat("-")) {
+            p_expr(Prec_Add + 1);
+        } else if (max_prec <= Prec_Mul && eat("*")) {
+            p_expr(Prec_Mul + 1);
+        } else if (max_prec <= Prec_Mul && eat("/")) {
+            p_expr(Prec_Mul + 1);
+        } else if (max_prec <= Prec_Mul && eat("%")) {
+            p_expr(Prec_Mul + 1);
+        } else if (max_prec <= Prec_Cast && eat("as")) {
+            p_type();
+        } else if (max_prec <= Prec_Postfix && eat("[")) {
+            p_expr(0);
+            expect("]");
+        } else if (max_prec <= Prec_Postfix && eat(".")) {
+            p_ident();
+        } else {
+            return;
+        }
+    }
+}
+
+func p_const_expr() {
+    p_expr(0);
+}
+
+func p_stmt() {
+    printf("p_stmt()\n");
+    if (eat("{")) {
+        while (!eat("}")) {
+            p_stmt();
+        }
+    } else if (eat("var")) {
+        p_ident();
+        if (eat(":")) {
+            p_type();
+        }
+        if (eat("=")) {
+            p_expr(0);
+        }
+        expect(";");
+    } else if (eat("if")) {
+        expect("(");
+        p_expr(0);
+        expect(")");
+        p_stmt();
+        if (eat("else")) {
+            p_stmt();
+        }
+    } else if (eat("while")) {
+        expect("(");
+        p_expr(0);
+        expect(")");
+        p_stmt();
+    } else if (eat("return")) {
+        if (!at(";")) {
+            p_expr(0);
+        }
+        expect(";");
+    } else {
+        p_expr(0);
+        expect(";");
+    }
+}
+
+func p_decl() {
+    if (eat("func")) {
+        p_ident();
+        expect("(");
+        while (!at(")") && !at("...")) {
+            p_ident();
+            expect(":");
+            p_type();
+            p_comma(")");
+        }
+        eat("...");
+        expect(")");
+        if (eat(":")) {
+            p_type();
+        }
+        if (at("{")) {
+            p_stmt();
+        } else {
+            expect(";");
+        }
+    } else if (eat("var")) {
+        p_ident();
+        if (eat(":")) {
+            p_type();
+        }
+        if (eat("=")) {
+            p_expr(0);
+        }
+        expect(";");
+    } else if (eat("const")) {
+        p_ident();
+        expect("=");
+        p_expr(0);
+        expect(";");
+    } else if (eat("struct")) {
+        p_ident();
+        expect("{");
+        while (!eat("}")) {
+            p_ident();
+            expect(":");
+            p_type();
+            p_comma("}");
+        }
+    } else if (eat("enum")) {
+        expect("{");
+        while (!eat("}")) {
+            p_ident();
+            if (eat("=")) {
+                p_const_expr();
+            }
+            p_comma("}");
+        }
+    } else {
+        error_at(&tok_pos, "Declaration expected.");
+    }
+}
+
+func main() {
+    next_char();
+    next_tok();
+    while (tok != Tok_Eof) {
+        p_decl();
+    }
+}
