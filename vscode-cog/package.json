@@ -1,0 +1,37 @@
+{
+    "name": "vscode-cog",
+    "version": "0.0.1",
+    "displayName": "Cog",
+    "description": "Language support for Cog",
+    "engines": {
+        "vscode": "^1.22.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "grammars": [
+            {
+                "language": "cog",
+                "scopeName": "source.cog",
+                "path": "./cog.tmLanguage.json"
+            }
+        ],
+        "languages": [
+            {
+                "id": "cog",
+                "aliases": [
+                    "Cog"
+                ],
+                "extensions": [
+                    ".cog"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ]
+    },
+    "activationEvents": [
+        "*.cog"
+    ]
+}
