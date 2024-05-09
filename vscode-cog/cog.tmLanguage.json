@@ -1,13 +1,18 @@
 {
-    "name": "MyLanguage",
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Cog",
     "scopeName": "source.cog",
     "fileTypes": [
         "cog"
     ],
     "patterns": [
         {
-            "name": "keyword.cog",
-            "match": "\\b(as|const|else|enum|extern|false|func|if|null|return|sizeof|struct|true|var|while)\\b"
+            "name": "keyword.control.cog",
+            "match": "\\b(if|else|return|while)\\b"
+        },
+        {
+            "name": "keyword.regular.cog",
+            "match": "\\b(as|const|enum|extern|false|func|null|sizeof|struct|true|var)\\b"
         },
         {
             "name": "comment.line.cog",
@@ -27,6 +32,10 @@
                     "match": "\\\\."
                 }
             ]
+        },
+        {
+            "name": "entity.name.function",
+            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*\\()"
         },
         {
             "name": "variable.other.cog",
