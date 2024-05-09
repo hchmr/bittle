@@ -297,6 +297,7 @@ void enter_scope(void) {
 }
 
 void leave_scope(void) {
+    sym_count = first_sym[scope_depth];
     scope_depth -= 1;
 }
 
@@ -362,14 +363,14 @@ void add_global(bool is_extern, char *name, Type *type, Pos *pos) {
 
 void add_const(char *name, int value, Pos *pos) {
     Symbol *constant = mk_sym(Sym_Const, name);
-    constant->type = mk_type(Type_Int);
+    constant->type = mk_int_type(8);
     constant->value = value;
     add_sym(constant, pos);
 }
 
 bool func_eq(Symbol *a, Symbol *b) {
     assert(a->kind == Sym_Func);
-    if (a->param_count != b->param_count || a->is_variadic != b->is_variadic)
+    if (a->param_count != b->param_count || a->is_variadic != b->is_variadic || !type_eq(a->type, b->type))
         return false;
     for (int i = 0; i < a->param_count; i++) {
         if (!type_eq(a->param_types[i], b->param_types[i]))
@@ -433,6 +434,8 @@ Expr *mk_expr_1(char *kind, Expr *e1, Type *type) {
 }
 
 void try_coerce(Expr **expr_p, Type *target) {
+    if (type_eq((*expr_p)->type, target))
+        return;
     if (type_le((*expr_p)->type, target)) {
         *expr_p = mk_expr_1("as", *expr_p, target);
     } else if ((*expr_p)->type->kind == Type_Int && target->kind == Type_Int) {
@@ -626,7 +629,6 @@ void next_tok(void) {
 
 int label_count;
 int temp_stack_top;
-int stack_arg_top;
 
 const char *strx(Type *type) {
     if (type_size(type) == 1)
@@ -668,10 +670,10 @@ void emit_pop(int reg) {
     temp_stack_top -= 8;
 }
 
-void emit_arg_push(Expr *e, int reg) {
-    stack_arg_top += 8;
-    assert(stack_arg_top <= FRAME_ARGS_SIZE);
-    printf("  str x%d, [sp, #%d]\n", reg, stack_arg_top - 8);
+void emit_arg_push(int *arg_offset, Expr *e, int reg) {
+    *arg_offset += 8;
+    assert(*arg_offset <= FRAME_ARGS_SIZE);
+    printf("  str x%d, [sp, #%d]\n", reg, *arg_offset - 8);
 }
 
 void emit_sign_extend(Type *source, int t0, int t1) {
@@ -735,7 +737,7 @@ void emit_lvalue(Expr *e, int t0) {
         emit_lvalue(e->args[0], t0);
         printf("  add x%d, x%d, #%d ; &%s\n", t0, t0, field_offset, field_name);
     } else if (str_eq(e->kind, "*_")) {
-        emit_expr(e->args[0], 0);
+        emit_expr(e->args[0], t0);
     } else if (str_eq(e->kind, "_[_]")) {
         int t1 = t0 == 0 ? 1 : 0;
         if (e->args[0]->type->kind == Type_Ptr) {
@@ -776,7 +778,7 @@ void emit_expr(Expr *e, int t0) {
         printf("  add x%d, x%d, .str.%d@PAGEOFF\n", t0, t0, label);
     } else if (str_eq(e->kind, "_(_)")) {
         Symbol *sym = e->sym;
-        stack_arg_top = 0;
+        int arg_offset = 0;
 
         int arg_idx = 0;
         while (arg_idx < e->arg_count) {
@@ -784,7 +786,7 @@ void emit_expr(Expr *e, int t0) {
             emit_expr(arg, 0);
             if (arg_idx >= sym->param_count) {
                 assert(sym->is_variadic);
-                emit_arg_push(arg, 0);
+                emit_arg_push(&arg_offset, arg, 0);
             } else {
                 emit_push(0);
             }
@@ -1243,7 +1245,7 @@ int const_eval(Expr *e) {
     } else if (str_eq(e->kind, "_+_")) {
         return const_eval(e->args[0]) + const_eval(e->args[1]);
     } else {
-        error_at(&e->pos, "Constant evaluation not supported (yet).");
+        error_at(&e->pos, "Constant evaluation failed.");
     }
 }
 
@@ -1287,9 +1289,10 @@ void p_stmt(void) {
 
         add_local(name, type, &tok_pos);
         if (init != NULL) {
-            int offset = find_sym(name)->frame_offset;
-            emit_expr(init, 0);
-            printf("  %s0, [fp, #-%d] ; %s\n", strx(type), offset, name);
+            Symbol *sym = find_sym(name);
+            Expr *lhs = mk_expr("<var>", sym->type, &tok_pos);
+            lhs->sym = sym;
+            emit_expr(build_binary_expr(lhs, "_=_", init), 0);
         }
     } else if (eat("if")) {
         int label = label_count += 1;
@@ -1405,9 +1408,9 @@ void p_decl(void) {
         if (at("{")) {
             current_func->defined = true;
         }
-        add_func(current_func, &start_pos);
 
         if (!is_extern && at("{")) {
+            add_func(current_func, &start_pos);
             printf("  .global _%s\n", name);
             printf("_%s:\n", name);
             printf("  stp x29, x30, [sp, #-16]!\n");
@@ -1423,6 +1426,8 @@ void p_decl(void) {
             expect(";");
         }
         leave_scope();
+        add_func(current_func, &start_pos);
+
         current_func = NULL;
     } else if (eat("var")) {
         char *name = p_ident();
