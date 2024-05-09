@@ -1,13 +1,23 @@
-func printf(fmt: *Char, ...): Int32;
-func getchar(): Int32;
-func strcmp(a: *Char, b: *Char): Int32;
-func realloc(ptr: *Void, size: Int64): *Void;
-func strlen(s: *Char): Int64;
-func sprintf(s: *Char, fmt: *Char, ...): Int32;
-func memcpy(dst: *Void, src: *Void, size: Int64): *Void;
-func exit(code: Int32): Void;
-func atoi(s: *Char): Int32;
-func strdup(s: *Char): *Char;
+// stdio
+extern struct File;
+extern var __stdinp: *File;
+extern var __stdoutp: *File;
+extern var __stderrp: *File;
+
+extern func printf(fmt: *Char, ...): Int32;
+extern func fprintf(file: *File, fmt: *Char, ...): Int32;
+extern func sprintf(buf: *Char, fmt: *Char, ...): Int32;
+extern func getchar(): Int32;
+
+// stdlib
+extern func exit(status: Int32);
+extern func calloc(count: Int, size: Int): *Void;
+extern func realloc(ptr: *Void, size: Int): *Void;
+
+// string
+extern func strlen(s: *Char): Int;
+extern func strcmp(a: *Char, b: *Char): Int32;
+extern func strdup(s: *Char): *Char;
 
 //= Misc
 
@@ -16,10 +26,8 @@ struct Pos {
     col: Int,
 }
 
-func error_at(pos: *Pos, fmt: *Char, ...) {
-    printf("%d:%d: Error: \n", pos.line, pos.col);
-    printf("Raw message: %s\n", fmt); // TODO: Variadic arguments
-    exit(1);
+func error_at(pos: *Pos) {
+    fprintf(__stderrp, "%d:%d: Error: ", pos.line, pos.col);
 }
 
 func str_eq(a: *Char, b: *Char): Bool {
@@ -132,12 +140,16 @@ func scan_char() {
         } else if (chr == '\"') {
             c = '\"';
         } else {
-            error_at(&chr_pos, "Invalid escape sequence.");
+            error_at(&chr_pos);
+            fprintf(__stderrp, "Invalid escape sequence.");
+            exit(1);
         }
     } else if (is_print(chr)) {
         c = chr;
     } else {
-        error_at(&chr_pos, "Illegal character.");
+        error_at(&chr_pos);
+        fprintf(__stderrp, "Illegal character.");
+        exit(1);
     }
     sb_push(&lexeme, c);
     next_char();
@@ -160,11 +172,15 @@ func next_tok() {
     } else if (chr == '\'') {
         next_char();
         if (chr == '\'') {
-            error_at(&chr_pos, "Empty character.");
+            error_at(&chr_pos);
+            fprintf(__stderrp, "Empty character.");
+            exit(1);
         }
         scan_char();
         if (chr != '\'') {
-            error_at(&chr_pos, "Expected closing quote.");
+            error_at(&chr_pos);
+            fprintf(__stderrp, "Expected closing quote.");
+            exit(1);
         }
         next_char();
         tok = Tok_Chr;
@@ -174,7 +190,9 @@ func next_tok() {
             scan_char();
         }
         if (chr != '\"') {
-            error_at(&chr_pos, "Expected closing quote.");
+            error_at(&chr_pos);
+            fprintf(__stderrp, "Expected closing quote.");
+            exit(1);
         }
         next_char();
         tok = Tok_Str;
@@ -221,7 +239,9 @@ func eat(str: *Char): Bool {
 func expect(str: *Char) {
     printf("expect(\"%s\")\n", str);
     if (!eat(str)) {
-        error_at(&tok_pos, "'%s' expected.", str);
+        error_at(&tok_pos);
+        fprintf(__stderrp, "'%s' expected.", str);
+        exit(1);
     }
 }
 
@@ -233,14 +253,18 @@ func p_lexeme(): *Char {
 
 func p_ident(): *Char {
     if (tok != Tok_Wrd) {
-        error_at(&tok_pos, "Identifier expected.");
+        error_at(&tok_pos);
+        fprintf(__stderrp, "Identifier expected.");
+        exit(1);
     }
     return p_lexeme();
 }
 
 func p_comma(end: *Char) {
     if (!eat(",") && !at(end)) {
-        error_at(&tok_pos, "',' or '%s' expected.", end);
+        error_at(&tok_pos);
+        fprintf(__stderrp, "',' or '%s' expected.", end);
+        exit(1);
     }
 }
 
@@ -261,7 +285,9 @@ func p_type() {
         p_const_expr();
         expect("]");
     } else {
-        error_at(&tok_pos, "Type expected.");
+        error_at(&tok_pos);
+        fprintf(__stderrp, "Type expected.");
+        exit(1);
     }
 }
 
@@ -320,7 +346,9 @@ func p_expr(max_prec: Int) {
     } else if (eat("-")) {
         p_expr(Prec_Unary);
     } else {
-        error_at(&tok_pos, "Expression expected.");
+        error_at(&tok_pos);
+        fprintf(__stderrp, "Expression expected.");
+        exit(1);
     }
 
     while (true) {
@@ -427,6 +455,16 @@ func p_stmt() {
 }
 
 func p_decl() {
+    var is_extern = false;
+    if (eat("extern")) {
+        if (!at("func") && !at("var") && !at("struct")) {
+            error_at(&tok_pos);
+            fprintf(__stderrp, "External declaration expected.");
+            exit(1);
+        }
+        is_extern = true;
+    }
+
     if (eat("func")) {
         p_ident();
         expect("(");
@@ -441,7 +479,7 @@ func p_decl() {
         if (eat(":")) {
             p_type();
         }
-        if (at("{")) {
+        if (!is_extern && at("{")) {
             p_stmt();
         } else {
             expect(";");
@@ -451,9 +489,6 @@ func p_decl() {
         if (eat(":")) {
             p_type();
         }
-        if (eat("=")) {
-            p_expr(0);
-        }
         expect(";");
     } else if (eat("const")) {
         p_ident();
@@ -462,12 +497,16 @@ func p_decl() {
         expect(";");
     } else if (eat("struct")) {
         p_ident();
-        expect("{");
-        while (!eat("}")) {
-            p_ident();
-            expect(":");
-            p_type();
-            p_comma("}");
+        if (!is_extern) {
+            expect("{");
+            while (!eat("}")) {
+                p_ident();
+                expect(":");
+                p_type();
+                p_comma("}");
+            }
+        } else {
+            expect(";");
         }
     } else if (eat("enum")) {
         expect("{");
@@ -479,14 +518,17 @@ func p_decl() {
             p_comma("}");
         }
     } else {
-        error_at(&tok_pos, "Declaration expected.");
+        error_at(&tok_pos);
+        fprintf(__stderrp, "Declaration expected.");
+        exit(1);
     }
 }
 
-func main() {
+func main(): Int {
     next_char();
     next_tok();
     while (tok != Tok_Eof) {
         p_decl();
     }
+    return 0;
 }

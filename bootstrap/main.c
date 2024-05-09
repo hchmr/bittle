@@ -265,6 +265,7 @@ typedef enum SymKind {
 typedef struct Symbol {
     SymKind kind;
     char *name;
+    bool is_extern;
     // Variable type/return type/struct type
     Type *type;
     // Local variable
@@ -352,8 +353,9 @@ void add_local(char *name, Type *type, Pos *pos) {
     add_sym(local, pos);
 }
 
-void add_global(char *name, Type *type, Pos *pos) {
+void add_global(bool is_extern, char *name, Type *type, Pos *pos) {
     Symbol *global = mk_sym(Sym_Global, name);
+    global->is_extern = is_extern;
     global->type = type;
     add_sym(global, pos);
 }
@@ -640,7 +642,7 @@ const char *strx(Type *type) {
 
 const char *ldrx(Type *type) {
     if (type->kind == Type_Bool)
-        return "ldrb x";
+        return "ldrb w";
     if (type->kind == Type_Int && type->size == 1)
         return "ldrsb x";
     if (type->kind == Type_Int && type->size == 2)
@@ -719,8 +721,13 @@ void emit_lvalue(Expr *e, int t0) {
         printf("  add x%d, fp, #-%d ; &%s\n", t0, e->sym->frame_offset, name);
     } else if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Global) {
         const char *name = e->sym->name;
-        printf("  adrp x%d, _%s@PAGE\n", t0, e->sym->name);
-        printf("  add x%d, x%d, _%s@PAGEOFF ; &%s\n", t0, t0, e->sym->name, name);
+        if (e->sym->is_extern) {
+            printf("  adrp x%d, _%s@GOTPAGE\n", t0, name);
+            printf("  ldr x%d, [x%d, _%s@GOTPAGEOFF] ; &%s\n", t0, t0, name, name);
+        } else {
+            printf("  adrp x%d, _%s@PAGE\n", t0, name);
+            printf("  add x%d, x%d, _%s@PAGEOFF ; &%s\n", t0, t0, name, name);
+        }
     } else if (str_eq(e->kind, "_._")) {
         Type *lhs_type = e->args[0]->type;
         int field_offset = lhs_type->field_offsets[e->field_index];
@@ -1368,10 +1375,20 @@ void emit_param_copy(void) {
 
 void p_decl(void) {
     Pos start_pos = tok_pos;
+
+    bool is_extern = false;
+    if (eat("extern")) {
+        if (!at("func") && !at("var") && !at("struct")) {
+            error_at(&tok_pos, "External declaration expected.");
+        }
+        is_extern = true;
+    }
+
     if (eat("func")) {
         char *name = p_ident();
 
         current_func = mk_sym(Sym_Func, name);
+        current_func->is_extern = is_extern;
         enter_scope();
 
         expect("(");
@@ -1390,7 +1407,7 @@ void p_decl(void) {
         }
         add_func(current_func, &start_pos);
 
-        if (at("{")) {
+        if (!is_extern && at("{")) {
             printf("  .global _%s\n", name);
             printf("_%s:\n", name);
             printf("  stp x29, x30, [sp, #-16]!\n");
@@ -1412,9 +1429,11 @@ void p_decl(void) {
         expect(":");
         Type *type = p_type();
         expect(";");
-        add_global(name, type, &start_pos);
-        printf("  .globl _%s\n", name);
-        printf(".zerofill __DATA,__common,_%s,%d,%d\n", name, type_size(type), type_align(type));
+        add_global(is_extern, name, type, &start_pos);
+        if (!is_extern) {
+            printf("  .globl _%s\n", name);
+            printf(".zerofill __DATA,__common,_%s,%d,%d\n", name, type_size(type), type_align(type));
+        }
     } else if (eat("const")) {
         char *name = p_ident();
         expect("=");
@@ -1425,13 +1444,17 @@ void p_decl(void) {
         char *name = p_ident();
         Type *type = mk_struct_type(name);
         add_type(name, type, &start_pos);
-        expect("{");
-        while (!eat("}")) {
-            char *field_name = p_ident();
-            expect(":");
-            Type *field_type = p_type();
-            add_field(type, field_name, field_type);
-            p_comma("}");
+        if (!is_extern) {
+            expect("{");
+            while (!eat("}")) {
+                char *field_name = p_ident();
+                expect(":");
+                Type *field_type = p_type();
+                add_field(type, field_name, field_type);
+                p_comma("}");
+            }
+        } else {
+            expect(";");
         }
     } else if (eat("enum")) {
         expect("{");
