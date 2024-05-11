@@ -1,3 +1,2 @@
-target create ./out/cog1
+target create ./out/stage1/cog1
 settings set target.input-path self-host/main.cog
-run

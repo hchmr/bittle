@@ -1,7 +1,3 @@
-//=
-//= Stage 0 compiler for the Cog Compiler
-//=
-
 #include <assert.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -18,8 +14,12 @@ typedef struct Pos {
     int col;
 } Pos;
 
+void print_error_at(Pos *pos) {
+    fprintf(stderr, "%d:%d: ", pos->line, pos->col);
+}
+
 __dead2 void error_at(Pos *pos, const char *fmt, ...) {
-    fprintf(stderr, "%d:%d: Error: ", pos->line, pos->col);
+    print_error_at(pos);
     va_list args;
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
@@ -39,7 +39,7 @@ int align_up(int size, int align) {
 int ilog2(int n) {
     int i = 0;
     while (n > 1) {
-        n >>= 1;
+        n = n / 2;
         i += 1;
     }
     return i;
@@ -50,19 +50,6 @@ void sb_push(char **buf_p, char c) {
     *buf_p = realloc(*buf_p, len + 2);
     (*buf_p)[len] = c;
     (*buf_p)[len + 1] = '\0';
-}
-
-void sb_append(char **buf_p, const char *str) {
-    while (*str) {
-        sb_push(buf_p, *str);
-        str = &str[1];
-    }
-}
-
-void sb_append_int(char **buf_p, int n) {
-    char s[22]; // sign + 20 digits + \0
-    sprintf(s, "%d", n);
-    sb_append(buf_p, s);
 }
 
 //= Type System
@@ -99,6 +86,10 @@ Type *mk_type(TypeKind kind) {
     Type *type = calloc(1, sizeof(Type));
     type->kind = kind;
     return type;
+}
+
+Type *mk_void_type(void) {
+    return mk_type(Type_Void);
 }
 
 Type *mk_int_type(int size) {
@@ -156,28 +147,28 @@ int type_size(Type *type) {
     if (type->kind == Type_Ptr)
         return 8;
     if (type->kind == Type_Arr)
-        return align_up(type_size(type->base), type_align(type)) * type->len;
+        return type->len * align_up(type_size(type->base), type_align(type));
     if (type->kind == Type_Struct)
         return type->field_count == 0 ? -1 : align_up(type->unpadded_size, type_align(type));
     assert(0);
 }
 
-bool is_scalar(Type *type) {
-    return type->kind == Type_Bool || type->kind == Type_Int || type->kind == Type_Ptr;
+bool type_eq(Type *t1, Type *t2) {
+    if (t1->kind != t2->kind)
+        return false;
+    if (t1->kind == Type_Int)
+        return t1->size == t2->size;
+    if (t1->kind == Type_Ptr)
+        return type_eq(t1->base, t2->base);
+    if (t1->kind == Type_Arr)
+        return t1->len == t2->len && type_eq(t1->base, t2->base);
+    if (t1->kind == Type_Struct)
+        return t1 == t2;
+    return true;
 }
 
-bool type_eq(Type *a, Type *b) {
-    if (a->kind != b->kind)
-        return false;
-    if (a->kind == Type_Int)
-        return a->size == b->size;
-    if (a->kind == Type_Ptr)
-        return type_eq(a->base, b->base);
-    if (a->kind == Type_Arr)
-        return a->len == b->len && type_eq(a->base, b->base);
-    if (a->kind == Type_Struct)
-        return a == b;
-    return true;
+bool is_scalar(Type *type) {
+    return type->kind == Type_Bool || type->kind == Type_Int || type->kind == Type_Ptr;
 }
 
 // Subtyping for implicit conversions
@@ -191,18 +182,18 @@ bool type_le(Type *t1, Type *t2) {
     return false;
 }
 
-void add_field(Type *type, const char *name, Type *field_type) {
+void add_field(Type *type, const char *field_name, Type *field_type) {
     assert(type->kind == Type_Struct);
     if (type->field_count == MAX_FIELDS) {
         fprintf(stderr, "Too many fields\n");
         exit(1);
     }
-    int n = type->field_count;
-    type->field_names[n] = name;
-    type->field_types[n] = field_type;
-    type->field_offsets[n] = align_up(type->unpadded_size, type_align(field_type));
-    type->unpadded_size = type->field_offsets[n] + type_size(field_type);
-    type->field_count = n + 1;
+    int i = type->field_count;
+    type->field_count += 1;
+    type->field_names[i] = field_name;
+    type->field_types[i] = field_type;
+    type->field_offsets[i] = align_up(type->unpadded_size, type_align(field_type));
+    type->unpadded_size = type->field_offsets[i] + type_size(field_type);
 }
 
 int find_field(Type *type, char *name) {
@@ -218,27 +209,24 @@ int find_field(Type *type, char *name) {
     return -1;
 }
 
-void pretty_type(char **buf_p, Type *type) {
+void print_type(FILE *file, Type *type) {
     if (type->kind == Type_Void) {
-        sb_append(buf_p, "Void");
+        fprintf(file, "Void");
     } else if (type->kind == Type_Bool) {
-        sb_append(buf_p, "Bool");
+        fprintf(file, "Bool");
     } else if (type->kind == Type_Int) {
-        sb_append(buf_p, "Int");
-        sb_append_int(buf_p, type->size * 8);
+        fprintf(file, "Int%d", type->size * 8);
     } else if (type->kind == Type_Ptr) {
-        sb_push(buf_p, '*');
-        pretty_type(buf_p, type->base);
+        fprintf(file, "*");
+        print_type(file, type->base);
     } else if (type->kind == Type_Arr) {
-        sb_push(buf_p, '[');
-        pretty_type(buf_p, type->base);
-        sb_append(buf_p, "; ");
-        sb_append_int(buf_p, type->len);
-        sb_push(buf_p, ']');
+        fprintf(file, "[");
+        print_type(file, type->base);
+        fprintf(file, "; %d]", type->len);
     } else if (type->kind == Type_Struct) {
-        sb_append(buf_p, type->name);
+        fprintf(file, "%s", type->name);
     } else {
-        assert(0);
+        assert(false);
     }
 }
 
@@ -262,7 +250,7 @@ typedef enum SymKind {
     Sym_Type,
 } SymKind;
 
-typedef struct Symbol {
+typedef struct Sym {
     SymKind kind;
     char *name;
     bool is_extern;
@@ -279,10 +267,10 @@ typedef struct Symbol {
     bool is_variadic;
     int locals_size;
     bool defined;
-} Symbol;
+} Sym;
 
-Symbol **sym_table;
-Symbol *current_func;
+Sym **sym_table;
+Sym *current_func;
 int sym_count;
 int first_sym[MAX_SCOPES + 1];
 int scope_depth;
@@ -301,7 +289,7 @@ void leave_scope(void) {
     scope_depth -= 1;
 }
 
-Symbol *find_sym_within(char *name, int depth) {
+Sym *find_sym_within(char *name, int depth) {
     int i = sym_count - 1;
     while (i >= first_sym[depth]) {
         if (str_eq(sym_table[i]->name, name)) {
@@ -312,29 +300,29 @@ Symbol *find_sym_within(char *name, int depth) {
     return NULL;
 }
 
-Symbol *find_sym(char *name) {
+Sym *find_sym(char *name) {
     return find_sym_within(name, 0);
 }
 
-Symbol *mk_sym(SymKind kind, char *name) {
-    Symbol *sym = calloc(1, sizeof(Symbol));
+Sym *mk_sym(SymKind kind, char *name) {
+    Sym *sym = calloc(1, sizeof(Sym));
     sym->kind = kind;
     sym->name = name;
     return sym;
 }
 
-void add_sym(Symbol *sym, Pos *pos) {
+void add_sym(Sym *sym, Pos *pos) {
     if (find_sym_within(sym->name, scope_depth)) {
         error_at(pos, "Symbol '%s' already defined", sym->name);
     }
 
-    sym_table = realloc(sym_table, (sym_count + 1) * sizeof(Symbol *));
+    sym_table = realloc(sym_table, (sym_count + 1) * sizeof(Sym *));
     sym_table[sym_count] = sym;
     sym_count += 1;
 }
 
 void add_type(char *name, Type *type, Pos *pos) {
-    Symbol *sym = mk_sym(Sym_Type, name);
+    Sym *sym = mk_sym(Sym_Type, name);
     sym->type = type;
     add_sym(sym, pos);
 }
@@ -348,27 +336,27 @@ void add_local(char *name, Type *type, Pos *pos) {
     }
     current_func->locals_size = offset;
 
-    Symbol *local = mk_sym(Sym_Local, name);
+    Sym *local = mk_sym(Sym_Local, name);
     local->type = type;
     local->frame_offset = offset;
     add_sym(local, pos);
 }
 
 void add_global(bool is_extern, char *name, Type *type, Pos *pos) {
-    Symbol *global = mk_sym(Sym_Global, name);
+    Sym *global = mk_sym(Sym_Global, name);
     global->is_extern = is_extern;
     global->type = type;
     add_sym(global, pos);
 }
 
 void add_const(char *name, int value, Pos *pos) {
-    Symbol *constant = mk_sym(Sym_Const, name);
+    Sym *constant = mk_sym(Sym_Const, name);
     constant->type = mk_int_type(8);
     constant->value = value;
     add_sym(constant, pos);
 }
 
-bool func_eq(Symbol *a, Symbol *b) {
+bool func_eq(Sym *a, Sym *b) {
     assert(a->kind == Sym_Func);
     if (a->param_count != b->param_count || a->is_variadic != b->is_variadic || !type_eq(a->type, b->type))
         return false;
@@ -379,8 +367,8 @@ bool func_eq(Symbol *a, Symbol *b) {
     return true;
 }
 
-void add_func(Symbol *func, Pos *pos) {
-    Symbol *existing = find_sym(func->name);
+void add_func(Sym *func, Pos *pos) {
+    Sym *existing = find_sym(func->name);
     if (existing && existing->kind == Sym_Func && func_eq(func, existing) && !(existing->defined && func->defined))
         return;
     add_sym(func, pos);
@@ -396,7 +384,7 @@ typedef struct Expr {
     int int_value;
     char *str_value;
     // Variables and calls
-    Symbol *sym;
+    Sym *sym;
     // Calls and operator expressions
     struct Expr *args[MAX_PARAMS + 1];
     int arg_count;
@@ -433,39 +421,64 @@ Expr *mk_expr_1(char *kind, Expr *e1, Type *type) {
     return mk_expr_2(kind, e1, NULL, type);
 }
 
-void try_coerce(Expr **expr_p, Type *target) {
-    if (type_eq((*expr_p)->type, target))
+//= Constant Folding
+
+int const_eval(Expr *e) {
+    if (str_eq(e->kind, "<int>")) {
+        return e->int_value;
+    } else if (str_eq(e->kind, "-_")) {
+        return -const_eval(e->args[0]);
+    } else if (str_eq(e->kind, "_+_")) {
+        return const_eval(e->args[0]) + const_eval(e->args[1]);
+    } else {
+        error_at(&e->pos, "Constant evaluation failed.");
+    }
+}
+
+//= Type Checking
+
+Expr *copy_expr(Expr *expr) {
+    Expr *copy = calloc(1, sizeof(Expr));
+    *copy = *expr;
+    return copy;
+}
+
+void try_coerce(Expr *expr, Type *target) {
+    if (type_eq(expr->type, target))
         return;
-    if (type_le((*expr_p)->type, target)) {
-        *expr_p = mk_expr_1("as", *expr_p, target);
-    } else if ((*expr_p)->type->kind == Type_Int && target->kind == Type_Int) {
-        int size = ilog2((**expr_p).int_value) + 1;
+    if (type_le(expr->type, target)) {
+        *expr = *mk_expr_1("<cast>", copy_expr(expr), target);
+    } else if (expr->type->kind == Type_Int && target->kind == Type_Int) {
+        int value = expr->int_value;
+        int size = ilog2(value) + 1;
         if (size < target->size) {
-            *expr_p = mk_expr_1("as", *expr_p, target);
+            expr->type = target;
         }
     }
 }
 
-void check_type(Expr **expr_p, Type *expected) {
-    try_coerce(expr_p, expected);
+void check_type(Expr *e, Type *expected) {
+    try_coerce(e, expected);
 
     if (expected->kind == Type_Ptr && expected->base->kind == Type_Void) {
-        if ((*expr_p)->type->kind == Type_Ptr) {
+        if (e->type->kind == Type_Ptr) {
             return;
         }
     }
 
-    if (!type_eq((*expr_p)->type, expected)) {
-        char *sb = NULL;
-        pretty_type(&sb, (*expr_p)->type);
-        sb_append(&sb, " != ");
-        pretty_type(&sb, expected);
-        error_at(&(*expr_p)->pos, "Type mismatch: %s", sb);
+    if (!type_eq(e->type, expected)) {
+        print_error_at(&e->pos);
+        fprintf(stderr, "Type mismatch: ");
+        print_type(stderr, e->type);
+        fprintf(stderr, " != ");
+        print_type(stderr, expected);
+        fprintf(stderr, ".\n");
+        exit(1);
     }
 }
 
-void check_type_bool(Expr **expr_p) {
-    check_type(expr_p, mk_bool_type());
+void check_type_bool(Expr *expr) {
+    check_type(expr, mk_bool_type());
 }
 
 void check_type_int(Expr *expr) {
@@ -474,10 +487,10 @@ void check_type_int(Expr *expr) {
     }
 }
 
-void unify_types(Expr **lhs_p, Expr **rhs_p) {
-    try_coerce(rhs_p, (*lhs_p)->type);
-    try_coerce(lhs_p, (*rhs_p)->type);
-    check_type(rhs_p, (*lhs_p)->type);
+void unify_types(Expr *lhs, Expr *rhs) {
+    try_coerce(rhs, lhs->type);
+    try_coerce(lhs, rhs->type);
+    check_type(rhs, lhs->type);
 }
 
 //= Characters
@@ -625,282 +638,6 @@ void next_tok(void) {
     sb_push(&lexeme, '\0');
 }
 
-//= Codegen
-
-int label_count;
-int temp_stack_top;
-
-const char *strx(Type *type) {
-    if (type_size(type) == 1)
-        return "strb w";
-    if (type_size(type) == 2)
-        return "strh w";
-    if (type_size(type) == 4)
-        return "str w";
-    if (type_size(type) == 8)
-        return "str x";
-    assert(false);
-}
-
-const char *ldrx(Type *type) {
-    if (type->kind == Type_Bool)
-        return "ldrb w";
-    if (type->kind == Type_Int && type->size == 1)
-        return "ldrsb x";
-    if (type->kind == Type_Int && type->size == 2)
-        return "ldrsh x";
-    if (type->kind == Type_Int && type->size == 4)
-        return "ldrsw x";
-    if (type_size(type) == 8)
-        return "ldr x";
-    assert(false);
-}
-
-void emit_push(int reg) {
-    if (temp_stack_top + 8 > FRAME_TEMP_SIZE) {
-        fprintf(stderr, "Ran out of temporary space\n");
-        exit(1);
-    }
-    temp_stack_top += 8;
-    printf("  str x%d, [fp, #-%d] ; push\n", reg, FRAME_LOCALS_SIZE + temp_stack_top);
-}
-
-void emit_pop(int reg) {
-    printf("  ldr x%d, [fp, #-%d] ; pop\n", reg, FRAME_LOCALS_SIZE + temp_stack_top);
-    temp_stack_top -= 8;
-}
-
-void emit_arg_push(int *arg_offset, Expr *e, int reg) {
-    *arg_offset += 8;
-    assert(*arg_offset <= FRAME_ARGS_SIZE);
-    printf("  str x%d, [sp, #%d]\n", reg, *arg_offset - 8);
-}
-
-void emit_sign_extend(Type *source, int t0, int t1) {
-    assert(is_scalar(source));
-    if (source->kind == Type_Int && source->size < 8) {
-        char suffix = "_bh_w"[source->size];
-        printf("  sxt%c x%d, w%d\n", suffix, t0, t1);
-    } else {
-        if (t0 != t1) {
-            printf("  mov x%d, x%d\n", t0, t1);
-        }
-    }
-}
-
-void emit_expr(Expr *e, int t0);
-
-void emit_lvalue(Expr *e, int t0);
-
-void emit_operands(Expr *e, int t_lhs, int t_rhs) {
-    emit_expr(e->args[0], t_lhs);
-    emit_push(t_lhs);
-    emit_expr(e->args[1], t_rhs);
-    emit_pop(t_lhs);
-}
-
-void emit_operands_lvalue(Expr *e, int t_lhs, int t_rhs) {
-    emit_lvalue(e->args[0], t_lhs);
-    emit_push(t_lhs);
-    emit_expr(e->args[1], t_rhs);
-    emit_pop(t_lhs);
-}
-
-void emit_binary(const char *op, Expr *e, int t0) {
-    emit_operands(e, 0, 1);
-    printf("  %s x%d, x0, x1\n", op, t0);
-}
-
-void emit_cmp(const char *rel, Expr *e, int t0) {
-    emit_operands(e, 0, 1);
-    printf("  cmp x0, x1\n");
-    printf("  cset x%d, %s\n", t0, rel);
-}
-
-void emit_lvalue(Expr *e, int t0) {
-    if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Local) {
-        const char *name = e->sym->name;
-        printf("  add x%d, fp, #-%d ; &%s\n", t0, e->sym->frame_offset, name);
-    } else if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Global) {
-        const char *name = e->sym->name;
-        if (e->sym->is_extern) {
-            printf("  adrp x%d, _%s@GOTPAGE\n", t0, name);
-            printf("  ldr x%d, [x%d, _%s@GOTPAGEOFF] ; &%s\n", t0, t0, name, name);
-        } else {
-            printf("  adrp x%d, _%s@PAGE\n", t0, name);
-            printf("  add x%d, x%d, _%s@PAGEOFF ; &%s\n", t0, t0, name, name);
-        }
-    } else if (str_eq(e->kind, "_._")) {
-        Type *lhs_type = e->args[0]->type;
-        int field_offset = lhs_type->field_offsets[e->field_index];
-        const char *field_name = lhs_type->field_names[e->field_index];
-        emit_lvalue(e->args[0], t0);
-        printf("  add x%d, x%d, #%d ; &%s\n", t0, t0, field_offset, field_name);
-    } else if (str_eq(e->kind, "*_")) {
-        emit_expr(e->args[0], t0);
-    } else if (str_eq(e->kind, "_[_]")) {
-        int t1 = t0 == 0 ? 1 : 0;
-        if (e->args[0]->type->kind == Type_Ptr) {
-            emit_operands(e, t0, t1);
-        } else {
-            emit_operands_lvalue(e, t0, t1);
-        }
-        printf("  lsl x%d, x%d, #%d\n", t1, t1, ilog2(type_size(e->type)));
-        printf("  add x%d, x%d, x%d\n", t0, t0, t1);
-    } else {
-        error_at(&e->pos, "Not an lvalue.");
-    }
-}
-
-void emit_expr(Expr *e, int t0) {
-    if (is_lvalue(e)) {
-        emit_lvalue(e, t0);
-        printf("  %s%d, [x%d]\n", ldrx(e->type), t0, t0);
-    } else if (str_eq(e->kind, "<int>")) {
-        printf("  mov x%d, #%d\n", t0, e->int_value);
-    } else if (str_eq(e->kind, "<str>")) {
-        int label = label_count += 1;
-        printf("  .data\n");
-        printf(".str.%d:\n", label);
-        printf("  .asciz \"");
-        int i = 0;
-        while (e->str_value[i] != '\0') {
-            if (!is_print(e->str_value[i]) || e->str_value[i] == '\"') {
-                printf("\\%03o", e->str_value[i]);
-            } else {
-                printf("%c", e->str_value[i]);
-            }
-            i += 1;
-        }
-        printf("\"\n");
-        printf("  .text\n");
-        printf("  adrp x%d, .str.%d@PAGE\n", t0, label);
-        printf("  add x%d, x%d, .str.%d@PAGEOFF\n", t0, t0, label);
-    } else if (str_eq(e->kind, "_(_)")) {
-        Symbol *sym = e->sym;
-        int arg_offset = 0;
-
-        int arg_idx = 0;
-        while (arg_idx < e->arg_count) {
-            Expr *arg = e->args[arg_idx];
-            emit_expr(arg, 0);
-            if (arg_idx >= sym->param_count) {
-                assert(sym->is_variadic);
-                emit_arg_push(&arg_offset, arg, 0);
-            } else {
-                emit_push(0);
-            }
-            arg_idx += 1;
-        }
-
-        arg_idx = sym->param_count;
-        while (arg_idx > 0) {
-            emit_pop(arg_idx - 1);
-            arg_idx -= 1;
-        }
-
-        printf("  bl _%s\n", sym->name);
-        if (e->type->kind != Type_Void) {
-            emit_sign_extend(e->type, t0, 0);
-        }
-    } else if (str_eq(e->kind, "&_")) {
-        emit_lvalue(e->args[0], t0);
-    } else if (str_eq(e->kind, "!_")) {
-        emit_expr(e->args[0], t0);
-        printf("  eor x%d, x%d, #1\n", t0, t0);
-    } else if (str_eq(e->kind, "~_")) {
-        emit_expr(e->args[0], t0);
-        printf("  mvn x%d, x%d\n", t0, t0);
-    } else if (str_eq(e->kind, "-_")) {
-        emit_expr(e->args[0], t0);
-        printf("  neg x%d, x%d\n", t0, t0);
-    } else if (str_eq(e->kind, "_|_")) {
-        emit_binary("orr", e, t0);
-    } else if (str_eq(e->kind, "_^_")) {
-        emit_binary("eor", e, t0);
-    } else if (str_eq(e->kind, "_&_")) {
-        emit_binary("and", e, t0);
-    } else if (str_eq(e->kind, "_==_")) {
-        emit_cmp("eq", e, t0);
-    } else if (str_eq(e->kind, "_!=_")) {
-        emit_cmp("ne", e, t0);
-    } else if (str_eq(e->kind, "_<_")) {
-        emit_cmp("lt", e, t0);
-    } else if (str_eq(e->kind, "_<=_")) {
-        emit_cmp("le", e, t0);
-    } else if (str_eq(e->kind, "_>_")) {
-        emit_cmp("gt", e, t0);
-    } else if (str_eq(e->kind, "_>=_")) {
-        emit_cmp("ge", e, t0);
-    } else if (str_eq(e->kind, "_<<_")) {
-        emit_binary("lsl", e, t0);
-    } else if (str_eq(e->kind, "_>>_")) {
-        emit_binary("lsr", e, t0);
-    } else if (str_eq(e->kind, "_+_")) {
-        emit_binary("add", e, t0);
-    } else if (str_eq(e->kind, "_-_")) {
-        emit_binary("sub", e, t0);
-    } else if (str_eq(e->kind, "_*_")) {
-        emit_binary("mul", e, t0);
-    } else if (str_eq(e->kind, "_/_")) {
-        emit_binary("sdiv", e, t0);
-    } else if (str_eq(e->kind, "_%_")) {
-        int t1 = t0 == 0 ? 1 : 0;
-        int t2 = t0 == 2 ? 1 : 2;
-        emit_operands(e, t1, t2);
-        printf("  sdiv x%d, x%d, x%d\n", t0, t1, t2);
-        printf("  msub x%d, x%d, x%d, x%d\n", t0, t0, t2, t1);
-    } else if (str_eq(e->kind, "_?_:_")) {
-        int label = label_count += 1;
-        printf(".L%d.if:\n", label);
-        emit_expr(e->args[0], t0);
-        printf("  cmp x%d, #0\n", t0);
-        printf("  cbz x%d, .L%d.else\n", t0, label);
-        printf(".L%d.then:\n", label);
-        emit_expr(e->args[1], t0);
-        printf("  b .L%d.end\n", label);
-        printf(".L%d.else:\n", label);
-        emit_expr(e->args[2], t0);
-        printf(".L%d.end:\n", label);
-    } else if (str_eq(e->kind, "_=_") || str_eq(e->kind, "_+=_") || str_eq(e->kind, "_-=_")) {
-        int t1 = t0 == 0 ? 1 : 0;
-        int t2 = t0 == 2 ? 1 : 2;
-        Expr *lhs = e->args[0];
-        emit_operands_lvalue(e, t0, t1);
-        if (str_eq(e->kind, "_+=_") || str_eq(e->kind, "_-=_")) {
-            printf("  %s%d, [x%d]\n", ldrx(lhs->type), t2, t0);
-            if (str_eq(e->kind, "_+=_")) {
-                printf("  add x%d, x%d, x%d\n", t1, t2, t1);
-            } else if (str_eq(e->kind, "_-=_")) {
-                printf("  sub x%d, x%d, x%d\n", t1, t2, t1);
-            } else {
-                assert(false);
-            }
-        }
-        printf("  %s%d, [x%d]\n", strx(lhs->type), t1, t0);
-    } else if (str_eq(e->kind, "<memcpy>")) {
-        assert(str_eq(e->args[0]->kind, "&_") && str_eq(e->args[1]->kind, "&_"));
-        emit_operands(e, 0, 1);
-        printf("  mov x2, #%d\n", type_size(e->args[0]->type->base));
-        printf("  bl _memcpy\n");
-    } else if (str_eq(e->kind, "as")) {
-        Type *target = e->type;
-        Type *source = e->args[0]->type;
-        assert(is_scalar(target) && is_scalar(source));
-        emit_expr(e->args[0], t0);
-        if (target->kind == Type_Bool) {
-            printf("  cmp x%d, #0\n", t0);
-            printf("  cset w%d, ne\n", t0);
-        } else if (type_size(target) < type_size(source)) {
-            emit_sign_extend(target, t0, t0);
-        } else {
-            // no-op
-        }
-    } else {
-        assert(false);
-    }
-}
-
 //= Parsing
 
 bool at(const char *str) {
@@ -939,6 +676,283 @@ void p_comma(const char *end) {
     }
 }
 
+//= Codegen
+
+int label_count;
+int temp_size;
+
+const char *strx(Type *type) {
+    if (type_size(type) == 1)
+        return "strb w";
+    if (type_size(type) == 2)
+        return "strh w";
+    if (type_size(type) == 4)
+        return "str w";
+    if (type_size(type) == 8)
+        return "str x";
+    assert(false);
+}
+
+const char *ldrx(Type *type) {
+    if (type->kind == Type_Bool)
+        return "ldrb w";
+    if (type->kind == Type_Int && type->size == 1)
+        return "ldrsb x";
+    if (type->kind == Type_Int && type->size == 2)
+        return "ldrsh x";
+    if (type->kind == Type_Int && type->size == 4)
+        return "ldrsw x";
+    if (type_size(type) == 8)
+        return "ldr x";
+    assert(false);
+}
+
+void emit_push(int reg) {
+    if (temp_size + 8 > FRAME_TEMP_SIZE) {
+        fprintf(stderr, "Ran out of temporary space\n");
+        exit(1);
+    }
+    temp_size += 8;
+    printf("  str x%d, [fp, #%d] ; push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+}
+
+void emit_pop(int reg) {
+    printf("  ldr x%d, [fp, #%d] ; pop\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    temp_size -= 8;
+}
+
+void emit_sign_extend(Type *source, int t0, int t1) {
+    assert(is_scalar(source));
+    if (source->kind == Type_Int && source->size < 8) {
+        char suffix = "_bh_w"[source->size];
+        printf("  sxt%c x%d, w%d\n", suffix, t0, t1);
+    } else {
+        if (t0 != t1) {
+            printf("  mov x%d, x%d\n", t0, t1);
+        }
+    }
+}
+
+void emit_expr(Expr *e, int t0);
+
+void emit_expr_lvalue(Expr *e, int t0);
+
+void emit_operands(Expr *e, int t_lhs, int t_rhs) {
+    emit_expr(e->args[0], t_lhs);
+    emit_push(t_lhs);
+    emit_expr(e->args[1], t_rhs);
+    emit_pop(t_lhs);
+}
+
+void emit_operands_lvalue(Expr *e, int t_lhs, int t_rhs) {
+    emit_expr_lvalue(e->args[0], t_lhs);
+    emit_push(t_lhs);
+    emit_expr(e->args[1], t_rhs);
+    emit_pop(t_lhs);
+}
+
+void emit_expr_binary(const char *op, Expr *e, int t0) {
+    emit_operands(e, 0, 1);
+    printf("  %s x%d, x0, x1\n", op, t0);
+}
+
+void emit_expr_cmp(const char *rel, Expr *e, int t0) {
+    emit_operands(e, 0, 1);
+    printf("  cmp x0, x1\n");
+    printf("  cset x%d, %s\n", t0, rel);
+}
+
+void emit_expr_lvalue(Expr *e, int t0) {
+    if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Local) {
+        const char *name = e->sym->name;
+        printf("  add x%d, fp, #%d ; &%s\n", t0, -e->sym->frame_offset, name);
+    } else if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Global) {
+        const char *name = e->sym->name;
+        if (e->sym->is_extern) {
+            printf("  adrp x%d, _%s@GOTPAGE\n", t0, name);
+            printf("  ldr x%d, [x%d, _%s@GOTPAGEOFF] ; &%s\n", t0, t0, name, name);
+        } else {
+            printf("  adrp x%d, _%s@PAGE\n", t0, name);
+            printf("  add x%d, x%d, _%s@PAGEOFF ; &%s\n", t0, t0, name, name);
+        }
+    } else if (str_eq(e->kind, "_._")) {
+        Type *lhs_type = e->args[0]->type;
+        int field_offset = lhs_type->field_offsets[e->field_index];
+        const char *field_name = lhs_type->field_names[e->field_index];
+        emit_expr_lvalue(e->args[0], t0);
+        printf("  add x%d, x%d, #%d ; &%s\n", t0, t0, field_offset, field_name);
+    } else if (str_eq(e->kind, "*_")) {
+        emit_expr(e->args[0], t0);
+    } else if (str_eq(e->kind, "_[_]")) {
+        if (e->args[0]->type->kind == Type_Ptr) {
+            emit_operands(e, 0, 1);
+        } else {
+            emit_operands_lvalue(e, 0, 1);
+        }
+        int elem_size = type_size(e->args[0]->type->base);
+        printf("  add x%d, x0, x1, lsl #%d ; &_[_]\n", t0, ilog2(elem_size));
+    } else {
+        assert(false);
+    }
+}
+
+void emit_expr(Expr *e, int t0) {
+    if (is_lvalue(e)) {
+        emit_expr_lvalue(e, t0);
+        printf("  %s%d, [x%d]\n", ldrx(e->type), t0, t0);
+    } else if (str_eq(e->kind, "<int>")) {
+        printf("  mov x%d, #%d\n", t0, e->int_value);
+    } else if (str_eq(e->kind, "<str>")) {
+        int label = label_count += 1;
+        printf("  .data\n");
+        printf(".str.%d:\n", label);
+        printf("  .asciz \"");
+        int i = 0;
+        while (e->str_value[i] != '\0') {
+            if (!is_print(e->str_value[i]) || e->str_value[i] == '\"' || e->str_value[i] == '\\') {
+                printf("\\%03o", e->str_value[i]);
+            } else {
+                printf("%c", e->str_value[i]);
+            }
+            i += 1;
+        }
+        printf("\"\n");
+        printf("  .text\n");
+        printf("  adrp x%d, .str.%d@PAGE\n", t0, label);
+        printf("  add x%d, x%d, .str.%d@PAGEOFF\n", t0, t0, label);
+    } else if (str_eq(e->kind, "_(_)")) {
+        Sym *sym = e->sym;
+        int arg_offset = 0;
+
+        int i = 0;
+        while (i < e->arg_count) {
+            Expr *arg = e->args[i];
+            emit_expr(arg, 0);
+            if (i >= sym->param_count) {
+                assert(sym->is_variadic);
+                printf("  str x0, [sp, #%d]\n", 8 * (i - sym->param_count));
+            } else {
+                emit_push(0);
+            }
+            i += 1;
+        }
+
+        i = sym->param_count;
+        while (i > 0) {
+            i -= 1;
+            emit_pop(i);
+        }
+
+        printf("  bl _%s\n", sym->name);
+        if (e->type->kind != Type_Void) {
+            emit_sign_extend(e->type, t0, 0);
+        }
+    } else if (str_eq(e->kind, "&_")) {
+        emit_expr_lvalue(e->args[0], t0);
+    } else if (str_eq(e->kind, "!_")) {
+        emit_expr(e->args[0], t0);
+        printf("  eor x%d, x%d, #1\n", t0, t0);
+    } else if (str_eq(e->kind, "~_")) {
+        emit_expr(e->args[0], t0);
+        printf("  mvn x%d, x%d\n", t0, t0);
+    } else if (str_eq(e->kind, "-_")) {
+        emit_expr(e->args[0], t0);
+        printf("  neg x%d, x%d\n", t0, t0);
+    } else if (str_eq(e->kind, "_&&_") || str_eq(e->kind, "_||_")) {
+        int label = label_count += 1;
+        printf(".L%d.begin: ; %s\n", label, e->kind);
+        emit_expr(e->args[0], t0);
+        if (str_eq(e->kind, "_&&_")) {
+            printf("  cbz x%d, .L%d.end\n", t0, label);
+        } else {
+            printf("  cbnz x%d, .L%d.end\n", t0, label);
+        }
+        emit_expr(e->args[1], t0);
+        printf(".L%d.end:\n", label);
+    } else if (str_eq(e->kind, "_|_")) {
+        emit_expr_binary("orr", e, t0);
+    } else if (str_eq(e->kind, "_^_")) {
+        emit_expr_binary("eor", e, t0);
+    } else if (str_eq(e->kind, "_&_")) {
+        emit_expr_binary("and", e, t0);
+    } else if (str_eq(e->kind, "_==_")) {
+        emit_expr_cmp("eq", e, t0);
+    } else if (str_eq(e->kind, "_!=_")) {
+        emit_expr_cmp("ne", e, t0);
+    } else if (str_eq(e->kind, "_<_")) {
+        emit_expr_cmp("lt", e, t0);
+    } else if (str_eq(e->kind, "_<=_")) {
+        emit_expr_cmp("le", e, t0);
+    } else if (str_eq(e->kind, "_>_")) {
+        emit_expr_cmp("gt", e, t0);
+    } else if (str_eq(e->kind, "_>=_")) {
+        emit_expr_cmp("ge", e, t0);
+    } else if (str_eq(e->kind, "_<<_")) {
+        emit_expr_binary("lsl", e, t0);
+    } else if (str_eq(e->kind, "_>>_")) {
+        emit_expr_binary("lsr", e, t0);
+    } else if (str_eq(e->kind, "_+_")) {
+        emit_expr_binary("add", e, t0);
+    } else if (str_eq(e->kind, "_-_")) {
+        emit_expr_binary("sub", e, t0);
+    } else if (str_eq(e->kind, "_*_")) {
+        emit_expr_binary("mul", e, t0);
+    } else if (str_eq(e->kind, "_/_")) {
+        emit_expr_binary("sdiv", e, t0);
+    } else if (str_eq(e->kind, "_%_")) {
+        emit_operands(e, 1, 2);
+        printf("  sdiv x%d, x%d, x%d\n", 0, 1, 2);
+        printf("  msub x%d, x%d, x%d, x%d\n", t0, 0, 2, 1);
+    } else if (str_eq(e->kind, "_?_:_")) {
+        int label = label_count += 1;
+        printf(".L%d.if:\n", label);
+        emit_expr(e->args[0], 0);
+        printf("  cbz x0, .L%d.else\n", label);
+        printf(".L%d.then:\n", label);
+        emit_expr(e->args[1], t0);
+        printf("  b .L%d.end\n", label);
+        printf(".L%d.else:\n", label);
+        emit_expr(e->args[2], t0);
+        printf(".L%d.end:\n", label);
+    } else if (str_eq(e->kind, "_=_") || str_eq(e->kind, "_+=_") || str_eq(e->kind, "_-=_")) {
+        Expr *lhs = e->args[0];
+        emit_operands_lvalue(e, 0, 1);
+        if (str_eq(e->kind, "_+=_") || str_eq(e->kind, "_-=_")) {
+            printf("  %s2, [x0]\n", ldrx(lhs->type));
+            if (str_eq(e->kind, "_+=_")) {
+                printf("  add x1, x2, x1\n");
+            } else if (str_eq(e->kind, "_-=_")) {
+                printf("  sub x1, x2, x1\n");
+            } else {
+                assert(false);
+            }
+        }
+        printf("  %s1, [x0]\n", strx(lhs->type));
+    } else if (str_eq(e->kind, "<memcpy>")) {
+        assert(str_eq(e->args[0]->kind, "&_") && str_eq(e->args[1]->kind, "&_"));
+        emit_operands(e, 0, 1);
+        printf("  mov x2, #%d\n", type_size(e->args[0]->type->base));
+        printf("  bl _memcpy\n");
+    } else if (str_eq(e->kind, "<cast>")) {
+        Type *target = e->type;
+        Type *source = e->args[0]->type;
+        assert(is_scalar(target) && is_scalar(source));
+        emit_expr(e->args[0], t0);
+        if (target->kind == Type_Bool) {
+            printf("  cmp x%d, #0\n", t0);
+            printf("  cset w%d, ne\n", t0);
+        } else if (type_size(target) < type_size(source)) {
+            emit_sign_extend(target, t0, t0);
+        } else {
+            // no-op
+        }
+    } else {
+        assert(false);
+    }
+}
+
+//= Grammar
+
 int p_const_expr(void);
 
 Type *p_type(void) {
@@ -947,7 +961,7 @@ Type *p_type(void) {
         expect(")");
         return type;
     } else if (eat("Void")) {
-        return mk_type(Type_Void);
+        return mk_void_type();
     } else if (eat("Bool")) {
         return mk_bool_type();
     } else if (eat("Char") || eat("Int8")) {
@@ -968,12 +982,12 @@ Type *p_type(void) {
         expect("]");
         return mk_arr_type(base, len);
     } else if (tok == Tok_Wrd) {
-        Symbol *sym = find_sym(lexeme);
+        Sym *sym = find_sym(lexeme);
         if (!sym) {
-            error_at(&tok_pos, "Unknown type '%s'", lexeme);
+            error_at(&tok_pos, "Undeclared symbol '%s'.\n", lexeme);
         }
         if (sym->kind != Sym_Type) {
-            error_at(&tok_pos, "Type expected.");
+            error_at(&tok_pos, "'%s' is not a type.\n", lexeme);
         }
         next_tok();
         return sym->type;
@@ -999,8 +1013,6 @@ enum {
     Prec_Postfix,
 };
 
-Expr *p_expr(int max_prec);
-
 Expr *build_unary_expr(char *op, Expr *rhs) {
     if (str_eq(op, "*_")) {
         if (rhs->type->kind != Type_Ptr) {
@@ -1013,7 +1025,7 @@ Expr *build_unary_expr(char *op, Expr *rhs) {
         }
         return mk_expr_1("&_", rhs, mk_ptr_type(rhs->type));
     } else if ((str_eq(op, "!_"))) {
-        check_type_bool(&rhs);
+        check_type_bool(rhs);
         return mk_expr_1("!_", rhs, rhs->type);
     } else {
         check_type_int(rhs);
@@ -1029,29 +1041,22 @@ Expr *build_binary_expr(Expr *lhs, char *op, Expr *rhs) {
         if (!str_eq(op, "_=_")) {
             check_type_int(lhs);
         }
-        check_type(&rhs, lhs->type);
+        check_type(rhs, lhs->type);
         if (!is_scalar(lhs->type)) {
             assert(is_lvalue(rhs));
             lhs = mk_expr_1("&_", lhs, mk_ptr_type(lhs->type));
             rhs = mk_expr_1("&_", rhs, mk_ptr_type(rhs->type));
-            return mk_expr_2("<memcpy>", lhs, rhs, mk_type(Type_Void));
+            return mk_expr_2("<memcpy>", lhs, rhs, mk_void_type());
         } else {
             return mk_expr_2(op, lhs, rhs, lhs->type);
         }
     } else if (str_eq(op, "_&&_") || str_eq(op, "_||_")) {
-        check_type_bool(&lhs);
-        check_type_bool(&rhs);
-        Expr *e = mk_expr("<int>", mk_bool_type(), &tok_pos);
-        if (str_eq(op, "_&&_")) {
-            e->int_value = 0;
-            return mk_expr_3("_?_:_", lhs, rhs, e, rhs->type);
-        } else {
-            e->int_value = 1;
-            return mk_expr_3("_?_:_", lhs, e, rhs, rhs->type);
-        }
+        check_type_bool(lhs);
+        check_type_bool(rhs);
+        return mk_expr_2(op, lhs, rhs, mk_bool_type());
     } else if (str_eq(op, "_==_") || str_eq(op, "_!=_") || str_eq(op, "_<_") || str_eq(op, "_<=_") ||
                str_eq(op, "_>_") || str_eq(op, "_>=_") || str_eq(op, "_<<_")) {
-        unify_types(&lhs, &rhs);
+        unify_types(lhs, rhs);
         if (!is_scalar(lhs->type)) {
             error_at(&tok_pos, "Type is not comparable.");
         }
@@ -1059,7 +1064,7 @@ Expr *build_binary_expr(Expr *lhs, char *op, Expr *rhs) {
     } else {
         check_type_int(lhs);
         check_type_int(rhs);
-        unify_types(&lhs, &rhs);
+        unify_types(lhs, rhs);
         return mk_expr_2(op, lhs, rhs, lhs->type);
     }
 }
@@ -1070,8 +1075,7 @@ Expr *p_expr(int max_prec) {
         lhs = p_expr(0);
         expect(")");
     } else if (eat("null")) {
-        Type *type_1 = mk_ptr_type(mk_type(Type_Void));
-        lhs = mk_expr("<int>", type_1, &tok_pos);
+        lhs = mk_expr("<int>", mk_ptr_type(mk_void_type()), &tok_pos);
     } else if (at("true") || at("false")) {
         lhs = mk_expr("<int>", mk_bool_type(), &tok_pos);
         lhs->int_value = eat("true") || !eat("false");
@@ -1093,7 +1097,7 @@ Expr *p_expr(int max_prec) {
     } else if (tok == Tok_Wrd) {
         Pos name_pos = tok_pos;
         char *name = p_ident();
-        Symbol *sym = find_sym(name);
+        Sym *sym = find_sym(name);
         if (!sym) {
             error_at(&name_pos, "Unknown symbol '%s'", name);
         }
@@ -1107,7 +1111,7 @@ Expr *p_expr(int max_prec) {
                 Expr *arg = p_expr(0);
                 p_comma(")");
                 if (lhs->arg_count == MAX_PARAMS) {
-                    error_at(&tok_pos, "Too many arguments provided.");
+                    error_at(&arg->pos, "Too many arguments provided.");
                 }
                 lhs->args[lhs->arg_count] = arg;
                 lhs->arg_count += 1;
@@ -1119,12 +1123,12 @@ Expr *p_expr(int max_prec) {
             }
             int i = 0;
             while (i < lhs->sym->param_count) {
-                check_type(&lhs->args[i], lhs->sym->param_types[i]);
+                check_type(lhs->args[i], lhs->sym->param_types[i]);
                 i += 1;
             }
             while (i < lhs->arg_count) {
                 if (!is_scalar(lhs->args[i]->type)) {
-                    error_at(&lhs->args[i]->pos, "Invalid type for variadic argument.");
+                    error_at(&lhs->args[i]->pos, "Variadic argument must be scalar.");
                 }
                 i += 1;
             }
@@ -1164,8 +1168,8 @@ Expr *p_expr(int max_prec) {
             Expr *ift = p_expr(Prec_Cond);
             expect(":");
             Expr *iff = p_expr(Prec_Cond);
-            check_type_bool(&lhs);
-            unify_types(&ift, &iff);
+            check_type_bool(lhs);
+            unify_types(ift, iff);
             lhs = mk_expr_3("_?_:_", lhs, ift, iff, ift->type);
         } else if (max_prec <= Prec_CondOr && eat("||")) {
             lhs = build_binary_expr(lhs, "_||_", p_expr(Prec_CondOr + 1));
@@ -1208,7 +1212,7 @@ Expr *p_expr(int max_prec) {
             if (!(is_scalar(type) && is_scalar(lhs->type))) {
                 error_at(&tok_pos, "Invalid cast type.");
             }
-            lhs = mk_expr_1("as", lhs, type);
+            lhs = mk_expr_1("<cast>", lhs, type);
         } else if (max_prec <= Prec_Postfix && eat("[")) {
             Expr *rhs = p_expr(0);
             expect("]");
@@ -1219,7 +1223,7 @@ Expr *p_expr(int max_prec) {
             lhs = mk_expr_2("_[_]", lhs, rhs, lhs->type->base);
         } else if (max_prec <= Prec_Postfix && eat(".")) {
             char *field_name = p_ident();
-            if (lhs->type->kind == Type_Ptr) {
+            if (lhs->type->kind == Type_Ptr && lhs->type->base->kind == Type_Struct) {
                 lhs = mk_expr_1("*_", lhs, lhs->type->base);
             }
             if (lhs->type->kind != Type_Struct) {
@@ -1237,18 +1241,6 @@ Expr *p_expr(int max_prec) {
     }
 }
 
-int const_eval(Expr *e) {
-    if (str_eq(e->kind, "<int>")) {
-        return e->int_value;
-    } else if (str_eq(e->kind, "-_")) {
-        return -const_eval(e->args[0]);
-    } else if (str_eq(e->kind, "_+_")) {
-        return const_eval(e->args[0]) + const_eval(e->args[1]);
-    } else {
-        error_at(&e->pos, "Constant evaluation failed.");
-    }
-}
-
 int p_const_expr(void) {
     return const_eval(p_expr(0));
 }
@@ -1261,6 +1253,7 @@ void p_stmt(void) {
         }
         leave_scope();
     } else if (eat("var")) {
+        Pos name_pos = tok_pos;
         char *name = p_ident();
         Type *type = NULL;
         if (eat(":")) {
@@ -1274,22 +1267,22 @@ void p_stmt(void) {
 
         if (type != NULL) {
             if (init != NULL) {
-                check_type(&init, type);
+                check_type(init, type);
             }
         } else {
             if (init != NULL) {
                 type = init->type;
             } else {
-                error_at(&tok_pos, "Type or initializer expected.");
+                error_at(&name_pos, "Type or initializer expected.");
             }
         }
         if (type_size(type) == -1) {
-            error_at(&tok_pos, "Variable must have a size.");
+            error_at(&name_pos, "Variable must have a size.");
         }
 
         add_local(name, type, &tok_pos);
         if (init != NULL) {
-            Symbol *sym = find_sym(name);
+            Sym *sym = find_sym(name);
             Expr *lhs = mk_expr("<var>", sym->type, &tok_pos);
             lhs->sym = sym;
             emit_expr(build_binary_expr(lhs, "_=_", init), 0);
@@ -1297,11 +1290,11 @@ void p_stmt(void) {
     } else if (eat("if")) {
         int label = label_count += 1;
         expect("(");
-        Expr *expr = p_expr(0);
+        Expr *cond = p_expr(0);
         expect(")");
-        check_type_bool(&expr);
+        check_type_bool(cond);
         printf(".L%d.if:\n", label);
-        emit_expr(expr, 0);
+        emit_expr(cond, 0);
         printf("  cbz x0, .L%d.else\n", label);
         printf(".L%d.then:\n", label);
         p_stmt();
@@ -1314,24 +1307,24 @@ void p_stmt(void) {
     } else if (eat("while")) {
         int label = label_count += 1;
         expect("(");
-        Expr *expr = p_expr(0);
+        Expr *cond = p_expr(0);
         expect(")");
-        check_type_bool(&expr);
+        check_type_bool(cond);
         printf(".L%d.while:\n", label);
-        emit_expr(expr, 0);
-        printf("  cbz x0, .L%d.end\n", label);
+        emit_expr(cond, 0);
+        printf("  cbz x0, .L%d.done\n", label);
         printf(".L%d.do:\n", label);
         p_stmt();
         printf("  b .L%d.while\n", label);
-        printf(".L%d.end:\n", label);
+        printf(".L%d.done:\n", label);
     } else if (eat("return")) {
         if (!at(";")) {
             Expr *expr = p_expr(0);
-            check_type(&expr, current_func->type);
+            check_type(expr, current_func->type);
             emit_expr(expr, 0);
         }
         expect(";");
-        printf("  b .return.%s\n", current_func->name);
+        printf("  b .L.%s.ret\n", current_func->name);
     } else {
         Expr *expr = p_expr(0);
         emit_expr(expr, 0);
@@ -1339,7 +1332,7 @@ void p_stmt(void) {
     }
 }
 
-void p_param(Symbol *func) {
+void p_param(Sym *func) {
     Pos start_pos = tok_pos;
     char *param_name = p_ident();
     expect(":");
@@ -1357,7 +1350,7 @@ void p_param(Symbol *func) {
 }
 
 Type *p_return_type(void) {
-    Type *type = mk_type(Type_Void);
+    Type *type = mk_void_type();
     if (eat(":")) {
         type = p_type();
     }
@@ -1367,11 +1360,11 @@ Type *p_return_type(void) {
     return type;
 }
 
-void emit_param_copy(void) {
+void emit_param_store(void) {
     int i = 0;
     while (i < current_func->param_count) {
-        Symbol *sym = find_sym(current_func->param_names[i]);
-        printf("  %s%d, [fp, #-%d] ; %s\n", strx(sym->type), i, sym->frame_offset, sym->name);
+        Sym *sym = find_sym(current_func->param_names[i]);
+        printf("  %s%d, [fp, #%d] ; %s\n", strx(sym->type), i, -sym->frame_offset, sym->name);
         i += 1;
     }
 }
@@ -1416,9 +1409,9 @@ void p_decl(void) {
             printf("  stp x29, x30, [sp, #-16]!\n");
             printf("  mov x29, sp\n");
             printf("  sub sp, sp, #%d\n", FRAME_SIZE);
-            emit_param_copy();
+            emit_param_store();
             p_stmt();
-            printf(".return.%s:\n", name);
+            printf(".L.%s.ret:\n", name);
             printf("  add sp, sp, #%d\n", FRAME_SIZE);
             printf("  ldp x29, x30, [sp], #16\n");
             printf("  ret\n");
@@ -1436,8 +1429,8 @@ void p_decl(void) {
         expect(";");
         add_global(is_extern, name, type, &start_pos);
         if (!is_extern) {
-            printf("  .globl _%s\n", name);
-            printf(".zerofill __DATA,__common,_%s,%d,%d\n", name, type_size(type), type_align(type));
+            printf("  .global _%s\n", name);
+            printf(".zerofill __DATA, __common, _%s, %d, %d\n", name, type_size(type), type_align(type));
         }
     } else if (eat("const")) {
         char *name = p_ident();
