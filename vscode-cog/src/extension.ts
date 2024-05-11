@@ -13,7 +13,10 @@ async function compile(document: TextDocument) {
     log.appendLine('Invoking compiler');
 
     const compilerPath = __dirname + '/../../bootstrap/cmake-build-debug/cog0';
-    const process = spawn(compilerPath, { stdio: ['pipe', 'ignore', 'pipe'] });
+    const process = spawn(compilerPath, {
+        stdio: ['pipe', 'ignore', 'pipe'],
+        timeout: 1000,
+    });
 
     process.stdin.write(document.getText());
     process.stdin.end();
