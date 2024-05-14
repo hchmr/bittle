@@ -1,0 +1,24 @@
+extern func printf(fmt: *Char, ...): Int32;
+extern func exit(code: Int32);
+
+func assert(cond: Bool, because: *Char) {
+    if (!cond) {
+        printf("*** Assertion failed: %s\n", because);
+        exit(1);
+    }
+}
+
+func swap(a: *Int, b: *Int) {
+    var tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+func main() {
+    var a = 42;
+    var b = 1337;
+    swap(&a, &b);
+    assert(a == 1337, "a should be 1337");
+    assert(b == 42, "b should be 42");
+    printf("Ok\n");
+}

@@ -1,0 +1,201 @@
+//= Imports
+
+// stdio.h
+
+extern struct File;
+extern var __stdinp: *File;
+extern var __stderrp: *File;
+extern var __stdoutp: *File;
+const EOF = -1;
+extern func fgetc(stream: *File): Int32;
+extern func fprintf(stream: *File, format: *Char, ...): Int32;
+extern func ferror(stream: *File): Int32;
+extern func fopen(file_name: *Char, mode: *Char): *File;
+extern func fclose(stream: *File): Int32;
+
+// ctype.h
+
+extern func isspace(c: Char): Int32;
+
+// stdlib.h
+
+extern func exit(status: Int32): Void;
+
+//= Misc
+
+func open_file(file_name: *Char): *File {
+    var stream = fopen(file_name, "r");
+    if (stream == null) {
+        fprintf(__stderrp, "Error opening file %s\n", file_name);
+        exit(1);
+    }
+    return stream;
+}
+
+func close_file(stream: *File) {
+    if (fclose(stream) != 0) {
+        fprintf(__stderrp, "Error closing file\n");
+        exit(1);
+    }
+}
+
+func get_char(stream: *File): Char {
+    var char = fgetc(stream) as Char;
+    if (char == EOF && ferror(stream) != 0) {
+        fprintf(__stderrp, "Error reading file\n");
+        exit(1);
+    }
+    return char;
+}
+
+func int32_max(a: Int32, b: Int32): Int32 {
+    return a < b ? b : a;
+}
+
+//= Stats
+
+struct Stats {
+    lines: Int32,
+    words: Int32,
+    bytes: Int32,
+    max_len: Int32,
+}
+
+func stats_init(stats: *Stats) {
+    stats.lines = 0;
+    stats.words = 0;
+    stats.bytes = 0;
+    stats.max_len = 0;
+}
+
+func stats_accum(total: *Stats, other: *Stats) {
+    total.lines += other.lines;
+    total.words += other.words;
+    total.bytes += other.bytes;
+    total.max_len = int32_max(total.max_len, other.max_len);
+}
+
+func get_stats(stream: *File, stats: *Stats) {
+    stats_init(stats);
+    var prev_char = ' ';
+    var curr_len = 0;
+    while (true) {
+        var curr_char = get_char(stream);
+        if (curr_char == EOF)
+            return; // 'break' would be nice
+
+        stats.bytes += 1;
+        curr_len += 1;
+
+        if (isspace(prev_char) && !isspace(curr_char)) {
+            stats.words += 1;
+        }
+        prev_char = curr_char;
+
+        if (curr_char == '\n') {
+            stats.lines += 1;
+            stats.max_len = int32_max(stats.max_len, curr_len);
+            curr_len = 0;
+        }
+    }
+}
+
+//= Display
+
+enum {
+    Opt_PrintLines = 1,
+    Opt_PrintWords = 2,
+    Opt_PrintBytes = 4,
+    Opt_PrintMaxLen = 8,
+}
+
+func print_row(options: Int32, stats: *Stats, label: *Char) {
+    if (options & Opt_PrintLines) {
+        fprintf(__stdoutp, "%8d", stats.lines);
+    }
+    if (options & Opt_PrintWords) {
+        fprintf(__stdoutp, "%8d", stats.words);
+    }
+    if (options & Opt_PrintBytes) {
+        fprintf(__stdoutp, "%8d", stats.bytes);
+    }
+    if (options & Opt_PrintMaxLen) {
+        fprintf(__stdoutp, "%8d", stats.max_len);
+    }
+    if (label) {
+        fprintf(__stdoutp, " %s", label);
+    }
+    fprintf(__stdoutp, "\n");
+}
+
+//= Args
+
+struct Args {
+    options: Int32,
+    files: *(*Char),
+    files_count: Int32,
+}
+
+func print_usage(argv: *(*Char)) {
+    fprintf(__stderrp, "Usage: %s [-cLlm] [file ...]\n", argv[0]);
+}
+
+func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
+    var options = 0;
+    var i = 1;
+    while (i < argc && argv[i][0] == '-') {
+        var arg = argv[i];
+        var j = 1;
+        while (arg[j] != '\0') {
+            if (arg[j] == 'l') {
+                options = options | Opt_PrintLines;
+            } else if (arg[j] == 'w') {
+                options = options | Opt_PrintWords;
+            } else if (arg[j] == 'c') {
+                options = options | Opt_PrintBytes;
+            } else if (arg[j] == 'L') {
+                options = options | Opt_PrintMaxLen;
+            } else {
+                fprintf(__stderrp, "Unknown option: %c\n", arg[j]);
+                print_usage(argv);
+                exit(1);
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    if (options == 0) {
+        options = Opt_PrintLines | Opt_PrintWords | Opt_PrintBytes;
+    }
+    args.options = options;
+    args.files = &argv[i];
+    args.files_count = argc - i;
+}
+
+func main(argc: Int32, argv: *(*Char)): Int32 {
+    var args: Args;
+    arg_parse(argc, argv, &args);
+
+    var total: Stats;
+    stats_init(&total);
+
+    var i = 0;
+    while (i < args.files_count) {
+        var stats: Stats;
+        stats_init(&stats);
+        var file_name = args.files[i];
+        var stream = open_file(file_name);
+        get_stats(stream, &stats);
+        close_file(stream);
+        print_row(args.options, &stats, file_name);
+        stats_accum(&total, &stats);
+        i += 1;
+    }
+
+    if (i == 0) {
+        get_stats(__stdinp, &total);
+        print_row(args.options, &total, null);
+    } else if (i > 1) {
+        print_row(args.options, &total, "total");
+    }
+}
