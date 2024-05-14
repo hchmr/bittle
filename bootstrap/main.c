@@ -1280,10 +1280,10 @@ void p_stmt(void) {
             error_at(&name_pos, "Variable must have a size.");
         }
 
-        add_local(name, type, &tok_pos);
+        add_local(name, type, &name_pos);
         if (init != NULL) {
             Sym *sym = find_sym(name);
-            Expr *lhs = mk_expr("<var>", sym->type, &tok_pos);
+            Expr *lhs = mk_expr("<var>", sym->type, &name_pos);
             lhs->sym = sym;
             emit_expr(build_binary_expr(lhs, "_=_", init), 0);
         }
