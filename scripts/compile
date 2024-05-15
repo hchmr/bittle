@@ -72,11 +72,11 @@ if [ -n "$compile_only" ]; then
 fi
 
 echo "Assembling $asm_file to $obj_file"
-as -g -o "$obj_file" "$asm_file"
+gcc -g -c -o "$obj_file" "$asm_file"
 
 if [ -n "$compile_and_assemble_only" ]; then
   exit 0
 fi
 
 echo "Linking $obj_file to $exe_file"
-ld -lSystem -syslibroot "$(xcrun -sdk macosx --show-sdk-path)" -o "$exe_file" "$obj_file"
+gcc -g -o "$exe_file" "$obj_file"

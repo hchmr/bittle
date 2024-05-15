@@ -3,9 +3,9 @@
 // stdio.h
 
 extern struct File;
-extern var __stdinp: *File;
-extern var __stderrp: *File;
-extern var __stdoutp: *File;
+extern var stdin: *File;
+extern var stderr: *File;
+extern var stdout: *File;
 const EOF = -1;
 extern func fgetc(stream: *File): Int32;
 extern func fprintf(stream: *File, format: *Char, ...): Int32;
@@ -26,7 +26,7 @@ extern func exit(status: Int32): Void;
 func open_file(file_name: *Char): *File {
     var stream = fopen(file_name, "r");
     if (stream == null) {
-        fprintf(__stderrp, "Error opening file %s\n", file_name);
+        fprintf(stderr, "Error opening file %s\n", file_name);
         exit(1);
     }
     return stream;
@@ -34,7 +34,7 @@ func open_file(file_name: *Char): *File {
 
 func close_file(stream: *File) {
     if (fclose(stream) != 0) {
-        fprintf(__stderrp, "Error closing file\n");
+        fprintf(stderr, "Error closing file\n");
         exit(1);
     }
 }
@@ -42,7 +42,7 @@ func close_file(stream: *File) {
 func get_char(stream: *File): Char {
     var char = fgetc(stream) as Char;
     if (char == EOF && ferror(stream) != 0) {
-        fprintf(__stderrp, "Error reading file\n");
+        fprintf(stderr, "Error reading file\n");
         exit(1);
     }
     return char;
@@ -111,21 +111,21 @@ enum {
 
 func print_row(options: Int32, stats: *Stats, label: *Char) {
     if (options & Opt_PrintLines) {
-        fprintf(__stdoutp, "%8d", stats.lines);
+        fprintf(stdout, "%8d", stats.lines);
     }
     if (options & Opt_PrintWords) {
-        fprintf(__stdoutp, "%8d", stats.words);
+        fprintf(stdout, "%8d", stats.words);
     }
     if (options & Opt_PrintBytes) {
-        fprintf(__stdoutp, "%8d", stats.bytes);
+        fprintf(stdout, "%8d", stats.bytes);
     }
     if (options & Opt_PrintMaxLen) {
-        fprintf(__stdoutp, "%8d", stats.max_len);
+        fprintf(stdout, "%8d", stats.max_len);
     }
     if (label) {
-        fprintf(__stdoutp, " %s", label);
+        fprintf(stdout, " %s", label);
     }
-    fprintf(__stdoutp, "\n");
+    fprintf(stdout, "\n");
 }
 
 //= Args
@@ -137,7 +137,7 @@ struct Args {
 }
 
 func print_usage(argv: *(*Char)) {
-    fprintf(__stderrp, "Usage: %s [-cLlm] [file ...]\n", argv[0]);
+    fprintf(stderr, "Usage: %s [-cLlm] [file ...]\n", argv[0]);
 }
 
 func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
@@ -156,7 +156,7 @@ func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
             } else if (arg[j] == 'L') {
                 options = options | Opt_PrintMaxLen;
             } else {
-                fprintf(__stderrp, "Unknown option: %c\n", arg[j]);
+                fprintf(stderr, "Unknown option: %c\n", arg[j]);
                 print_usage(argv);
                 exit(1);
             }
@@ -193,7 +193,7 @@ func main(argc: Int32, argv: *(*Char)): Int32 {
     }
 
     if (i == 0) {
-        get_stats(__stdinp, &total);
+        get_stats(stdin, &total);
         print_row(args.options, &total, null);
     } else if (i > 1) {
         print_row(args.options, &total, "total");

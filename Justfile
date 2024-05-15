@@ -19,9 +19,9 @@ stage1-compile:
     @echo "Generating assembly"
     bootstrap/cmake-build-debug/cog0 < self-host/main.cog > out/stage1/main.s
     @echo "Assembling"
-    as -g -o out/stage1/main.o out/stage1/main.s
+    gcc -g -c -o out/stage1/main.o out/stage1/main.s
     @echo "Linking"
-    ld -lSystem -syslibroot "$(xcrun -sdk macosx --show-sdk-path)" -o out/stage1/cog1 out/stage1/main.o
+    gcc -o out/stage1/cog1 out/stage1/main.o
 
 stage1-dbg:
     @just stage1-compile
@@ -38,9 +38,9 @@ stage2-compile:
     @echo "Generating assembly"
     out/stage1/cog1 < self-host/main.cog > out/stage2/main.s
     @echo "Assembling"
-    as -g -o out/stage2/main.o out/stage2/main.s
+    gcc -g -c -o out/stage2/main.o out/stage2/main.s
     @echo "Linking"
-    ld -lSystem -syslibroot "$(xcrun -sdk macosx --show-sdk-path)" -o out/stage2/cog2 out/stage2/main.o
+    gcc -o out/stage2/cog2 out/stage2/main.o
 
 stage2:
     @just stage2-compile
@@ -53,9 +53,9 @@ stage3:
     @echo "Generating assembly"
     out/stage2/cog2 < self-host/main.cog > out/stage3/main.s
     @echo "Assembling"
-    as -g -o out/stage3/main.o out/stage3/main.s
+    gcc -g -c -o out/stage3/main.o out/stage3/main.s
     @echo "Linking"
-    ld -lSystem -syslibroot "$(xcrun -sdk macosx --show-sdk-path)" -o out/stage3/cog3 out/stage3/main.o
+    gcc -o out/stage3/cog3 out/stage3/main.o
 
     @echo "Comparing stage2 and stage3"
     diff out/stage2/main.s out/stage3/main.s && echo "No difference"

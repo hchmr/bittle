@@ -1,8 +1,8 @@
 // stdio
 extern struct File;
-extern var __stdinp: *File;
-extern var __stdoutp: *File;
-extern var __stderrp: *File;
+extern var stdin: *File;
+extern var stdout: *File;
+extern var stderr: *File;
 
 extern func printf(fmt: *Char, ...): Int32;
 extern func fprintf(file: *File, fmt: *Char, ...): Int32;
@@ -28,7 +28,7 @@ struct Pos {
 }
 
 func error_at(pos: *Pos) {
-    fprintf(__stderrp, "%d:%d: Error: ", pos.line, pos.col);
+    fprintf(stderr, "%d:%d: Error: ", pos.line, pos.col);
 }
 
 func str_eq(a: *Char, b: *Char): Bool {
@@ -41,7 +41,7 @@ func align_up(size: Int , align: Int): Int {
 
 func assert(cond: Bool, because: *Char) {
     if (!cond) {
-        fprintf(__stderrp, "Assertion failed: %s\n", because);
+        fprintf(stderr, "Assertion failed: %s\n", because);
         exit(1);
     }
 }
@@ -53,6 +53,10 @@ func ilog2(n: Int): Int {
         i += 1;
     }
     return i;
+}
+
+func int_min(a: Int, b: Int): Int {
+    return a > b ? b : a;
 }
 
 func sb_push(buf_p: *(*Char), c: Char): Void {
@@ -289,7 +293,7 @@ func mk_sym(kind: Int, name: *Char): *Sym {
 
 func enter_scope() {
     if (scope_depth == MAX_SCOPES) {
-        fprintf(__stderrp, "Maximum scope depth exceeded.\n");
+        fprintf(stderr, "Maximum scope depth exceeded.\n");
         exit(1);
     }
     scope_depth += 1;
@@ -333,7 +337,7 @@ func add_sym(sym: *Sym, pos: *Pos) {
     var existing = find_sym(sym.name, scope_depth);
     if (existing && !(sym.kind == Sym_Func && existing.kind == Sym_Func && !existing.defined && func_eq(sym, existing))) {
         error_at(pos);
-        fprintf(__stderrp, "Symbol '%s' already defined.\n", sym.name);
+        fprintf(stderr, "Symbol '%s' already defined.\n", sym.name);
         exit(1);
     }
     sym_count += 1;
@@ -345,7 +349,7 @@ func add_local(name: *Char, type: *Type, pos: *Pos): *Sym {
     current_func.locals_size = align_up(current_func.locals_size + type_size(type), type_align(type));
     if (current_func.locals_size > FRAME_LOCALS_SIZE) {
         error_at(pos);
-        fprintf(__stderrp, "Maximum local size exceeded.\n");
+        fprintf(stderr, "Maximum local size exceeded.\n");
         exit(1);
     }
 
@@ -478,7 +482,7 @@ func const_eval(e: *Expr): Int {
         return const_eval(e.args[0]) - const_eval(e.args[1]);
     } else {
         error_at(&e.pos);
-        fprintf(__stderrp, "Failed to evaluate constant expression.\n", e.kind);
+        fprintf(stderr, "Failed to evaluate constant expression.\n", e.kind);
         exit(1);
     }
 }
@@ -510,11 +514,11 @@ func check_type(e: *Expr, expected: *Type) {
         return;
     if (!type_eq(e.type, expected)) {
         error_at(&e.pos);
-        fprintf(__stderrp, "Type mismatch: ");
-        print_type(__stderrp, e.type);
-        fprintf(__stderrp, " != ");
-        print_type(__stderrp, expected);
-        fprintf(__stderrp, ".\n");
+        fprintf(stderr, "Type mismatch: ");
+        print_type(stderr, e.type);
+        fprintf(stderr, " != ");
+        print_type(stderr, expected);
+        fprintf(stderr, ".\n");
         exit(1);
     }
 }
@@ -522,7 +526,7 @@ func check_type(e: *Expr, expected: *Type) {
 func check_type_int(e: *Expr) {
     if (e.type.kind != Type_Int) {
         error_at(&e.pos);
-        fprintf(__stderrp, "Integer type expected.\n");
+        fprintf(stderr, "Integer type expected.\n");
         exit(1);
     }
 }
@@ -611,14 +615,14 @@ func scan_char() {
             c = '\"';
         } else {
             error_at(&chr_pos);
-            fprintf(__stderrp, "Invalid escape sequence.\n");
+            fprintf(stderr, "Invalid escape sequence.\n");
             exit(1);
         }
     } else if (is_print(chr)) {
         c = chr;
     } else {
         error_at(&chr_pos);
-        fprintf(__stderrp, "Illegal character.\n");
+        fprintf(stderr, "Illegal character.\n");
         exit(1);
     }
     sb_push(&lexeme, c);
@@ -643,13 +647,13 @@ func next_tok() {
         next_char();
         if (chr == '\'') {
             error_at(&chr_pos);
-            fprintf(__stderrp, "Empty character.\n");
+            fprintf(stderr, "Empty character.\n");
             exit(1);
         }
         scan_char();
         if (chr != '\'') {
             error_at(&chr_pos);
-            fprintf(__stderrp, "Expected closing quote.\n");
+            fprintf(stderr, "Expected closing quote.\n");
             exit(1);
         }
         next_char();
@@ -661,7 +665,7 @@ func next_tok() {
         }
         if (chr != '\"') {
             error_at(&chr_pos);
-            fprintf(__stderrp, "Expected closing quote.\n");
+            fprintf(stderr, "Expected closing quote.\n");
             exit(1);
         }
         next_char();
@@ -708,7 +712,7 @@ func eat(str: *Char): Bool {
 func expect(str: *Char) {
     if (!eat(str)) {
         error_at(&tok_pos);
-        fprintf(__stderrp, "'%s' expected.\n", str);
+        fprintf(stderr, "'%s' expected.\n", str);
         exit(1);
     }
 }
@@ -722,7 +726,7 @@ func p_lexeme(): *Char {
 func p_ident(): *Char {
     if (tok != Tok_Wrd) {
         error_at(&tok_pos);
-        fprintf(__stderrp, "Identifier expected.\n");
+        fprintf(stderr, "Identifier expected.\n");
         exit(1);
     }
     return p_lexeme();
@@ -731,7 +735,7 @@ func p_ident(): *Char {
 func p_comma(end: *Char) {
     if (!eat(",") && !at(end)) {
         error_at(&tok_pos);
-        fprintf(__stderrp, "',' or '%s' expected.\n", end);
+        fprintf(stderr, "',' or '%s' expected.\n", end);
         exit(1);
     }
 }
@@ -774,11 +778,11 @@ func ldrx(type: *Type): *Char {
 
 func emit_push(reg: Int) {
     temp_size += 8;
-    printf("  str x%d, [fp, #%d] ; push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    printf("  str x%d, [fp, #%d] // push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
 }
 
 func emit_pop(reg: Int) {
-    printf("  ldr x%d, [fp, #%d] ; pop\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    printf("  ldr x%d, [fp, #%d] // pop\n", reg, -FRAME_LOCALS_SIZE - temp_size);
     temp_size -= 8;
 }
 
@@ -826,22 +830,22 @@ func emit_expr_cmp(op: *Char, e: *Expr, t0: Int) {
 func emit_expr_lvalue(e: *Expr, t0: Int) {
     if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Local) {
         var name = e.sym.name;
-        printf("  add x%d, fp, #%d ; &%s\n", t0, -e.sym.offset, name);
+        printf("  add x%d, fp, #%d // &%s\n", t0, -e.sym.offset, name);
     } else if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Global) {
         var name = e.sym.name;
         if (e.sym.is_extern) {
-            printf("  adrp x%d, _%s@GOTPAGE\n", t0, name);
-            printf("  ldr x%d, [x%d, _%s@GOTPAGEOFF] ; &%s\n", t0, t0, name, name);
+            printf("  adrp x%d, :got:%s\n", t0, name);
+            printf("  ldr x%d, [x%d, :got_lo12:%s] // &%s\n", t0, t0, name, name);
         } else {
-            printf("  adrp x%d, _%s@PAGE\n", t0, name);
-            printf("  add x%d, x%d, _%s@PAGEOFF ; &%s\n", t0, t0, name, name);
+            printf("  adrp x%d, %s\n", t0, name);
+            printf("  add x%d, x%d, :lo12:%s // &%s\n", t0, t0, name, name);
         }
     } else if (str_eq(e.kind, "_._")) {
         var lhs_type = e.args[0].type;
         var field_name = lhs_type.field_names[e.field_index];
         var field_offset = lhs_type.field_offsets[e.field_index];
         emit_expr_lvalue(e.args[0], t0);
-        printf("  add x%d, x%d, #%d ; &%s\n", t0, t0, field_offset, field_name);
+        printf("  add x%d, x%d, #%d // &%s\n", t0, t0, field_offset, field_name);
     } else if (str_eq(e.kind, "*_")) {
         emit_expr(e.args[0], t0);
     } else if (str_eq(e.kind, "_[_]")) {
@@ -851,7 +855,7 @@ func emit_expr_lvalue(e: *Expr, t0: Int) {
             emit_operands_lvalue(e, 0, 1);
         }
         var elem_size = type_size(e.args[0].type.base);
-        printf("  add x%d, x0, x1, lsl #%d ; &_[_]\n", t0, ilog2(elem_size));
+        printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
     } else {
         assert(false, "emit_expr_lvalue: Unreachable.");
     }
@@ -865,9 +869,11 @@ func emit_expr(e: *Expr, t0: Int) {
         printf("  mov x%d, #%d\n", t0, e.int_val);
     } else if (str_eq(e.kind, "<str>")) {
         var label = next_label();
-        printf("  .data\n");
+        printf("  .text\n");
+        printf("  .section .rodata\n");
+        printf("  .align 3\n");
         printf(".str.%d:\n", label);
-        printf("  .asciz \"");
+        printf("  .string \"");
         var i = 0;
         while (e.str_val[i] != '\0') {
             if (!is_print(e.str_val[i]) || e.str_val[i] == '\"' || e.str_val[i] == '\\') {
@@ -879,26 +885,26 @@ func emit_expr(e: *Expr, t0: Int) {
         }
         printf("\"\n");
         printf("  .text\n");
-        printf("  adrp x%d, .str.%d@PAGE\n", t0, label);
-        printf("  add x%d, x%d, .str.%d@PAGEOFF\n", t0, t0, label);
+        printf("  adrp x%d, .str.%d\n", t0, label);
+        printf("  add x%d, x%d, :lo12:.str.%d\n", t0, t0, label);
     } else if (str_eq(e.kind, "_(_)")) {
         var sym = e.sym;
         var i = 0;
         while (i < e.arg_count) {
             emit_expr(e.args[i], 0);
-            if (i >= sym.param_count) {
+            if (i >= MAX_PARAMS) {
                 printf("  str x0, [sp, #%d]\n", 8 * (i - sym.param_count));
             } else {
                 emit_push(0);
             }
             i += 1;
         }
-        i = sym.param_count;
+        i = int_min(e.arg_count, MAX_PARAMS);
         while (i > 0) {
             i -= 1;
             emit_pop(i);
         }
-        printf("  bl _%s\n", e.sym.name);
+        printf("  bl %s\n", e.sym.name);
         if (e.type.kind != Type_Void) {
             emit_sign_extend(e.type, t0, 0);
         }
@@ -915,7 +921,7 @@ func emit_expr(e: *Expr, t0: Int) {
         printf("  neg x%d, x%d\n", t0, t0);
     } else if (str_eq(e.kind, "_&&_") || str_eq(e.kind, "_||_")) {
         var label = next_label();
-        printf(".L%d.begin: ; %s\n", label, e.kind);
+        printf(".L%d.begin: // %s\n", label, e.kind);
         emit_expr(e.args[0], t0);
         if (str_eq(e.kind, "_&&_")) {
             printf("  cbz x%d, .L%d.end\n", t0, label);
@@ -986,7 +992,7 @@ func emit_expr(e: *Expr, t0: Int) {
     } else if (str_eq(e.kind, "<memcpy>")) {
         emit_operands(e, 0, 1);
         printf("  mov x2, #%d\n", type_size(e.args[0].type.base));
-        printf("  bl _memcpy\n");
+        printf("  bl memcpy\n");
     } else if (str_eq(e.kind, "<cast>")) {
         var target = e.type;
         var source = e.args[0].type;
@@ -1038,19 +1044,19 @@ func p_type(): *Type {
         var sym = find_sym(lexeme, 0);
         if (!sym) {
             error_at(&tok_pos);
-            fprintf(__stderrp, "Undeclared symbol '%s'.\n", lexeme);
+            fprintf(stderr, "Undeclared symbol '%s'.\n", lexeme);
             exit(1);
         }
         if (sym.kind != Sym_Type) {
             error_at(&tok_pos);
-            fprintf(__stderrp, "'%s' is not a type.\n", lexeme);
+            fprintf(stderr, "'%s' is not a type.\n", lexeme);
             exit(1);
         }
         next_tok();
         return sym.type;
     } else {
         error_at(&tok_pos);
-        fprintf(__stderrp, "Type expected.\n");
+        fprintf(stderr, "Type expected.\n");
         exit(1);
     }
 }
@@ -1076,14 +1082,14 @@ func build_unary_expr(op: *Char, rhs: *Expr): *Expr {
     if (str_eq(op, "*_")) {
         if (rhs.type.kind != Type_Ptr) {
             error_at(&rhs.pos);
-            fprintf(__stderrp, "Pointer type expected.\n");
+            fprintf(stderr, "Pointer type expected.\n");
             exit(1);
         }
         return mk_expr_1("*_", rhs, rhs.type.base);
     } else if (str_eq(op, "&_")) {
         if (!is_lvalue(rhs)) {
             error_at(&rhs.pos);
-            fprintf(__stderrp, "L-value expected.\n");
+            fprintf(stderr, "L-value expected.\n");
             exit(1);
         }
         return mk_expr_1("&_", rhs, mk_ptr_type(rhs.type));
@@ -1100,7 +1106,7 @@ func build_binary_expr(lhs: *Expr, op: *Char, rhs: *Expr): *Expr {
     if (str_eq(op, "_=_") || str_eq(op, "_+=_") || str_eq(op, "_-=_")) {
         if (!is_lvalue(lhs)) {
             error_at(&lhs.pos);
-            fprintf(__stderrp, "L-value expected.\n");
+            fprintf(stderr, "L-value expected.\n");
             exit(1);
         }
         if (!str_eq(op, "_=_")) {
@@ -1123,9 +1129,9 @@ func build_binary_expr(lhs: *Expr, op: *Char, rhs: *Expr): *Expr {
         unify_types(lhs, rhs);
         if (!is_scalar(lhs.type)) {
             error_at(&lhs.pos);
-            fprintf(__stderrp, "Type ");
-            print_type(__stderrp, lhs.type);
-            fprintf(__stderrp, " is not comparable.\n");
+            fprintf(stderr, "Type ");
+            print_type(stderr, lhs.type);
+            fprintf(stderr, " is not comparable.\n");
             exit(1);
         }
         return mk_expr_2(op, lhs, rhs, mk_bool_type());
@@ -1168,13 +1174,13 @@ func p_expr(max_prec: Int): *Expr {
         var sym = find_sym(name, 0);
         if (!sym) {
             error_at(&name_pos);
-            fprintf(__stderrp, "Undeclared symbol '%s'.\n", name);
+            fprintf(stderr, "Undeclared symbol '%s'.\n", name);
             exit(1);
         }
         if (eat("(")) {
             if (sym.kind != Sym_Func) {
                 error_at(&name_pos);
-                fprintf(__stderrp, "Function expected.\n");
+                fprintf(stderr, "Function expected.\n");
                 exit(1);
             }
             lhs = mk_expr("_(_)", sym.type, &name_pos);
@@ -1184,7 +1190,7 @@ func p_expr(max_prec: Int): *Expr {
                 p_comma(")");
                 if (lhs.arg_count == MAX_PARAMS) {
                     error_at(&arg.pos);
-                    fprintf(__stderrp, "Too many arguments.\n");
+                    fprintf(stderr, "Too many arguments.\n");
                     exit(1);
                 }
                 lhs.args[lhs.arg_count] = arg;
@@ -1192,12 +1198,12 @@ func p_expr(max_prec: Int): *Expr {
             }
             if (lhs.arg_count < sym.param_count) {
                 error_at(&lhs.pos);
-                fprintf(__stderrp, "Not enough arguments provided (%d < %d).\n", lhs.arg_count, sym.param_count);
+                fprintf(stderr, "Not enough arguments provided (%d < %d).\n", lhs.arg_count, sym.param_count);
                 exit(1);
             }
             if (!sym.is_variadic && lhs.arg_count > sym.param_count) {
                 error_at(&lhs.pos);
-                fprintf(__stderrp, "Too many arguments provided (%d > %d).\n", lhs.arg_count, sym.param_count);
+                fprintf(stderr, "Too many arguments provided (%d > %d).\n", lhs.arg_count, sym.param_count);
                 exit(1);
             }
             var i = 0;
@@ -1208,7 +1214,7 @@ func p_expr(max_prec: Int): *Expr {
             while (i < lhs.arg_count) {
                 if (!is_scalar(lhs.args[i].type)) {
                     error_at(&tok_pos);
-                    fprintf(__stderrp, "Variadic argument must be scalar.\n");
+                    fprintf(stderr, "Variadic argument must be scalar.\n");
                     exit(1);
                 }
                 i += 1;
@@ -1222,7 +1228,7 @@ func p_expr(max_prec: Int): *Expr {
                 lhs.int_val = sym.value;
             } else {
                 error_at(&tok_pos);
-                fprintf(__stderrp, "'%s' is not a variable or constant.\n", name);
+                fprintf(stderr, "'%s' is not a variable or constant.\n", name);
                 exit(1);
             }
         }
@@ -1238,7 +1244,7 @@ func p_expr(max_prec: Int): *Expr {
         lhs = build_unary_expr("-_", p_expr(Prec_Unary));
     } else {
         error_at(&tok_pos);
-        fprintf(__stderrp, "Expression expected.\n");
+        fprintf(stderr, "Expression expected.\n");
         exit(1);
     }
 
@@ -1296,7 +1302,7 @@ func p_expr(max_prec: Int): *Expr {
             var type = p_type();
             if (!(is_scalar(type) && is_scalar(lhs.type))) {
                 error_at(&tok_pos);
-                fprintf(__stderrp, "Invalid cast type.\n");
+                fprintf(stderr, "Invalid cast type.\n");
                 exit(1);
             }
             lhs = mk_cast_expr(lhs, type);
@@ -1305,7 +1311,7 @@ func p_expr(max_prec: Int): *Expr {
             expect("]");
             if (lhs.type.kind != Type_Arr && lhs.type.kind != Type_Ptr) {
                 error_at(&lhs.pos);
-                fprintf(__stderrp, "Expression is not indexable.\n");
+                fprintf(stderr, "Expression is not indexable.\n");
                 exit(1);
             }
             check_type_int(rhs);
@@ -1317,13 +1323,13 @@ func p_expr(max_prec: Int): *Expr {
             }
             if (lhs.type.kind != Type_Struct) {
                 error_at(&lhs.pos);
-                fprintf(__stderrp, "Struct type expected.\n");
+                fprintf(stderr, "Struct type expected.\n");
                 exit(1);
             }
             var field_index = find_field(lhs.type, field_name);
             if (field_index == -1) {
                 error_at(&tok_pos);
-                fprintf(__stderrp, "Unknown field '%s'.\n", field_name);
+                fprintf(stderr, "Unknown field '%s'.\n", field_name);
                 exit(1);
             }
             var field_type = lhs.type.field_types[field_index];
@@ -1370,13 +1376,13 @@ func p_stmt() {
                 type = init.type;
             } else {
                 error_at(&name_pos);
-                fprintf(__stderrp, "Type or initializer expected.\n");
+                fprintf(stderr, "Type or initializer expected.\n");
                 exit(1);
             }
         }
         if (type_size(type) == -1) {
             error_at(&name_pos);
-            fprintf(__stderrp, "Variable must have a size.\n");
+            fprintf(stderr, "Variable must have a size.\n");
             exit(1);
         }
 
@@ -1429,7 +1435,7 @@ func p_stmt() {
             emit_expr(expr, 0);
         } else if (current_func.type.kind != Type_Void) {
             error_at(&tok_pos);
-            fprintf(__stderrp, "Return value expected.\n");
+            fprintf(stderr, "Return value expected.\n");
             exit(1);
         }
         printf("  b .L.%s.ret\n", current_func.name);
@@ -1444,7 +1450,7 @@ func emit_param_store(sym: *Sym) {
     var i = 0;
     while (i < sym.param_count) {
         var sym = find_sym(sym.param_names[i], 0);
-        printf("  %s%d, [fp, #%d] ; %s\n", strx(sym.type), i, -sym.offset, sym.name);
+        printf("  %s%d, [fp, #%d] // %s\n", strx(sym.type), i, -sym.offset, sym.name);
         i += 1;
     }
 }
@@ -1469,12 +1475,12 @@ func p_func(is_extern: Bool) {
 
         if (sym.param_count == MAX_PARAMS) {
             error_at(&tok_pos);
-            fprintf(__stderrp, "Too many parameters.\n");
+            fprintf(stderr, "Too many parameters.\n");
             exit(1);
         }
         if (!is_scalar(param_type)) {
             error_at(&param_pos);
-            fprintf(__stderrp, "Parameter must be of scalar type.\n");
+            fprintf(stderr, "Parameter must be of scalar type.\n");
             exit(1);
         }
         sym.param_names[sym.param_count] = param_name;
@@ -1492,8 +1498,10 @@ func p_func(is_extern: Bool) {
     }
     if (!is_extern && at("{")) {
         sym.defined = true;
-        printf("  .global _%s\n", name);
-        printf("_%s:\n", name);
+        printf("  .text\n");
+        printf("  .align 2\n");
+        printf("  .global %s\n", name);
+        printf("%s:\n", name);
         printf("  stp x29, x30, [sp, #-16]!\n");
         printf("  mov x29, sp\n");
         printf("  sub sp, sp, #%d\n", FRAME_SIZE);
@@ -1515,7 +1523,7 @@ func p_decl() {
     if (eat("extern")) {
         if (!at("func") && !at("var") && !at("struct")) {
             error_at(&tok_pos);
-            fprintf(__stderrp, "External declaration expected.\n");
+            fprintf(stderr, "External declaration expected.\n");
             exit(1);
         }
         is_extern = true;
@@ -1530,8 +1538,11 @@ func p_decl() {
         expect(";");
         add_global(is_extern, name, type, &tok_pos);
         if (!is_extern) {
-            printf("  .global _%s\n", name);
-            printf(".zerofill __DATA, __common, _%s, %d, %d\n", name, type_size(type), type_align(type));
+            printf("  .global %s\n", name);
+            printf("  .bss\n");
+            printf(".align %d\n", type_align(type));
+            printf("%s:\n", name);
+            printf("  .zero %d\n", type_size(type));
         }
     } else if (eat("const")) {
         var name = p_ident();
@@ -1570,7 +1581,7 @@ func p_decl() {
         }
     } else {
         error_at(&tok_pos);
-        fprintf(__stderrp, "Declaration expected.\n");
+        fprintf(stderr, "Declaration expected.\n");
         exit(1);
     }
 }

@@ -7,6 +7,8 @@
 
 //= Misc
 
+#define dead __attribute__((noreturn))
+
 #define dbg(...) fprintf(stderr, __VA_ARGS__)
 
 typedef struct Pos {
@@ -18,7 +20,7 @@ void print_error_at(Pos *pos) {
     fprintf(stderr, "%d:%d: ", pos->line, pos->col);
 }
 
-__dead2 void error_at(Pos *pos, const char *fmt, ...) {
+dead void error_at(Pos *pos, const char *fmt, ...) {
     print_error_at(pos);
     va_list args;
     va_start(args, fmt);
@@ -43,6 +45,10 @@ int ilog2(int n) {
         i += 1;
     }
     return i;
+}
+
+int int_min(int a, int b) {
+    return a > b ? b : a;
 }
 
 void sb_push(char **buf_p, char c) {
@@ -495,7 +501,7 @@ void unify_types(Expr *lhs, Expr *rhs) {
 
 //= Characters
 
-char chr;
+signed char chr;
 Pos chr_pos;
 
 void next_char(void) {
@@ -508,7 +514,7 @@ void next_char(void) {
     } else {
         chr_pos.col += 1;
     }
-    chr = (char)getchar();
+    chr = (signed char)getchar();
 }
 
 bool is_space(int c) {
@@ -713,11 +719,11 @@ void emit_push(int reg) {
         exit(1);
     }
     temp_size += 8;
-    printf("  str x%d, [fp, #%d] ; push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    printf("  str x%d, [fp, #%d] // push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
 }
 
 void emit_pop(int reg) {
-    printf("  ldr x%d, [fp, #%d] ; pop\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    printf("  ldr x%d, [fp, #%d] // pop\n", reg, -FRAME_LOCALS_SIZE - temp_size);
     temp_size -= 8;
 }
 
@@ -765,22 +771,22 @@ void emit_expr_cmp(const char *rel, Expr *e, int t0) {
 void emit_expr_lvalue(Expr *e, int t0) {
     if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Local) {
         const char *name = e->sym->name;
-        printf("  add x%d, fp, #%d ; &%s\n", t0, -e->sym->frame_offset, name);
+        printf("  add x%d, fp, #%d // &%s\n", t0, -e->sym->frame_offset, name);
     } else if (str_eq(e->kind, "<var>") && e->sym->kind == Sym_Global) {
         const char *name = e->sym->name;
         if (e->sym->is_extern) {
-            printf("  adrp x%d, _%s@GOTPAGE\n", t0, name);
-            printf("  ldr x%d, [x%d, _%s@GOTPAGEOFF] ; &%s\n", t0, t0, name, name);
+            printf("  adrp x%d, :got:%s\n", t0, name);
+            printf("  ldr x%d, [x%d, :got_lo12:%s] // &%s\n", t0, t0, name, name);
         } else {
-            printf("  adrp x%d, _%s@PAGE\n", t0, name);
-            printf("  add x%d, x%d, _%s@PAGEOFF ; &%s\n", t0, t0, name, name);
+            printf("  adrp x%d, %s\n", t0, name);
+            printf("  add x%d, x%d, :lo12:%s // &%s\n", t0, t0, name, name);
         }
     } else if (str_eq(e->kind, "_._")) {
         Type *lhs_type = e->args[0]->type;
         int field_offset = lhs_type->field_offsets[e->field_index];
         const char *field_name = lhs_type->field_names[e->field_index];
         emit_expr_lvalue(e->args[0], t0);
-        printf("  add x%d, x%d, #%d ; &%s\n", t0, t0, field_offset, field_name);
+        printf("  add x%d, x%d, #%d // &%s\n", t0, t0, field_offset, field_name);
     } else if (str_eq(e->kind, "*_")) {
         emit_expr(e->args[0], t0);
     } else if (str_eq(e->kind, "_[_]")) {
@@ -790,7 +796,7 @@ void emit_expr_lvalue(Expr *e, int t0) {
             emit_operands_lvalue(e, 0, 1);
         }
         int elem_size = type_size(e->args[0]->type->base);
-        printf("  add x%d, x0, x1, lsl #%d ; &_[_]\n", t0, ilog2(elem_size));
+        printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
     } else {
         assert(false);
     }
@@ -804,9 +810,11 @@ void emit_expr(Expr *e, int t0) {
         printf("  mov x%d, #%d\n", t0, e->int_value);
     } else if (str_eq(e->kind, "<str>")) {
         int label = label_count += 1;
-        printf("  .data\n");
+        printf("  .text\n");
+        printf("  .section .rodata\n");
+        printf("  .align 3\n");
         printf(".str.%d:\n", label);
-        printf("  .asciz \"");
+        printf("  .string \"");
         int i = 0;
         while (e->str_value[i] != '\0') {
             if (!is_print(e->str_value[i]) || e->str_value[i] == '\"' || e->str_value[i] == '\\') {
@@ -818,8 +826,8 @@ void emit_expr(Expr *e, int t0) {
         }
         printf("\"\n");
         printf("  .text\n");
-        printf("  adrp x%d, .str.%d@PAGE\n", t0, label);
-        printf("  add x%d, x%d, .str.%d@PAGEOFF\n", t0, t0, label);
+        printf("  adrp x%d, .str.%d\n", t0, label);
+        printf("  add x%d, x%d, :lo12:.str.%d\n", t0, t0, label);
     } else if (str_eq(e->kind, "_(_)")) {
         Sym *sym = e->sym;
         int arg_offset = 0;
@@ -828,22 +836,22 @@ void emit_expr(Expr *e, int t0) {
         while (i < e->arg_count) {
             Expr *arg = e->args[i];
             emit_expr(arg, 0);
-            if (i >= sym->param_count) {
+            if (i >= MAX_PARAMS) {
                 assert(sym->is_variadic);
-                printf("  str x0, [sp, #%d]\n", 8 * (i - sym->param_count));
+                printf("  str x0, [sp, #%d]\n", 8 * (i - MAX_PARAMS));
             } else {
                 emit_push(0);
             }
             i += 1;
         }
 
-        i = sym->param_count;
+        i = int_min(e->arg_count, MAX_PARAMS);
         while (i > 0) {
             i -= 1;
             emit_pop(i);
         }
 
-        printf("  bl _%s\n", sym->name);
+        printf("  bl %s\n", sym->name);
         if (e->type->kind != Type_Void) {
             emit_sign_extend(e->type, t0, 0);
         }
@@ -860,7 +868,7 @@ void emit_expr(Expr *e, int t0) {
         printf("  neg x%d, x%d\n", t0, t0);
     } else if (str_eq(e->kind, "_&&_") || str_eq(e->kind, "_||_")) {
         int label = label_count += 1;
-        printf(".L%d.begin: ; %s\n", label, e->kind);
+        printf(".L%d.begin: // %s\n", label, e->kind);
         emit_expr(e->args[0], t0);
         if (str_eq(e->kind, "_&&_")) {
             printf("  cbz x%d, .L%d.end\n", t0, label);
@@ -932,7 +940,7 @@ void emit_expr(Expr *e, int t0) {
         assert(str_eq(e->args[0]->kind, "&_") && str_eq(e->args[1]->kind, "&_"));
         emit_operands(e, 0, 1);
         printf("  mov x2, #%d\n", type_size(e->args[0]->type->base));
-        printf("  bl _memcpy\n");
+        printf("  bl memcpy\n");
     } else if (str_eq(e->kind, "<cast>")) {
         Type *target = e->type;
         Type *source = e->args[0]->type;
@@ -1364,7 +1372,7 @@ void emit_param_store(void) {
     int i = 0;
     while (i < current_func->param_count) {
         Sym *sym = find_sym(current_func->param_names[i]);
-        printf("  %s%d, [fp, #%d] ; %s\n", strx(sym->type), i, -sym->frame_offset, sym->name);
+        printf("  %s%d, [fp, #%d] // %s\n", strx(sym->type), i, -sym->frame_offset, sym->name);
         i += 1;
     }
 }
@@ -1404,8 +1412,10 @@ void p_decl(void) {
 
         if (!is_extern && at("{")) {
             add_func(current_func, &start_pos);
-            printf("  .global _%s\n", name);
-            printf("_%s:\n", name);
+            printf("  .text\n");
+            printf("  .align 2\n");
+            printf("  .global %s\n", name);
+            printf("%s:\n", name);
             printf("  stp x29, x30, [sp, #-16]!\n");
             printf("  mov x29, sp\n");
             printf("  sub sp, sp, #%d\n", FRAME_SIZE);
@@ -1429,8 +1439,11 @@ void p_decl(void) {
         expect(";");
         add_global(is_extern, name, type, &start_pos);
         if (!is_extern) {
-            printf("  .global _%s\n", name);
-            printf(".zerofill __DATA, __common, _%s, %d, %d\n", name, type_size(type), type_align(type));
+            printf("  .global %s\n", name);
+            printf("  .bss\n");
+            printf(".align %d\n", type_align(type));
+            printf("%s:\n", name);
+            printf("  .zero %d\n", type_size(type));
         }
     } else if (eat("const")) {
         char *name = p_ident();
