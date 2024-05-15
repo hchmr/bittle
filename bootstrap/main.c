@@ -664,7 +664,7 @@ void expect(const char *str) {
 }
 
 char *p_lexeme(void) {
-    char *prev_lexeme = strdup(lexeme);
+    char *prev_lexeme = lexeme;
     next_tok();
     return prev_lexeme;
 }

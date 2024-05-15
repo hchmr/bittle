@@ -1,8 +1,7 @@
 stage0-compile:
     mkdir -p out/stage0
     @echo "Compiling stage0"
-    cmake --build ./bootstrap/cmake-build-debug
-    cp bootstrap/cmake-build-debug/cog0 out/stage0/cog0
+    cd ./bootstrap && make BUILD_DIR=../out/stage0
 
 stage0-dbg:
     @just stage0-compile
@@ -17,7 +16,7 @@ stage1-compile:
     mkdir -p out/stage1
     @echo "Compiling stage1"
     @echo "Generating assembly"
-    bootstrap/cmake-build-debug/cog0 < self-host/main.cog > out/stage1/main.s
+    out/stage0/cogc < self-host/main.cog > out/stage1/main.s
     @echo "Assembling"
     gcc -g -c -o out/stage1/main.o out/stage1/main.s
     @echo "Linking"

@@ -18,7 +18,6 @@ extern func atoi(s: *Char): Int;
 // string
 extern func strlen(s: *Char): Int;
 extern func strcmp(a: *Char, b: *Char): Int32;
-extern func strdup(s: *Char): *Char;
 
 //= Misc
 
@@ -718,7 +717,7 @@ func expect(str: *Char) {
 }
 
 func p_lexeme(): *Char {
-    var prev_lexeme = strdup(lexeme);
+    var prev_lexeme = lexeme;
     next_tok();
     return prev_lexeme;
 }

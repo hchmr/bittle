@@ -1,4 +1,4 @@
-target create ./bootstrap/cmake-build-debug/cog0
+target create ./out/stage0/cogc
 settings set target.input-path self-host/main.cog
 settings set target.output-path out/stage1/main.s
 run

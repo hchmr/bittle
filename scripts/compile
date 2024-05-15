@@ -60,12 +60,13 @@ obj_file="$out_dir/$(basename "$input_file" .cog).o"
 # Compile compiler
 
 echo "Compiling compiler"
-cmake --build bootstrap/cmake-build-debug
+mkdir -p out/stage0
+make -C bootstrap BUILD_DIR=../out/stage0
 
 # Compile
 
 echo "Compiling $input_file to $asm_file"
-bootstrap/cmake-build-debug/cog0 <"$input_file" >"$asm_file"
+out/stage0/cogc <"$input_file" >"$asm_file"
 
 if [ -n "$compile_only" ]; then
   exit 0
