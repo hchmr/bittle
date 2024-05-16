@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -e
+set -u
+set -o pipefail
+
+script_dir=$(dirname "$(realpath "$0")")
+root_dir="$script_dir/.."
+bootstrap_dir="$root_dir/out/bootstrap"
+src_dir="$bootstrap_dir/src"
+build_dir="$bootstrap_dir/build"
+repo_url="${COG_REPO:-file://$root_dir}"
+
+section() {
+    echo
+    echo "==> $1"
+    echo
+}
+
+stage() {
+    local i="$1"
+    local ref="$2"
+
+    section "Building stage $i"
+
+    local stage_dir="$build_dir/stage$i/"
+    mkdir -p "$stage_dir"
+    
+    echo "Checking out $ref"
+    git checkout --quiet --detach "$ref"
+
+    local cogc=""
+    if [ "$i" -gt 0 ]; then
+        cogc=$(realpath "$build_dir/stage$((i - 1))/cogc")
+    fi
+
+    make -C compiler "BUILD_DIR=$stage_dir" "COGC=$cogc"
+}
+
+rm -rf "$bootstrap_dir"
+mkdir -p "$bootstrap_dir" "$src_dir" "$build_dir"
+cd "$src_dir"
+
+git clone --quiet --filter=tree:0 "$repo_url" .
+
+stage 0 ":/Make compilation of bootstrap compiler stricter"
+
+stage 1 ":/Replace bootstrap compiler with self-host compiler"
+
+stage 2 ":/Replace bootstrap compiler with self-host compiler"
+
+echo "Verifying final stage"
+
+diff "$build_dir/stage2/cogc.s" "$build_dir/stage1/cogc.s"
+
+mkdir -p "$bootstrap_dir/bin"
+
+cp "$build_dir/stage2/cogc" "$bootstrap_dir/bin/cogc"
+
+section "Done"
