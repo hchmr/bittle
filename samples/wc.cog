@@ -6,7 +6,7 @@ extern struct File;
 extern var stdin: *File;
 extern var stderr: *File;
 extern var stdout: *File;
-const EOF = 0 - 1;
+const EOF = -1;
 extern func fgetc(stream: *File): Int32;
 extern func fprintf(stream: *File, format: *Char, ...): Int32;
 extern func ferror(stream: *File): Int32;
