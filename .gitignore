@@ -1,5 +1,6 @@
 build/
 __pycache__/
 /out/
+/bin/
 .vscode/
 .idea/

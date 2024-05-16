@@ -12,7 +12,7 @@ let diagnosticsCollection: DiagnosticCollection;
 async function compile(document: TextDocument) {
     log.appendLine('Invoking compiler');
 
-    const compilerPath = __dirname + '/../../out/stage0/cogc';
+    const compilerPath = __dirname + '/../../out/cogc';
     const process = spawn(compilerPath, {
         stdio: ['pipe', 'ignore', 'pipe'],
         timeout: 1000,

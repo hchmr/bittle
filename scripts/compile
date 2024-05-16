@@ -60,13 +60,13 @@ obj_file="$out_dir/$(basename "$input_file" .cog).o"
 # Compile compiler
 
 echo "Compiling compiler"
-mkdir -p out/stage0
-make -C compiler BUILD_DIR=../out/stage0
+mkdir -p out
+make -C compiler BUILD_DIR=../out
 
 # Compile
 
 echo "Compiling $input_file to $asm_file"
-out/stage0/cogc <"$input_file" >"$asm_file"
+out/cogc <"$input_file" >"$asm_file"
 
 if [ -n "$compile_only" ]; then
   exit 0

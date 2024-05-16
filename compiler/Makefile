@@ -1,15 +1,18 @@
-CC = gcc
-CFLAGS += -std=c99 -Wall -Wextra -Wpedantic -g -fno-omit-frame-pointer
-LDFLAGS += -fno-omit-frame-pointer
+COGC = cogc
+SRC = main.cog
 BUILD_DIR ?= .
-TARGET ?= $(BUILD_DIR)/cogc
-SRC = main.c
+TARGET = $(BUILD_DIR)/cogc
 
 build: $(TARGET)
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
+$(TARGET).s: $(SRC)
+	@echo "Generating assembly code"
+	$(COGC) <$(SRC) >$(TARGET).s
 
-.PHONY: clean
-clean:
-	rm -f $(TARGET)
+$(TARGET).o: $(TARGET).s
+	@echo "Compiling assembly"
+	gcc -g -c -o $(TARGET).o $(TARGET).s
+
+$(TARGET): $(TARGET).o
+	@echo "Linking executable"
+	gcc -g -o $(TARGET) $(TARGET).o
