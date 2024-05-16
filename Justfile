@@ -1,7 +1,7 @@
 stage0-compile:
     mkdir -p out/stage0
     @echo "Compiling stage0"
-    cd ./bootstrap && make BUILD_DIR=../out/stage0
+    cd ./compiler && make BUILD_DIR=../out/stage0
 
 stage0-dbg:
     @just stage0-compile

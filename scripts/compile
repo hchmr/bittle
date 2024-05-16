@@ -61,7 +61,7 @@ obj_file="$out_dir/$(basename "$input_file" .cog).o"
 
 echo "Compiling compiler"
 mkdir -p out/stage0
-make -C bootstrap BUILD_DIR=../out/stage0
+make -C compiler BUILD_DIR=../out/stage0
 
 # Compile
 
