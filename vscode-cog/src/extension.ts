@@ -1,4 +1,4 @@
-import { window, languages, workspace, Diagnostic, DiagnosticSeverity, Range, Location, SymbolInformation, SymbolKind, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position } from 'vscode';
+import { window, languages, workspace, Diagnostic, DiagnosticSeverity, Range, Location, SymbolInformation, SymbolKind, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, WorkspaceConfiguration } from 'vscode';
 import { spawn } from 'child_process';
 
 module.exports = {
@@ -12,7 +12,8 @@ let diagnosticsCollection: DiagnosticCollection;
 async function compile(document: TextDocument) {
     log.appendLine('Invoking compiler');
 
-    const compilerPath = __dirname + '/../../out/cogc';
+    const compilerPath = workspace.getConfiguration().get('cog.compilerPath', 'cogc');
+
     const process = spawn(compilerPath, {
         stdio: ['pipe', 'ignore', 'pipe'],
         timeout: 1000,
