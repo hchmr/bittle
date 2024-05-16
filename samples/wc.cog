@@ -6,7 +6,7 @@ extern struct File;
 extern var stdin: *File;
 extern var stderr: *File;
 extern var stdout: *File;
-const EOF = -1;
+const EOF = 0 - 1;
 extern func fgetc(stream: *File): Int32;
 extern func fprintf(stream: *File, format: *Char, ...): Int32;
 extern func ferror(stream: *File): Int32;
@@ -78,7 +78,7 @@ func stats_accum(total: *Stats, other: *Stats) {
 func get_stats(stream: *File, stats: *Stats) {
     stats_init(stats);
     var prev_char = ' ';
-    var curr_len = 0;
+    var curr_len: Int32 = 0;
     while (true) {
         var curr_char = get_char(stream);
         if (curr_char == EOF)
@@ -141,7 +141,7 @@ func print_usage(argv: *(*Char)) {
 }
 
 func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
-    var options = 0;
+    var options: Int32 = 0;
     var i = 1;
     while (i < argc && argv[i][0] == '-') {
         var arg = argv[i];
@@ -169,7 +169,7 @@ func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
     }
     args.options = options;
     args.files = &argv[i];
-    args.files_count = argc - i;
+    args.files_count = argc - i as Int32;
 }
 
 func main(argc: Int32, argv: *(*Char)): Int32 {
