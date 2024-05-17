@@ -1583,7 +1583,8 @@ func p_stmt(): *Expr {
     }
 }
 
-func p_func(is_extern: Bool) {
+func p_func_decl(is_extern: Bool) {
+    expect("func");
     var name_pos = tok_pos;
     var name = p_ident();
     var sym = mk_sym(Sym_Func, name);
@@ -1631,6 +1632,59 @@ func p_func(is_extern: Bool) {
     add_sym(sym, &name_pos);
 }
 
+func p_var_decl(is_extern: Bool) {
+    expect("var");
+    var name = p_ident();
+    expect(":");
+    var type = p_type();
+    expect(";");
+    add_global(is_extern, name, type, &tok_pos);
+}
+
+func p_const_decl() {
+    expect("const");
+    var name = p_ident();
+    expect("=");
+    var value = p_const_expr();
+    expect(";");
+    add_const(name, value, &tok_pos);
+}
+
+func p_struct_decl(is_extern: Bool) {
+    expect("struct");
+    var name = p_ident();
+    var sym = mk_sym(Sym_Type, name);
+    sym.type = mk_struct_type(name);
+    add_sym(sym, &tok_pos);
+    if (!is_extern) {
+        expect("{");
+        while (!eat("}")) {
+            var field_name = p_ident();
+            expect(":");
+            var field_type = p_type();
+            p_comma("}");
+            add_field(sym.type, field_name, field_type);
+        }
+    } else {
+        expect(";");
+    }
+}
+
+func p_enum_decl() {
+    expect("enum");
+    var value = 0;
+    expect("{");
+    while (!eat("}")) {
+        var name = p_ident();
+        if (eat("=")) {
+            value = p_const_expr();
+        }
+        p_comma("}");
+        add_const(name, value, &tok_pos);
+        value += 1;
+    }
+}
+
 func p_decl() {
     var is_extern = false;
     if (eat("extern")) {
@@ -1642,49 +1696,16 @@ func p_decl() {
         is_extern = true;
     }
 
-    if (eat("func")) {
-        p_func(is_extern);
-    } else if (eat("var")) {
-        var name = p_ident();
-        expect(":");
-        var type = p_type();
-        expect(";");
-        add_global(is_extern, name, type, &tok_pos);
-    } else if (eat("const")) {
-        var name = p_ident();
-        expect("=");
-        var value = p_const_expr();
-        expect(";");
-        add_const(name, value, &tok_pos);
-    } else if (eat("struct")) {
-        var name = p_ident();
-        var sym = mk_sym(Sym_Type, name);
-        sym.type = mk_struct_type(name);
-        add_sym(sym, &tok_pos);
-        if (!is_extern) {
-            expect("{");
-            while (!eat("}")) {
-                var field_name = p_ident();
-                expect(":");
-                var field_type = p_type();
-                p_comma("}");
-                add_field(sym.type, field_name, field_type);
-            }
-        } else {
-            expect(";");
-        }
-    } else if (eat("enum")) {
-        var value = 0;
-        expect("{");
-        while (!eat("}")) {
-            var name = p_ident();
-            if (eat("=")) {
-                value = p_const_expr();
-            }
-            p_comma("}");
-            add_const(name, value, &tok_pos);
-            value += 1;
-        }
+    if (at("func")) {
+        p_func_decl(is_extern);
+    } else if (at("var")) {
+        p_var_decl(is_extern);
+    } else if (at("const")) {
+        p_const_decl();
+    } else if (at("struct")) {
+        p_struct_decl(is_extern);
+    } else if (at("enum")) {
+        p_enum_decl();
     } else {
         error_at(&tok_pos);
         fprintf(stderr, "Declaration expected.\n");
@@ -1692,12 +1713,16 @@ func p_decl() {
     }
 }
 
-func main(): Int {
+func p_program() {
     next_char();
     next_tok();
     while (tok != Tok_Eof) {
         p_decl();
     }
+}
+
+func main(): Int {
+    p_program();
     emit_program();
     return 0;
 }
