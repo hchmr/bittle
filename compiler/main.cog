@@ -269,12 +269,11 @@ struct Sym {
     // Global
     value: Int,
     // Function
-    param_names: [*Char; MAX_PARAMS + 1],
-    param_types: [*Type; MAX_PARAMS + 1],
+    params: [*Sym; MAX_PARAMS + 1],
     param_count: Int,
-    defined: Bool,
     is_variadic: Bool,
-    locals_size: Int
+    locals_size: Int,
+    body: *Void, // FIXME: can't forward declare Expr
 }
 
 var syms: *(*Sym);
@@ -315,7 +314,7 @@ func func_eq(a: *Sym, b: *Sym): Bool {
         return false;
     var i = 0;
     while (i < a.param_count) {
-        if (!type_eq(a.param_types[i], b.param_types[i]))
+        if (!type_eq(a.params[i].type, b.params[i].type))
             return false;
         i += 1;
     }
@@ -335,7 +334,7 @@ func find_sym(name: *Char, depth: Int): *Sym {
 
 func add_sym(sym: *Sym, pos: *Pos) {
     var existing = find_sym(sym.name, scope_depth);
-    if (existing && !(sym.kind == Sym_Func && existing.kind == Sym_Func && !existing.defined && func_eq(sym, existing))) {
+    if (existing && !(sym.kind == Sym_Func && existing.kind == Sym_Func && !existing.body && func_eq(sym, existing))) {
         error_at(pos);
         fprintf(stderr, "Symbol '%s' already defined.\n", sym.name);
         exit(1);
@@ -1050,6 +1049,49 @@ func emit_expr(e: *Expr, t0: Int) {
     }
 }
 
+func emit_func(sym: *Sym) {
+    current_func = sym;
+    printf("  .text\n");
+    printf("  .align 2\n");
+    printf("  .global %s\n", sym.name);
+    printf("%s:\n", sym.name);
+    printf("  stp x29, x30, [sp, #-16]!\n");
+    printf("  mov x29, sp\n");
+    printf("  sub sp, sp, #%d\n", FRAME_SIZE);
+    var i = 0;
+    while (i < sym.param_count) {
+        var param = sym.params[i];
+        printf("  %s%d, [fp, #%d] // %s\n", strx(param.type), i, -param.offset, param.name);
+        i += 1;
+    }
+    emit_expr(sym.body, 0);
+    printf(".L.%s.ret:\n", sym.name);
+    printf("  add sp, sp, #%d\n", FRAME_SIZE);
+    printf("  ldp x29, x30, [sp], #16\n");
+    printf("  ret\n");
+}
+
+func emit_global(sym: *Sym) {
+    printf("  .global %s\n", sym.name);
+    printf("  .bss\n");
+    printf(".align %d\n", type_align(sym.type));
+    printf("%s:\n", sym.name);
+    printf("  .zero %d\n", type_size(sym.type));
+}
+
+func emit_program() {
+    var i = 0;
+    while (i < sym_count) {
+        var sym = syms[i];
+        if (sym.kind == Sym_Global && !sym.is_extern) {
+            emit_global(sym);
+        } else if (sym.kind == Sym_Func && sym.body) {
+            emit_func(sym);
+        }
+        i += 1;
+    }
+}
+
 //= Grammar
 
 func p_const_expr(): Int;
@@ -1246,7 +1288,7 @@ func p_expr(max_prec: Int): *Expr {
             }
             var i = 0;
             while (i < sym.param_count) {
-                check_type(lhs.children[i], sym.param_types[i]);
+                check_type(lhs.children[i], sym.params[i].type);
                 i += 1;
             }
             while (i < lhs.child_count) {
@@ -1541,15 +1583,6 @@ func p_stmt(): *Expr {
     }
 }
 
-func emit_param_store(sym: *Sym) {
-    var i = 0;
-    while (i < sym.param_count) {
-        var sym = find_sym(sym.param_names[i], 0);
-        printf("  %s%d, [fp, #%d] // %s\n", strx(sym.type), i, -sym.offset, sym.name);
-        i += 1;
-    }
-}
-
 func p_func(is_extern: Bool) {
     var name_pos = tok_pos;
     var name = p_ident();
@@ -1578,11 +1611,8 @@ func p_func(is_extern: Bool) {
             fprintf(stderr, "Parameter must be of scalar type.\n");
             exit(1);
         }
-        sym.param_names[sym.param_count] = param_name;
-        sym.param_types[sym.param_count] = param_type;
+        sym.params[sym.param_count] = add_local(param_name, param_type, &param_pos);
         sym.param_count += 1;
-
-        add_local(param_name, param_type, &param_pos);
     }
     if (eat("...")) {
         sym.is_variadic = true;
@@ -1591,22 +1621,9 @@ func p_func(is_extern: Bool) {
     if (eat(":")) {
         sym.type = p_type();
     }
+
     if (!is_extern && at("{")) {
-        sym.defined = true;
-        printf("  .text\n");
-        printf("  .align 2\n");
-        printf("  .global %s\n", name);
-        printf("%s:\n", name);
-        printf("  stp x29, x30, [sp, #-16]!\n");
-        printf("  mov x29, sp\n");
-        printf("  sub sp, sp, #%d\n", FRAME_SIZE);
-        emit_param_store(sym);
-        var body = p_stmt();
-        emit_expr(body, 0);
-        printf(".L.%s.ret:\n", name);
-        printf("  add sp, sp, #%d\n", FRAME_SIZE);
-        printf("  ldp x29, x30, [sp], #16\n");
-        printf("  ret\n");
+        sym.body = p_stmt();
     } else {
         expect(";");
     }
@@ -1633,13 +1650,6 @@ func p_decl() {
         var type = p_type();
         expect(";");
         add_global(is_extern, name, type, &tok_pos);
-        if (!is_extern) {
-            printf("  .global %s\n", name);
-            printf("  .bss\n");
-            printf(".align %d\n", type_align(type));
-            printf("%s:\n", name);
-            printf("  .zero %d\n", type_size(type));
-        }
     } else if (eat("const")) {
         var name = p_ident();
         expect("=");
@@ -1688,5 +1698,6 @@ func main(): Int {
     while (tok != Tok_Eof) {
         p_decl();
     }
+    emit_program();
     return 0;
 }
