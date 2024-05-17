@@ -9,6 +9,7 @@ usage: $0 [options] FILE
 options:
   -h,--help  Show this help
   -o FILE    Output file
+  --         End of options
 HERE
 }
 
@@ -24,6 +25,10 @@ while test $# -gt 0 ; do
     -o)
       shift
       output_file="$1"
+      ;;
+    --)
+      shift
+      break
       ;;
     *)
       if [ -n "$input_file" ] ; then
@@ -47,4 +52,4 @@ exe_file="${output_file:-a.out}"
 scripts/compile -o "$exe_file" "$input_file"
 
 echo "Running $exe_file"
-./"$exe_file"
+./"$exe_file" "$@"
