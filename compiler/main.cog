@@ -73,10 +73,10 @@ func sb_push(buf_p: *(*Char), c: Char): Void {
 
 //= Codegen Constants
 
-const FRAME_LOCALS_SIZE = 128;
-const FRAME_TEMP_SIZE = 512;
+const FRAME_SIZE_MAX = 4096;
+const FRAME_TEMP_SIZE = 128;
 const FRAME_ARGS_SIZE = 64;
-const FRAME_SIZE = FRAME_LOCALS_SIZE + FRAME_TEMP_SIZE + FRAME_ARGS_SIZE;
+const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_ARGS_SIZE - FRAME_TEMP_SIZE;
 
 //= Type System
 
@@ -352,7 +352,7 @@ func add_sym(sym: *Sym, pos: *Pos) {
 
 func add_local(name: *Char, type: *Type, pos: *Pos): *Sym {
     current_func.locals_size = align_up(current_func.locals_size + type_size(type), type_align(type));
-    if (current_func.locals_size > FRAME_LOCALS_SIZE) {
+    if (current_func.locals_size > FRAME_LOCALS_SIZE_MAX) {
         error_at(pos);
         fprintf(stderr, "Maximum local size exceeded.\n");
         exit(1);
@@ -755,6 +755,7 @@ func p_comma(end: *Char) {
 
 //= Codegen
 
+var frame_size: Int;
 var label_count: Int;
 var temp_size: Int;
 
@@ -795,11 +796,11 @@ func emit_push(reg: Int) {
         exit(1);
     }
     temp_size += 8;
-    printf("  str x%d, [fp, #%d] // push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    printf("  str x%d, [sp, #%d] // push\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - temp_size);
 }
 
 func emit_pop(reg: Int) {
-    printf("  ldr x%d, [fp, #%d] // pop\n", reg, -FRAME_LOCALS_SIZE - temp_size);
+    printf("  ldr x%d, [sp, #%d] // pop\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - temp_size);
     temp_size -= 8;
 }
 
@@ -847,7 +848,7 @@ func emit_expr_cmp(op: *Char, e: *Expr, t0: Int) {
 func emit_expr_lvalue(e: *Expr, t0: Int) {
     if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Local) {
         var name = e.sym.name;
-        printf("  add x%d, fp, #%d // &%s\n", t0, -e.sym.offset, name);
+        printf("  add x%d, sp, #%d // &%s\n", t0, frame_size - e.sym.offset, name);
     } else if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Global) {
         var name = e.sym.name;
         if (e.sym.is_extern) {
@@ -1061,22 +1062,23 @@ func emit_expr(e: *Expr, t0: Int) {
 
 func emit_func(sym: *Sym) {
     current_func = sym;
+    frame_size = align_up(sym.locals_size, 16) + FRAME_TEMP_SIZE + FRAME_ARGS_SIZE;
     printf("  .text\n");
     printf("  .align 2\n");
     printf("  .global %s\n", sym.name);
     printf("%s:\n", sym.name);
     printf("  stp x29, x30, [sp, #-16]!\n");
     printf("  mov x29, sp\n");
-    printf("  sub sp, sp, #%d\n", FRAME_SIZE);
+    printf("  sub sp, sp, #%d\n", frame_size);
     var i = 0;
     while (i < sym.param_count) {
         var param = sym.params[i];
-        printf("  %s%d, [fp, #%d] // %s\n", strx(param.type), i, -param.offset, param.name);
+        printf("  %s%d, [sp, #%d] // %s\n", strx(param.type), i, frame_size - param.offset, param.name);
         i += 1;
     }
     emit_expr(sym.body, 0);
     printf(".L.%s.ret:\n", sym.name);
-    printf("  add sp, sp, #%d\n", FRAME_SIZE);
+    printf("  add sp, sp, #%d\n", frame_size);
     printf("  ldp x29, x30, [sp], #16\n");
     printf("  ret\n");
 }
