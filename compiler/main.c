@@ -590,7 +590,8 @@ void next_tok(void) {
         tok = Tok_Eof;
     } else if (is_space(chr)) {
         next_char();
-        return next_tok();
+        next_tok();
+        return;
     } else if (is_digit(chr)) {
         while (is_digit(chr)) {
             sb_push(&lexeme, chr);
@@ -632,7 +633,8 @@ void next_tok(void) {
                 while (chr != '\n' && chr != -1) {
                     next_char();
                 }
-                return next_tok();
+                next_tok();
+                return;
             }
         }
         tok = Tok_Sym;
@@ -830,7 +832,6 @@ void emit_expr(Expr *e, int t0) {
         printf("  add x%d, x%d, :lo12:.str.%d\n", t0, t0, label);
     } else if (str_eq(e->kind, "_(_)")) {
         Sym *sym = e->sym;
-        int arg_offset = 0;
 
         int i = 0;
         while (i < e->arg_count) {
