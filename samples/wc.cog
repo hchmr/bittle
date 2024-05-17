@@ -82,9 +82,8 @@ func get_stats(stream: *File, stats: *Stats) {
     while (true) {
         var curr_char = get_char(stream);
         if (curr_char == EOF)
-            return; // 'break' would be nice
+            break;
 
-        stats.bytes += 1;
         curr_len += 1;
 
         if (isspace(prev_char) && !isspace(curr_char)) {
@@ -93,11 +92,13 @@ func get_stats(stream: *File, stats: *Stats) {
         prev_char = curr_char;
 
         if (curr_char == '\n') {
+            stats.bytes += curr_len;
             stats.lines += 1;
             stats.max_len = int32_max(stats.max_len, curr_len);
             curr_len = 0;
         }
     }
+    stats.bytes += curr_len;
 }
 
 //= Display
@@ -143,8 +144,10 @@ func print_usage(argv: *(*Char)) {
 func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
     var options: Int32 = 0;
     var i = 1;
-    while (i < argc && argv[i][0] == '-') {
+    while (i < argc) {
         var arg = argv[i];
+        if (arg[0] != '-')
+            break;
         var j = 1;
         while (arg[j] != '\0') {
             if (arg[j] == 'l') {

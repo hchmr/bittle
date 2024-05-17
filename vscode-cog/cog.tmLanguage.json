@@ -8,7 +8,7 @@
     "patterns": [
         {
             "name": "keyword.control.cog",
-            "match": "\\b(if|else|return|while)\\b"
+            "match": "\\b(break|continue|if|else|return|while)\\b"
         },
         {
             "name": "keyword.regular.cog",

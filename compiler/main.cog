@@ -282,6 +282,7 @@ var sym_count: Int;
 var first_sym: [Int; MAX_SCOPES];
 var scope_depth: Int;
 var current_func: *Sym;
+var current_loop: Int;
 
 func mk_sym(kind: Int, name: *Char): *Sym {
     var sym: *Sym = calloc(1, sizeof(Sym));
@@ -1413,7 +1414,9 @@ func p_stmt() {
         printf(".L%d.end:\n", label);
     } else if (eat("while")) {
         var label = next_label();
-        printf(".L%d.while:\n", label);
+        var outer_loop = current_loop;
+        current_loop = label;
+        printf(".L%d.next:\n", label);
         expect("(");
         var cond = p_expr(0);
         check_type_bool(cond);
@@ -1422,8 +1425,25 @@ func p_stmt() {
         printf("  cbz x0, .L%d.done\n", label);
         printf(".L%d.do:\n", label);
         p_stmt();
-        printf("  b .L%d.while\n", label);
+        printf("  b .L%d.next\n", label);
         printf(".L%d.done:\n", label);
+        current_loop = outer_loop;
+    } else if (eat("break")) {
+        expect(";");
+        if (current_loop == 0) {
+            error_at(&tok_pos);
+            fprintf(stderr, "Break statement outside of loop.\n");
+            exit(1);
+        }
+        printf("  b .L%d.done\n", current_loop);
+    } else if (eat("continue")) {
+        expect(";");
+        if (current_loop == 0) {
+            error_at(&tok_pos);
+            fprintf(stderr, "Continue statement outside of loop.\n");
+            exit(1);
+        }
+        printf("  b .L%d.next\n", current_loop);
     } else if (eat("return")) {
         var expr: *Expr = null;
         if (!at(";")) {
