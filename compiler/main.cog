@@ -7,7 +7,8 @@ extern var stderr: *File;
 extern func printf(fmt: *Char, ...): Int32;
 extern func fprintf(file: *File, fmt: *Char, ...): Int32;
 extern func sprintf(buf: *Char, fmt: *Char, ...): Int32;
-extern func getchar(): Int32;
+extern func fgetc(file: *File): Int32;
+extern func fopen(filename: *Char, mode: *Char): *File;
 
 // stdlib
 extern func exit(status: Int32);
@@ -19,6 +20,11 @@ extern func atoi(s: *Char): Int;
 extern func strlen(s: *Char): Int;
 extern func strcmp(a: *Char, b: *Char): Int32;
 
+//= Input file
+
+var input_file: *File;
+var input_name: *Char;
+
 //= Misc
 
 struct Pos {
@@ -27,7 +33,7 @@ struct Pos {
 }
 
 func error_at(pos: *Pos) {
-    fprintf(stderr, "%d:%d: Error: ", pos.line, pos.col);
+    fprintf(stderr, "%s:%d:%d: Error: ", input_name, pos.line, pos.col);
 }
 
 func str_eq(a: *Char, b: *Char): Bool {
@@ -563,7 +569,7 @@ func next_char() {
     } else {
         chr_pos.col += 1;
     }
-    chr = getchar() as Char;
+    chr = fgetc(input_file) as Char;
 }
 
 func is_space(c: Char): Bool {
@@ -1721,7 +1727,23 @@ func p_program() {
     }
 }
 
-func main(): Int {
+func main(argc: Int32, argv: *(*Char)): Int32 {
+    if (argc > 2) {
+        fprintf(stderr, "Usage: %s [file]\n", argv[0]);
+        return 1;
+    }
+    if (argc == 2) {
+        input_file = fopen(argv[1], "r");
+        if (!input_file) {
+            fprintf(stderr, "Error opening file '%s'.\n", argv[1]);
+            return 1;
+        }
+        input_name = argv[1];
+    } else {
+        input_file = stdin;
+        input_name = "<stdin>";
+    }
+
     p_program();
     emit_program();
     return 0;
