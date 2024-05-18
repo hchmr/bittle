@@ -790,6 +790,10 @@ func ldrx(type: *Type): *Char {
 }
 
 func emit_push(reg: Int) {
+    if (temp_size + 8 >= FRAME_TEMP_SIZE) {
+        fprintf(stderr, "Ran out of space for temporaries while compiling expression.\n");
+        exit(1);
+    }
     temp_size += 8;
     printf("  str x%d, [fp, #%d] // push\n", reg, -FRAME_LOCALS_SIZE - temp_size);
 }
