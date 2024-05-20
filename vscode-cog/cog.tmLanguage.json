@@ -3,7 +3,8 @@
     "name": "Cog",
     "scopeName": "source.cog",
     "fileTypes": [
-        "cog"
+        "cog",
+        "cogs"
     ],
     "patterns": [
         {
@@ -12,7 +13,7 @@
         },
         {
             "name": "keyword.regular.cog",
-            "match": "\\b(as|const|enum|extern|false|func|null|sizeof|struct|true|var)\\b"
+            "match": "\\b(as|const|enum|extern|false|func|include|null|sizeof|struct|true|var)\\b"
         },
         {
             "name": "comment.line.cog",

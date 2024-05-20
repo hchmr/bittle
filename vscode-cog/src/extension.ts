@@ -1,4 +1,4 @@
-import { window, languages, workspace, Diagnostic, DiagnosticSeverity, Range, Location, SymbolInformation, SymbolKind, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, WorkspaceConfiguration } from 'vscode';
+import { window, languages, workspace, Diagnostic, DiagnosticSeverity, Range, Location, SymbolInformation, SymbolKind, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, WorkspaceConfiguration, Uri } from 'vscode';
 import { spawn } from 'child_process';
 
 module.exports = {
@@ -12,15 +12,15 @@ let diagnosticsCollection: DiagnosticCollection;
 async function compile(document: TextDocument) {
     log.appendLine('Invoking compiler');
 
-    const compilerPath = workspace.getConfiguration().get('cog.compilerPath', 'cogc');
-
-    const process = spawn(compilerPath, {
-        stdio: ['pipe', 'ignore', 'pipe'],
-        timeout: 1000,
-    });
-
-    process.stdin.write(document.getText());
-    process.stdin.end();
+    const cogc = workspace.getConfiguration().get<string>('cog.compilerPath', 'cogc');
+    const process = spawn(
+        cogc,
+        [document.fileName],
+        {
+            stdio: ['ignore', 'ignore', 'pipe'],
+            timeout: 1000,
+        }
+    );
 
     let stderr = '';
     process.stderr.on('data', data => {
@@ -36,23 +36,32 @@ async function compile(document: TextDocument) {
 
     return { ok: code == 0, stderr };
 }
-
-function makeDiagnostic(stderr: string) {
-    const match = /^(\d+):(\d+):(.*)/s.exec(stderr);
+function makeDiagnostic(stderr: string, document: TextDocument) {
+    const match = /^(.*?):(\d+):(\d+):(.*)/s.exec(stderr);
     if (match) {
-        const row = parseInt(match[1]) - 1;
-        const col = parseInt(match[2]) - 1;
-        return new Diagnostic(
-            new Range(row, col, row, col),
-            match[3].trim(),
-            DiagnosticSeverity.Error
-        );
+        let fileName = match[1];
+        if (fileName === '<stdin>') {
+            fileName = document.fileName;
+        }
+        const row = parseInt(match[2]) - 1;
+        const col = parseInt(match[3]) - 1;
+        return {
+            fileName,
+            diagnostic: new Diagnostic(
+                new Range(row, col, row, col),
+                match[4].trim(),
+                DiagnosticSeverity.Error
+            )
+        };
     } else {
-        return new Diagnostic(
-            new Range(0, 0, 0, 0),
-            stderr,
-            DiagnosticSeverity.Error
-        );
+        return {
+            fileName: document.fileName,
+            diagnostic: new Diagnostic(
+                new Range(0, 0, 0, 0),
+                stderr,
+                DiagnosticSeverity.Error
+            )
+        };
     }
 }
 
@@ -112,11 +121,18 @@ async function refreshDiagnostics(document: TextDocument) {
 
     log.appendLine(`Compiler output: ${ok}, '${stderr}'`);
 
-    let diagnostics = !ok
-        ? [makeDiagnostic(stderr)]
-        : [];
+    let diagnostic = !ok
+        ? makeDiagnostic(stderr, document)
+        : undefined;
 
-    diagnosticsCollection.set(document.uri, diagnostics);
+    if (!diagnostic) {
+        diagnosticsCollection.delete(document.uri);
+    } else {
+        diagnosticsCollection.set(
+            Uri.file(diagnostic.fileName),
+            [diagnostic.diagnostic]
+        );
+    }
 }
 
 function activate(context: ExtensionContext) {

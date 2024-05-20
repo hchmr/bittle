@@ -25,7 +25,8 @@
                     "Cog"
                 ],
                 "extensions": [
-                    ".cog"
+                    ".cog",
+                    ".cogs"
                 ],
                 "configuration": "./language-configuration.json"
             }
