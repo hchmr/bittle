@@ -833,13 +833,17 @@ func p_comma(end: *Char) {
 
 //= Codegen
 
-var frame_size: Int;
-var label_count: Int;
-var temp_size: Int;
+struct CodegenCtx {
+    frame_size: Int,
+    label_count: Int,
+    temp_size: Int,
+    current_func: *Sym,
+    current_loop: Int,
+}
 
-func next_label(): Int {
-    label_count += 1;
-    return label_count;
+func next_label(ctx: *CodegenCtx): Int {
+    ctx.label_count += 1;
+    return ctx.label_count;
 }
 
 func strx(type: *Type): *Char {
@@ -868,21 +872,21 @@ func ldrx(type: *Type): *Char {
     assert(false, "ldrx: Unreachable.");
 }
 
-func emit_push(reg: Int) {
-    if (temp_size + 8 >= FRAME_TEMP_SIZE) {
+func emit_push(ctx: *CodegenCtx, reg: Int) {
+    if (ctx.temp_size + 8 >= FRAME_TEMP_SIZE) {
         fprintf(stderr, "Ran out of space for temporaries while compiling expression.\n");
         exit(1);
     }
-    temp_size += 8;
-    printf("  str x%d, [sp, #%d] // push\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - temp_size);
+    ctx.temp_size += 8;
+    printf("  str x%d, [sp, #%d] // push\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - ctx.temp_size);
 }
 
-func emit_pop(reg: Int) {
-    printf("  ldr x%d, [sp, #%d] // pop\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - temp_size);
-    temp_size -= 8;
+func emit_pop(ctx: *CodegenCtx, reg: Int) {
+    printf("  ldr x%d, [sp, #%d] // pop\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - ctx.temp_size);
+    ctx.temp_size -= 8;
 }
 
-func emit_sign_extend(source: *Type, t0: Int, t1: Int) {
+func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
     assert(is_scalar(source), "emit_sign_extend: source should be a scalar.");
     if (source.kind == Type_Int && source.size < 8) {
         var suffix = "_bh_w"[source.size];
@@ -894,39 +898,39 @@ func emit_sign_extend(source: *Type, t0: Int, t1: Int) {
     }
 }
 
-func emit_expr(e: *Expr, t0: Int);
+func emit_expr(ctx: *CodegenCtx, e: *Expr, t0: Int);
 
-func emit_expr_lvalue(e: *Expr, t0: Int);
+func emit_expr_lvalue(ctx: *CodegenCtx, e: *Expr, t0: Int);
 
-func emit_operands(e: *Expr, t0: Int, t1: Int) {
-    emit_expr(e.children[0], t0);
-    emit_push(t0);
-    emit_expr(e.children[1], t1);
-    emit_pop(t0);
+func emit_operands(ctx: *CodegenCtx, e: *Expr, t0: Int, t1: Int) {
+    emit_expr(ctx, e.children[0], t0);
+    emit_push(ctx, t0);
+    emit_expr(ctx, e.children[1], t1);
+    emit_pop(ctx, t0);
 }
 
-func emit_operands_lvalue(e: *Expr, t0: Int, t1: Int) {
-    emit_expr_lvalue(e.children[0], t0);
-    emit_push(t0);
-    emit_expr(e.children[1], t1);
-    emit_pop(t0);
+func emit_operands_lvalue(ctx: *CodegenCtx, e: *Expr, t0: Int, t1: Int) {
+    emit_expr_lvalue(ctx, e.children[0], t0);
+    emit_push(ctx, t0);
+    emit_expr(ctx, e.children[1], t1);
+    emit_pop(ctx, t0);
 }
 
-func emit_expr_binary(op: *Char, e: *Expr, t0: Int) {
-    emit_operands(e, 0, 1);
+func emit_expr_binary(ctx: *CodegenCtx, op: *Char, e: *Expr, t0: Int) {
+    emit_operands(ctx, e, 0, 1);
     printf("  %s x%d, x%d, x%d\n", op, t0, 0, 1);
 }
 
-func emit_expr_cmp(op: *Char, e: *Expr, t0: Int) {
-    emit_operands(e, 0, 1);
+func emit_expr_cmp(ctx: *CodegenCtx, op: *Char, e: *Expr, t0: Int) {
+    emit_operands(ctx, e, 0, 1);
     printf("  cmp x%d, x%d\n", 0, 1);
     printf("  cset x%d, %s\n", t0, op);
 }
 
-func emit_expr_lvalue(e: *Expr, t0: Int) {
+func emit_expr_lvalue(ctx: *CodegenCtx, e: *Expr, t0: Int) {
     if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Local) {
         var name = e.sym.name;
-        printf("  add x%d, sp, #%d // &%s\n", t0, frame_size - e.sym.offset, name);
+        printf("  add x%d, sp, #%d // &%s\n", t0, ctx.frame_size - e.sym.offset, name);
     } else if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Global) {
         var name = e.sym.name;
         if (e.sym.def_kind == DefKind_Extern) {
@@ -944,15 +948,15 @@ func emit_expr_lvalue(e: *Expr, t0: Int) {
         var lhs_type = e.children[0].type;
         var field_name = lhs_type.field_names[e.field_index];
         var field_offset = lhs_type.field_offsets[e.field_index];
-        emit_expr_lvalue(e.children[0], t0);
+        emit_expr_lvalue(ctx, e.children[0], t0);
         printf("  add x%d, x%d, #%d // &%s\n", t0, t0, field_offset, field_name);
     } else if (str_eq(e.kind, "*_")) {
-        emit_expr(e.children[0], t0);
+        emit_expr(ctx, e.children[0], t0);
     } else if (str_eq(e.kind, "_[_]")) {
         if (e.children[0].type.kind == Type_Ptr) {
-            emit_operands(e, 0, 1);
+            emit_operands(ctx, e, 0, 1);
         } else {
-            emit_operands_lvalue(e, 0, 1);
+            emit_operands_lvalue(ctx, e, 0, 1);
         }
         var elem_size = type_size(e.children[0].type.base);
         printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
@@ -961,14 +965,14 @@ func emit_expr_lvalue(e: *Expr, t0: Int) {
     }
 }
 
-func emit_expr(e: *Expr, t0: Int) {
+func emit_expr(ctx: *CodegenCtx, e: *Expr, t0: Int) {
     if (is_lvalue(e)) {
-        emit_expr_lvalue(e, t0);
+        emit_expr_lvalue(ctx, e, t0);
         printf("  %s%d, [x%d]\n", ldrx(e.type), t0, t0);
     } else if (str_eq(e.kind, "<int>")) {
         printf("  mov x%d, #%d\n", t0, e.int_val);
     } else if (str_eq(e.kind, "<str>")) {
-        var label = next_label();
+        var label = next_label(ctx);
         printf("  .text\n");
         printf("  .section .rodata\n");
         printf("  .align 3\n");
@@ -991,95 +995,95 @@ func emit_expr(e: *Expr, t0: Int) {
         var sym = e.sym;
         var i = 0;
         while (i < e.child_count) {
-            emit_expr(e.children[i], 0);
+            emit_expr(ctx, e.children[i], 0);
             if (i >= MAX_PARAMS) {
                 printf("  str x0, [sp, #%d]\n", 8 * (i - sym.param_count));
             } else {
-                emit_push(0);
+                emit_push(ctx, 0);
             }
             i += 1;
         }
         i = int_min(e.child_count, MAX_PARAMS);
         while (i > 0) {
             i -= 1;
-            emit_pop(i);
+            emit_pop(ctx, i);
         }
         printf("  bl %s\n", e.sym.name);
         if (e.type.kind != Type_Void) {
-            emit_sign_extend(e.type, t0, 0);
+            emit_sign_extend(ctx, e.type, t0, 0);
         }
     } else if (str_eq(e.kind, "&_")) {
-        emit_expr_lvalue(e.children[0], t0);
+        emit_expr_lvalue(ctx, e.children[0], t0);
     } else if (str_eq(e.kind, "!_")) {
-        emit_expr(e.children[0], t0);
+        emit_expr(ctx, e.children[0], t0);
         printf("  eor x%d, x%d, #1\n", t0, t0);
     } else if (str_eq(e.kind, "~_")) {
-        emit_expr(e.children[0], t0);
+        emit_expr(ctx, e.children[0], t0);
         printf("  mvn x%d, x%d\n", t0, t0);
     } else if (str_eq(e.kind, "-_")) {
-        emit_expr(e.children[0], t0);
+        emit_expr(ctx, e.children[0], t0);
         printf("  neg x%d, x%d\n", t0, t0);
     } else if (str_eq(e.kind, "_&&_") || str_eq(e.kind, "_||_")) {
-        var label = next_label();
+        var label = next_label(ctx);
         printf(".L%d.begin: // %s\n", label, e.kind);
-        emit_expr(e.children[0], t0);
+        emit_expr(ctx, e.children[0], t0);
         if (str_eq(e.kind, "_&&_")) {
             printf("  cbz x%d, .L%d.end\n", t0, label);
         } else {
             printf("  cbnz x%d, .L%d.end\n", t0, label);
         }
-        emit_expr(e.children[1], t0);
+        emit_expr(ctx, e.children[1], t0);
         printf(".L%d.end:\n", label);
     } else if (str_eq(e.kind, "_|_")) {
-        emit_expr_binary("orr", e, t0);
+        emit_expr_binary(ctx, "orr", e, t0);
     } else if (str_eq(e.kind, "_^_")) {
-        emit_expr_binary("eor", e, t0);
+        emit_expr_binary(ctx, "eor", e, t0);
     } else if (str_eq(e.kind, "_&_")) {
-        emit_expr_binary("and", e, t0);
+        emit_expr_binary(ctx, "and", e, t0);
     } else if (str_eq(e.kind, "_==_")) {
-        emit_expr_cmp("eq", e, t0);
+        emit_expr_cmp(ctx, "eq", e, t0);
     } else if (str_eq(e.kind, "_!=_")) {
-        emit_expr_cmp("ne", e, t0);
+        emit_expr_cmp(ctx, "ne", e, t0);
     } else if (str_eq(e.kind, "_<_")) {
-        emit_expr_cmp("lt", e, t0);
+        emit_expr_cmp(ctx, "lt", e, t0);
     } else if (str_eq(e.kind, "_<=_")) {
-        emit_expr_cmp("le", e, t0);
+        emit_expr_cmp(ctx, "le", e, t0);
     } else if (str_eq(e.kind, "_>_")) {
-        emit_expr_cmp("gt", e, t0);
+        emit_expr_cmp(ctx, "gt", e, t0);
     } else if (str_eq(e.kind, "_>=_")) {
-        emit_expr_cmp("ge", e, t0);
+        emit_expr_cmp(ctx, "ge", e, t0);
     } else if (str_eq(e.kind, "_<<_")) {
-        emit_expr_binary("lsl", e, t0);
+        emit_expr_binary(ctx, "lsl", e, t0);
     } else if (str_eq(e.kind, "_>>_")) {
-        emit_expr_binary("lsr", e, t0);
+        emit_expr_binary(ctx, "lsr", e, t0);
     } else if (str_eq(e.kind, "_+_")) {
-        emit_expr_binary("add", e, t0);
+        emit_expr_binary(ctx, "add", e, t0);
     } else if (str_eq(e.kind, "_-_")) {
-        emit_expr_binary("sub", e, t0);
+        emit_expr_binary(ctx, "sub", e, t0);
     } else if (str_eq(e.kind, "_*_")) {
-        emit_expr_binary("mul", e, t0);
+        emit_expr_binary(ctx, "mul", e, t0);
     } else if (str_eq(e.kind, "_/_")) {
-        emit_expr_binary("sdiv", e, t0);
+        emit_expr_binary(ctx, "sdiv", e, t0);
     } else if (str_eq(e.kind, "_%_")) {
-        emit_operands(e, 1, 2);
+        emit_operands(ctx, e, 1, 2);
         printf("  sdiv x%d, x%d, x%d\n", 0, 1, 2);
         printf("  msub x%d, x%d, x%d, x%d\n", t0, 0, 2, 1);
     } else if (str_eq(e.kind, "_?_:_")) {
-        var label = next_label();
+        var label = next_label(ctx);
         printf(".L%d.if:\n", label);
-        emit_expr(e.children[0], 0);
+        emit_expr(ctx, e.children[0], 0);
         printf("  cbz x0, .L%d.else\n", label);
         printf(".L%d.then:\n", label);
-        emit_expr(e.children[1], t0);
+        emit_expr(ctx, e.children[1], t0);
         printf("  b .L%d.end\n", label);
         printf(".L%d.else:\n", label);
         if (e.children[2]) {
-            emit_expr(e.children[2], t0);
+            emit_expr(ctx, e.children[2], t0);
         }
         printf(".L%d.end:\n", label);
     } else if (str_eq(e.kind, "_=_") || str_eq(e.kind, "_+=_") || str_eq(e.kind, "_-=_")) {
         var lhs = e.children[0];
-        emit_operands_lvalue(e, 0, 1);
+        emit_operands_lvalue(ctx, e, 0, 1);
         if (str_eq(e.kind, "_+=_") || str_eq(e.kind, "_-=_")) {
             printf("  %s2, [x0]\n", ldrx(lhs.type));
             if (str_eq(e.kind, "_+=_")) {
@@ -1092,80 +1096,80 @@ func emit_expr(e: *Expr, t0: Int) {
         }
         printf("  %s1, [x0]\n", strx(lhs.type));
     } else if (str_eq(e.kind, "<memcpy>")) {
-        emit_operands(e, 0, 1);
+        emit_operands(ctx, e, 0, 1);
         printf("  mov x2, #%d\n", type_size(e.children[0].type.base));
         printf("  bl memcpy\n");
     } else if (str_eq(e.kind, "<cast>")) {
         var target = e.type;
         var source = e.children[0].type;
         assert(is_scalar(target) && is_scalar(source), "emit_expr: <cast> should have scalar types.");
-        emit_expr(e.children[0], t0);
+        emit_expr(ctx, e.children[0], t0);
         if (target.kind == Type_Bool) {
             printf("  cmp x%d, #0\n", t0);
             printf("  cset w%d, ne\n", t0);
         } else if (type_size(target) < type_size(source)) {
-            emit_sign_extend(target, t0, t0);
+            emit_sign_extend(ctx, target, t0, t0);
         } else {
             // no-op
         }
     } else if (str_eq(e.kind, "<block>")) {
         var i = 0;
         while (i < e.child_count) {
-            emit_expr(e.children[i], 0);
+            emit_expr(ctx, e.children[i], 0);
             i += 1;
         }
     } else if (str_eq(e.kind, "<skip>")) {
         // noop
     } else if (str_eq(e.kind, "<while>")) {
-        var label = next_label();
-        var outer_loop = current_loop;
-        current_loop = label;
+        var label = next_label(ctx);
+        var outer_loop = ctx.current_loop;
+        ctx.current_loop = label;
         printf(".L%d.next:\n", label);
-        emit_expr(e.children[0], 0);
+        emit_expr(ctx, e.children[0], 0);
         printf("  cbz x0, .L%d.done\n", label);
         printf(".L%d.do:\n", label);
-        emit_expr(e.children[1], 0);
+        emit_expr(ctx, e.children[1], 0);
         printf("  b .L%d.next\n", label);
         printf(".L%d.done:\n", label);
-        current_loop = outer_loop;
+        ctx.current_loop = outer_loop;
     } else if (str_eq(e.kind, "<break>")) {
-        printf("  b .L%d.done\n", current_loop);
+        printf("  b .L%d.done\n", ctx.current_loop);
     } else if (str_eq(e.kind, "<continue>")) {
-        printf("  b .L%d.next\n", current_loop);
+        printf("  b .L%d.next\n", ctx.current_loop);
     } else if (str_eq(e.kind, "<return>")) {
         if (e.children[0]) {
-            emit_expr(e.children[0], 0);
+            emit_expr(ctx, e.children[0], 0);
         }
-        printf("  b .L.%s.ret\n", current_func.name);
+        printf("  b .L.%s.ret\n", ctx.current_func.name);
     } else {
         assert(false, "emit_expr: Unreachable.");
     }
 }
 
-func emit_func(sym: *Sym) {
-    current_func = sym;
-    frame_size = align_up(sym.locals_size, 16) + FRAME_TEMP_SIZE + FRAME_ARGS_SIZE;
+func emit_func(ctx: *CodegenCtx, sym: *Sym) {
+    ctx.current_func = sym;
+    ctx.frame_size = align_up(sym.locals_size, 16) + FRAME_TEMP_SIZE + FRAME_ARGS_SIZE;
     printf("  .text\n");
     printf("  .align 2\n");
     printf("  .global %s\n", sym.name);
     printf("%s:\n", sym.name);
     printf("  stp x29, x30, [sp, #-16]!\n");
     printf("  mov x29, sp\n");
-    printf("  sub sp, sp, #%d\n", frame_size);
+    printf("  sub sp, sp, #%d\n", ctx.frame_size);
     var i = 0;
     while (i < sym.param_count) {
         var param = sym.params[i];
-        printf("  %s%d, [sp, #%d] // %s\n", strx(param.type), i, frame_size - param.offset, param.name);
+        printf("  %s%d, [sp, #%d] // %s\n", strx(param.type), i, ctx.frame_size - param.offset, param.name);
         i += 1;
     }
-    emit_expr(sym.body, 0);
+    emit_expr(ctx, sym.body, 0);
     printf(".L.%s.ret:\n", sym.name);
-    printf("  add sp, sp, #%d\n", frame_size);
+    printf("  add sp, sp, #%d\n", ctx.frame_size);
     printf("  ldp x29, x30, [sp], #16\n");
     printf("  ret\n");
 }
 
-func emit_global(sym: *Sym) {
+func emit_global(ctx: *CodegenCtx, sym: *Sym) {
     printf("  .global %s\n", sym.name);
     printf("  .bss\n");
     printf(".align %d\n", type_align(sym.type));
@@ -1174,13 +1178,14 @@ func emit_global(sym: *Sym) {
 }
 
 func emit_program() {
+    var ctx = calloc(1, sizeof(CodegenCtx)) as *CodegenCtx;
     var i = 0;
     while (i < sym_count) {
         var sym = syms[i];
         if (sym.kind == Sym_Global && sym.def_kind == DefKind_Defined) {
-            emit_global(sym);
+            emit_global(ctx, sym);
         } else if (sym.kind == Sym_Func && sym.def_kind == DefKind_Defined) {
-            emit_func(sym);
+            emit_func(ctx, sym);
         } else if ((sym.kind == Sym_Type || sym.kind == Sym_Func || sym.kind == Sym_Global)
             && sym.def_kind == DefKind_Declared) {
             fprintf(stderr, "Undefined symbol '%s'.\n", sym.name);
