@@ -79,7 +79,9 @@ stage 0 "Make compilation of bootstrap compiler stricter"
 
 stage 1 "Replace bootstrap compiler with self-host compiler"
 
-stage 2 "Replace bootstrap compiler with self-host compiler"
+stage 2 "feat: Add support for include files"
+
+stage 3 "feat: Add support for include files"
 
 verify
 
