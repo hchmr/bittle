@@ -216,7 +216,7 @@ func find_field(type: *Type, name: *Char): Int {
 
 func add_field(type: *Type, field_name: *Char, field_type: *Type, pos: *Pos) {
     assert(type.kind == Type_Struct, "add_field: type should be a struct.");
-    
+
     var existing = find_field(type, field_name);
     if (existing != -1) {
         error_at(pos);
@@ -400,7 +400,7 @@ func sym_merge(existing: *Sym, new: *Sym) {
 
 func add_sym(env: *Env, sym: *Sym, pos: *Pos) {
     var existing = find_sym_scoped(env, sym.name);
-    
+
     if (existing) {
         if (decl_compat(existing, sym)) {
             sym_merge(existing, sym);
@@ -1189,7 +1189,7 @@ func next_tok(self: *Parser) {
 }
 
 func at(str: *Char, self: *Parser): Bool {
-    return (self.tok == Tok_Sym || self.tok == Tok_Wrd) 
+    return (self.tok == Tok_Sym || self.tok == Tok_Wrd)
         && str_eq(self.lexeme, str);
 }
 
@@ -1608,7 +1608,7 @@ func p_block_stmt(self: *Parser): *Expr {
 func p_var_stmt(self: *Parser): *Expr {
     var start_pos = self.tok_pos;
     expect("var", self);
-    
+
     var name_pos = self.tok_pos;
     var name = p_ident(self);
     var type: *Type = null;
@@ -1898,7 +1898,7 @@ func main(argc: Int32, argv: *(*Char)): Int32 {
         fprintf(stderr, "Usage: %s [file]\n", argv[0]);
         return 1;
     }
-    
+
     var input_name: *Char;
     var input_file: *File;
     if (argc == 2) {
