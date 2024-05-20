@@ -21,6 +21,8 @@ extern func atoi(s: *Char): Int;
 extern func strlen(s: *Char): Int;
 extern func strcmp(a: *Char, b: *Char): Int32;
 extern func memset(p: *Void, ch: Int32, count: Int): *Void;
+extern func memcpy(dest: *Void, src: *Void, count: Int): *Void;
+extern func strncat(dest: *Char, src: *Char, n: Int): *Char;
 
 //= Misc
 
@@ -31,7 +33,8 @@ struct Pos {
 }
 
 func error_at(pos: *Pos) {
-    fprintf(stderr, "%s:%d:%d: Error: ", pos.file, pos.line, pos.col);
+    var name = pos.file ? pos.file : "<stdin>";
+    fprintf(stderr, "%s:%d:%d: Error: ", name, pos.line, pos.col);
 }
 
 func str_eq(a: *Char, b: *Char): Bool {
@@ -67,6 +70,21 @@ func sb_push(buf_p: *(*Char), c: Char): Void {
     *buf_p = realloc(*buf_p, len + 2);
     (*buf_p)[len] = c;
     (*buf_p)[len + 1] = '\0';
+}
+
+func get_directory(path: *Char): *Char {
+    var i = strlen(path);
+    while (true) {
+        if (i == 0)
+            return ".";
+        i -= 1;
+        if (path[i] == '/') {
+            var dir = malloc(i + 1) as *Char;
+            memcpy(dir, path, i);
+            dir[i] = '\0';
+            return dir;
+        }
+    }
 }
 
 //= Codegen Constants
@@ -1152,6 +1170,7 @@ struct Parser {
 }
 
 func parser_init(self: *Parser, lexer: *Lexer, env: *Env) {
+    memset(self, 0, sizeof(Parser));
     self.lexer = lexer;
     self.env = env;
 }
@@ -1162,6 +1181,19 @@ func next_tok(self: *Parser) {
     self.tok = tok.kind;
     self.tok_pos = tok.pos;
     self.lexeme = tok.lexeme;
+}
+
+func make_parser(file_path: *Char, file: *File, env: *Env): *Parser {
+    var lexer = malloc(sizeof(Lexer)) as *Lexer;
+    lexer_init(lexer, file, file_path);
+
+    var parser = malloc(sizeof(Parser)) as *Parser;
+    parser_init(parser, lexer, env);
+
+    next_char(lexer);
+    next_tok(parser);
+
+    return parser;
 }
 
 func at(str: *Char, self: *Parser): Bool {
@@ -1194,6 +1226,15 @@ func p_ident(self: *Parser): *Char {
     if (self.tok != Tok_Wrd) {
         error_at(&self.tok_pos);
         fprintf(stderr, "Identifier expected.\n");
+        exit(1);
+    }
+    return p_lexeme(self);
+}
+
+func p_str(self: *Parser): *Char {
+    if (self.tok != Tok_Str) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "String literal expected.\n");
         exit(1);
     }
     return p_lexeme(self);
@@ -1723,6 +1764,8 @@ func p_stmt(self: *Parser): *Expr {
     }
 }
 
+func p_file(self: *Parser);
+
 func p_func_decl(self: *Parser) {
     expect("func", self);
     var name_pos = self.tok_pos;
@@ -1833,6 +1876,31 @@ func p_enum_decl(self: *Parser) {
     }
 }
 
+func p_include(self: *Parser) {
+    var start_pos = self.tok_pos;
+    expect("include", self);
+    var file_name = p_str(self);
+    expect(";", self);
+
+    var input_file_path = self.tok_pos.file;
+    if (!input_file_path) {
+        input_file_path = ".";
+    }
+
+    var file_dir = get_directory(input_file_path);
+    var file_path = malloc(strlen(file_dir) + strlen(file_name) + 2);
+    sprintf(file_path, "%s/%s", file_dir, file_name);
+    var file = fopen(file_path, "r");
+    if (!file) {
+        error_at(&start_pos);
+        fprintf(stderr, "Unable to open file '%s'.\n", file_path);
+        exit(1);
+    }
+
+    var other = make_parser(file_path, file, self.env);
+    p_file(other);
+}
+
 func p_decl(self: *Parser) {
     var is_extern = false;
     if (eat("extern", self)) {
@@ -1855,6 +1923,8 @@ func p_decl(self: *Parser) {
         p_struct_decl(self);
     } else if (at("enum", self)) {
         p_enum_decl(self);
+    } else if (at("include", self)) {
+        p_include(self);
     } else {
         error_at(&self.tok_pos);
         fprintf(stderr, "Declaration expected.\n");
@@ -1862,7 +1932,7 @@ func p_decl(self: *Parser) {
     }
 }
 
-func p_program(self: *Parser) {
+func p_file(self: *Parser) {
     while (self.tok != Tok_Eof) {
         p_decl(self);
     }
@@ -1874,32 +1944,22 @@ func main(argc: Int32, argv: *(*Char)): Int32 {
         return 1;
     }
 
-    var input_name: *Char;
-    var input_file: *File;
+    var input_path: *Char = null;
+    var input_file: *File = stdin;
     if (argc == 2) {
-        input_name = argv[1];
-        input_file = fopen(input_name, "r");
+        input_path = argv[1];
+        input_file = fopen(input_path, "r");
         if (!input_file) {
-            fprintf(stderr, "Error opening file '%s'.\n", input_name);
+            fprintf(stderr, "Error opening file '%s'.\n", input_path);
             return 1;
         }
-    } else {
-        input_name = "<stdin>";
-        input_file = stdin;
     }
 
-    var lexer = malloc(sizeof(Lexer)) as *Lexer;
-    lexer_init(lexer, input_file, input_name);
+    var root_env = calloc(1, sizeof(Env)) as *Env;
 
-    var env = calloc(1, sizeof(Env)) as *Env;
+    var parser = make_parser(input_path, input_file, root_env);
 
-    var parser = malloc(sizeof(Parser)) as *Parser;
-    parser_init(parser, lexer, env);
-
-    next_char(lexer);
-    next_tok(parser);
-
-    p_program(parser);
-    emit_program(env);
+    p_file(parser);
+    emit_program(root_env);
     return 0;
 }
