@@ -1327,6 +1327,129 @@ func build_binary_expr(lhs: *Expr, op: *Char, rhs: *Expr): *Expr {
     }
 }
 
+func p_expr(max_prec: Int): *Expr;
+
+func p_var_or_call_expr(): *Expr {
+    var name_pos = tok_pos;
+    var name = p_ident();
+    var sym = find_sym(name, 0);
+    if (!sym) {
+        error_at(&name_pos);
+        fprintf(stderr, "Undeclared symbol '%s'.\n", name);
+        exit(1);
+    }
+    if (eat("(")) {
+        if (sym.kind != Sym_Func) {
+            error_at(&name_pos);
+            fprintf(stderr, "Function expected.\n");
+            exit(1);
+        }
+        var expr = mk_expr("_(_)", sym.type, &name_pos);
+        expr.sym = sym;
+        while (!eat(")")) {
+            var arg = p_expr(0);
+            p_comma(")");
+            if (expr.child_count == MAX_PARAMS) {
+                error_at(&arg.pos);
+                fprintf(stderr, "Too many arguments.\n");
+                exit(1);
+            }
+            expr_add_child(expr, arg);
+        }
+        if (expr.child_count < sym.param_count) {
+            error_at(&expr.pos);
+            fprintf(stderr, "Not enough arguments provided (%d < %d).\n", expr.child_count, sym.param_count);
+            exit(1);
+        }
+        if (!sym.is_variadic && expr.child_count > sym.param_count) {
+            error_at(&expr.pos);
+            fprintf(stderr, "Too many arguments provided (%d > %d).\n", expr.child_count, sym.param_count);
+            exit(1);
+        }
+        var i = 0;
+        while (i < sym.param_count) {
+            check_type(expr.children[i], sym.params[i].type);
+            i += 1;
+        }
+        while (i < expr.child_count) {
+            if (!is_scalar(expr.children[i].type)) {
+                error_at(&tok_pos);
+                fprintf(stderr, "Variadic argument must be scalar.\n");
+                exit(1);
+            }
+            i += 1;
+        }
+        return expr;
+    } else {
+        if (sym.kind == Sym_Local || sym.kind == Sym_Global) {
+            var expr = mk_expr("<var>", sym.type, &tok_pos);
+            expr.sym = sym;
+            return expr;
+        } else if (sym.kind == Sym_Const) {
+            var expr = mk_expr("<int>", sym.type, &tok_pos);
+            expr.int_val = sym.value;
+            return expr;
+        } else {
+            error_at(&tok_pos);
+            fprintf(stderr, "'%s' is not a variable or constant.\n", name);
+            exit(1);
+        }
+    }
+}
+
+func p_ternary_expr(cond: *Expr): *Expr {
+    var ift = p_expr(Prec_Cond);
+    expect(":");
+    var iff = p_expr(Prec_Cond);
+    check_type_bool(cond);
+    unify_types(ift, iff);
+    return mk_expr_3("_?_:_", cond, ift, iff, ift.type);
+}
+
+func p_cast_expr(lhs: *Expr): *Expr {
+    var type = p_type();
+    if (!(is_scalar(type) && is_scalar(lhs.type))) {
+        error_at(&tok_pos);
+        fprintf(stderr, "Invalid cast type.\n");
+        exit(1);
+    }
+    return mk_cast_expr(lhs, type);
+}
+
+func p_index_expr(lhs: *Expr): *Expr {
+    var rhs = p_expr(0);
+    expect("]");
+    if (lhs.type.kind != Type_Arr && lhs.type.kind != Type_Ptr) {
+        error_at(&lhs.pos);
+        fprintf(stderr, "Expression is not indexable.\n");
+        exit(1);
+    }
+    check_type_int(rhs);
+    return mk_expr_2("_[_]", lhs, rhs, lhs.type.base);
+}
+
+func p_field_expr(lhs: *Expr): *Expr {
+    var field_name = p_ident();
+    if (lhs.type.kind == Type_Ptr && lhs.type.base.kind == Type_Struct) {
+        lhs = mk_expr_1("*_", lhs, lhs.type.base);
+    }
+    if (lhs.type.kind != Type_Struct) {
+        error_at(&lhs.pos);
+        fprintf(stderr, "Struct type expected.\n");
+        exit(1);
+    }
+    var field_index = find_field(lhs.type, field_name);
+    if (field_index == -1) {
+        error_at(&tok_pos);
+        fprintf(stderr, "Unknown field '%s'.\n", field_name);
+        exit(1);
+    }
+    var field_type = lhs.type.field_types[field_index];
+    lhs = mk_expr_1("_._", lhs, field_type);
+    lhs.field_index = field_index;
+    return lhs;
+}
+
 func p_expr(max_prec: Int): *Expr {
     var lhs: *Expr;
     if (eat("(")) {
@@ -1353,68 +1476,7 @@ func p_expr(max_prec: Int): *Expr {
         lhs = mk_expr("<int>", mk_int_type(8), &tok_pos);
         lhs.int_val = type_size(type);
     } else if (tok == Tok_Wrd) {
-        var name_pos = tok_pos;
-        var name = p_ident();
-        var sym = find_sym(name, 0);
-        if (!sym) {
-            error_at(&name_pos);
-            fprintf(stderr, "Undeclared symbol '%s'.\n", name);
-            exit(1);
-        }
-        if (eat("(")) {
-            if (sym.kind != Sym_Func) {
-                error_at(&name_pos);
-                fprintf(stderr, "Function expected.\n");
-                exit(1);
-            }
-            lhs = mk_expr("_(_)", sym.type, &name_pos);
-            lhs.sym = sym;
-            while (!eat(")")) {
-                var arg = p_expr(0);
-                p_comma(")");
-                if (lhs.child_count == MAX_PARAMS) {
-                    error_at(&arg.pos);
-                    fprintf(stderr, "Too many arguments.\n");
-                    exit(1);
-                }
-                expr_add_child(lhs, arg);
-            }
-            if (lhs.child_count < sym.param_count) {
-                error_at(&lhs.pos);
-                fprintf(stderr, "Not enough arguments provided (%d < %d).\n", lhs.child_count, sym.param_count);
-                exit(1);
-            }
-            if (!sym.is_variadic && lhs.child_count > sym.param_count) {
-                error_at(&lhs.pos);
-                fprintf(stderr, "Too many arguments provided (%d > %d).\n", lhs.child_count, sym.param_count);
-                exit(1);
-            }
-            var i = 0;
-            while (i < sym.param_count) {
-                check_type(lhs.children[i], sym.params[i].type);
-                i += 1;
-            }
-            while (i < lhs.child_count) {
-                if (!is_scalar(lhs.children[i].type)) {
-                    error_at(&tok_pos);
-                    fprintf(stderr, "Variadic argument must be scalar.\n");
-                    exit(1);
-                }
-                i += 1;
-            }
-        } else {
-            if (sym.kind == Sym_Local || sym.kind == Sym_Global) {
-                lhs = mk_expr("<var>", sym.type, &tok_pos);
-                lhs.sym = sym;
-            } else if (sym.kind == Sym_Const) {
-                lhs = mk_expr("<int>", sym.type, &tok_pos);
-                lhs.int_val = sym.value;
-            } else {
-                error_at(&tok_pos);
-                fprintf(stderr, "'%s' is not a variable or constant.\n", name);
-                exit(1);
-            }
-        }
+        lhs = p_var_or_call_expr();
     } else if (max_prec <= Prec_Unary && eat("*")) {
         lhs = build_unary_expr("*_", p_expr(Prec_Unary));
     } else if (max_prec <= Prec_Unary && eat("&")) {
@@ -1439,12 +1501,7 @@ func p_expr(max_prec: Int): *Expr {
         } else if (max_prec <= Prec_Assign && eat("-=")) {
             lhs = build_binary_expr(lhs, "_-=_", p_expr(Prec_Assign + 1));
         } else if (max_prec <= Prec_Cond && eat("?")) {
-            var ift = p_expr(Prec_Cond);
-            expect(":");
-            var iff = p_expr(Prec_Cond);
-            check_type_bool(lhs);
-            unify_types(ift, iff);
-            lhs = mk_expr_3("_?_:_", lhs, ift, iff, ift.type);
+            lhs = p_ternary_expr(lhs);
         } else if (max_prec <= Prec_CondOr && eat("||")) {
             lhs = build_binary_expr(lhs, "_||_", p_expr(Prec_CondOr + 1));
         } else if (max_prec <= Prec_CondAnd && eat("&&")) {
@@ -1482,42 +1539,11 @@ func p_expr(max_prec: Int): *Expr {
         } else if (max_prec <= Prec_Mul && eat("%")) {
             lhs = build_binary_expr(lhs, "_%_", p_expr(Prec_Mul + 1));
         } else if (max_prec <= Prec_Cast && eat("as")) {
-            var type = p_type();
-            if (!(is_scalar(type) && is_scalar(lhs.type))) {
-                error_at(&tok_pos);
-                fprintf(stderr, "Invalid cast type.\n");
-                exit(1);
-            }
-            lhs = mk_cast_expr(lhs, type);
+            lhs = p_cast_expr(lhs);
         } else if (max_prec <= Prec_Postfix && eat("[")) {
-            var rhs = p_expr(0);
-            expect("]");
-            if (lhs.type.kind != Type_Arr && lhs.type.kind != Type_Ptr) {
-                error_at(&lhs.pos);
-                fprintf(stderr, "Expression is not indexable.\n");
-                exit(1);
-            }
-            check_type_int(rhs);
-            lhs = mk_expr_2("_[_]", lhs, rhs, lhs.type.base);
+            lhs = p_index_expr(lhs);
         } else if (max_prec <= Prec_Postfix && eat(".")) {
-            var field_name = p_ident();
-            if (lhs.type.kind == Type_Ptr && lhs.type.base.kind == Type_Struct) {
-                lhs = mk_expr_1("*_", lhs, lhs.type.base);
-            }
-            if (lhs.type.kind != Type_Struct) {
-                error_at(&lhs.pos);
-                fprintf(stderr, "Struct type expected.\n");
-                exit(1);
-            }
-            var field_index = find_field(lhs.type, field_name);
-            if (field_index == -1) {
-                error_at(&tok_pos);
-                fprintf(stderr, "Unknown field '%s'.\n", field_name);
-                exit(1);
-            }
-            var field_type = lhs.type.field_types[field_index];
-            lhs = mk_expr_1("_._", lhs, field_type);
-            lhs.field_index = field_index;
+            lhs = p_field_expr(lhs);
         } else {
             return lhs;
         }
