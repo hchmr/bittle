@@ -1,0 +1,72 @@
+include "cog.cogs";
+
+func error_at(pos: *Pos) {
+    var name = pos.file ? pos.file : "<stdin>";
+    fprintf(stderr, "%s:%d:%d: Error: ", name, pos.line, pos.col);
+}
+
+func str_eq(a: *Char, b: *Char): Bool {
+    return strcmp(a, b) == 0;
+}
+
+func align_up(size: Int , align: Int): Int {
+    return (size + align - 1) / align * align;
+}
+
+func assert(cond: Bool, because: *Char) {
+    if (!cond) {
+        fprintf(stderr, "Assertion failed: %s\n", because);
+        exit(1);
+    }
+}
+
+func ilog2(n: Int): Int {
+    var i = 0;
+    while (n > 1) {
+        n = n / 2;
+        i += 1;
+    }
+    return i;
+}
+
+func int_min(a: Int, b: Int): Int {
+    return a > b ? b : a;
+}
+
+func sb_push(buf_p: *(*Char), c: Char): Void {
+    var len = *buf_p ? strlen(*buf_p) : 0;
+    *buf_p = realloc(*buf_p, len + 2);
+    (*buf_p)[len] = c;
+    (*buf_p)[len + 1] = '\0';
+}
+
+func get_directory(path: *Char): *Char {
+    var i = strlen(path);
+    while (true) {
+        if (i == 0)
+            return ".";
+        i -= 1;
+        if (path[i] == '/') {
+            var dir = malloc(i + 1) as *Char;
+            memcpy(dir, path, i);
+            dir[i] = '\0';
+            return dir;
+        }
+    }
+}
+
+func is_space(c: Char): Bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+func is_print(c: Char): Bool {
+    return c >= 32 as Char && c <= 126 as Char;
+}
+
+func is_digit(c: Char): Bool {
+    return c >= '0' && c <= '9';
+}
+
+func is_alpha(c: Char): Bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}

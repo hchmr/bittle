@@ -1,0 +1,770 @@
+include "cog.cogs";
+
+func parser_init(self: *Parser, lexer: *Lexer, env: *Env) {
+    memset(self, 0, sizeof(Parser));
+    self.lexer = lexer;
+    self.env = env;
+}
+
+func next_tok(self: *Parser) {
+    var tok: Tok;
+    scan_tok(self.lexer, &tok);
+    self.tok = tok.kind;
+    self.tok_pos = tok.pos;
+    self.lexeme = tok.lexeme;
+}
+
+func make_parser(file_path: *Char, file: *File, env: *Env): *Parser {
+    var lexer = malloc(sizeof(Lexer)) as *Lexer;
+    lexer_init(lexer, file, file_path);
+
+    var parser = malloc(sizeof(Parser)) as *Parser;
+    parser_init(parser, lexer, env);
+
+    next_char(lexer);
+    next_tok(parser);
+
+    return parser;
+}
+
+func at(str: *Char, self: *Parser): Bool {
+    return (self.tok == Tok_Sym || self.tok == Tok_Wrd)
+        && str_eq(self.lexeme, str);
+}
+
+func eat(str: *Char, self: *Parser): Bool {
+    if (!at(str, self))
+        return false;
+    next_tok(self);
+    return true;
+}
+
+func expect(str: *Char, self: *Parser) {
+    if (!eat(str, self)) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "'%s' expected.\n", str);
+        exit(1);
+    }
+}
+
+func p_lexeme(self: *Parser): *Char {
+    var prev_lexeme = self.lexeme;
+    next_tok(self);
+    return prev_lexeme;
+}
+
+func p_ident(self: *Parser): *Char {
+    if (self.tok != Tok_Wrd) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Identifier expected.\n");
+        exit(1);
+    }
+    return p_lexeme(self);
+}
+
+func p_str(self: *Parser): *Char {
+    if (self.tok != Tok_Str) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "String literal expected.\n");
+        exit(1);
+    }
+    return p_lexeme(self);
+}
+
+func p_comma(end: *Char, self: *Parser) {
+    if (!eat(",", self) && !at(end, self)) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "',' or '%s' expected.\n", end);
+        exit(1);
+    }
+}
+
+func p_const_expr(self: *Parser): Int;
+
+func p_type(self: *Parser): *Type {
+    if (eat("(", self)) {
+        var type = p_type(self);
+        expect(")", self);
+        return type;
+    } else if (eat("Void", self)) {
+        return mk_void_type();
+    } else if (eat("Bool", self)) {
+        return mk_bool_type();
+    } else if (eat("Char", self) || eat("Int8", self)) {
+        return mk_int_type(1);
+    } else if (eat("Int16", self)) {
+        return mk_int_type(2);
+    } else if (eat("Int32", self)) {
+        return mk_int_type(4);
+    } else if (eat("Int", self) || eat("Int64", self)) {
+        return mk_int_type(8);
+    } else if (eat("*", self)) {
+        return mk_ptr_type(p_type(self));
+    } else if (eat("[", self)) {
+        var type = p_type(self);
+        expect(";", self);
+        var len = p_const_expr(self);
+        expect("]", self);
+        return mk_array_type(type, len);
+    } else if (self.tok == Tok_Wrd) {
+        var sym = find_sym(self.env, self.lexeme);
+        if (!sym) {
+            error_at(&self.tok_pos);
+            fprintf(stderr, "Undeclared symbol '%s'.\n", self.lexeme);
+            exit(1);
+        }
+        if (sym.kind != Sym_Type) {
+            error_at(&self.tok_pos);
+            fprintf(stderr, "'%s' is not a type.\n", self.lexeme);
+            exit(1);
+        }
+        next_tok(self);
+        return sym.type;
+    } else {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Type expected.\n");
+        exit(1);
+    }
+}
+
+enum {
+    Prec_Assign,
+    Prec_Cond,
+    Prec_CondOr,
+    Prec_CondAnd,
+    Prec_BitOr,
+    Prec_BitXor,
+    Prec_BitAnd,
+    Prec_Cmp,
+    Prec_Shift,
+    Prec_Add,
+    Prec_Mul,
+    Prec_Cast,
+    Prec_Unary,
+    Prec_Postfix,
+}
+
+func build_unary_expr(op: *Char, rhs: *Expr): *Expr {
+    if (str_eq(op, "*_")) {
+        if (rhs.type.kind != Type_Ptr) {
+            error_at(&rhs.pos);
+            fprintf(stderr, "Pointer type expected.\n");
+            exit(1);
+        }
+        return mk_expr_1("*_", rhs, rhs.type.base);
+    } else if (str_eq(op, "&_")) {
+        if (!is_lvalue(rhs)) {
+            error_at(&rhs.pos);
+            fprintf(stderr, "L-value expected.\n");
+            exit(1);
+        }
+        return mk_expr_1("&_", rhs, mk_ptr_type(rhs.type));
+    } else if (str_eq(op, "!_")) {
+        check_type(rhs, mk_bool_type());
+        return mk_expr_1("!_", rhs, mk_bool_type());
+    } else {
+        check_type_int(rhs);
+        return mk_expr_1(op, rhs, rhs.type);
+    }
+}
+
+func build_binary_expr(lhs: *Expr, op: *Char, rhs: *Expr): *Expr {
+    if (str_eq(op, "_=_") || str_eq(op, "_+=_") || str_eq(op, "_-=_")) {
+        if (!is_lvalue(lhs)) {
+            error_at(&lhs.pos);
+            fprintf(stderr, "L-value expected.\n");
+            exit(1);
+        }
+        if (!str_eq(op, "_=_")) {
+            check_type_int(lhs);
+        }
+        check_type(rhs, lhs.type);
+        if (!is_scalar(lhs.type)) {
+            assert(is_lvalue(lhs), "build_binary_expr: lhs must be an lvalue.");
+            lhs = mk_expr_1("&_", lhs, mk_ptr_type(lhs.type));
+            rhs = mk_expr_1("&_", rhs, mk_ptr_type(rhs.type));
+            return mk_expr_2("<memcpy>", lhs, rhs, mk_void_type());
+        } else {
+            return mk_expr_2(op, lhs, rhs, mk_void_type());
+        }
+    } else if (str_eq(op, "_||_") || str_eq(op, "_&&_")) {
+        check_type_bool(lhs);
+        check_type_bool(rhs);
+        return mk_expr_2(op, lhs, rhs, mk_bool_type());
+    }  else if (str_eq(op, "_==_") || str_eq(op, "_!=_") || str_eq(op, "_<_") || str_eq(op, "_<=_") || str_eq(op, "_>_") || str_eq(op, "_>=_")) {
+        unify_types(lhs, rhs);
+        if (!is_scalar(lhs.type)) {
+            error_at(&lhs.pos);
+            fprintf(stderr, "Type ");
+            print_type(stderr, lhs.type);
+            fprintf(stderr, " is not comparable.\n");
+            exit(1);
+        }
+        return mk_expr_2(op, lhs, rhs, mk_bool_type());
+    } else {
+        check_type_int(lhs);
+        check_type_int(rhs);
+        unify_types(lhs, rhs);
+        return mk_expr_2(op, lhs, rhs, lhs.type);
+    }
+}
+
+func p_expr(self: *Parser, max_prec: Int): *Expr;
+
+func p_var_or_call_expr(self: *Parser): *Expr {
+    var name_pos = self.tok_pos;
+    var name = p_ident(self);
+    var sym = find_sym(self.env, name);
+    if (!sym) {
+        error_at(&name_pos);
+        fprintf(stderr, "Undeclared symbol '%s'.\n", name);
+        exit(1);
+    }
+    if (eat("(", self)) {
+        if (sym.kind != Sym_Func) {
+            error_at(&name_pos);
+            fprintf(stderr, "Function expected.\n");
+            exit(1);
+        }
+        var expr = mk_expr("_(_)", sym.type, &name_pos);
+        expr.sym = sym;
+        while (!eat(")", self)) {
+            var arg = p_expr(self, 0);
+            p_comma(")", self);
+            if (expr.child_count == MAX_PARAMS) {
+                error_at(&arg.pos);
+                fprintf(stderr, "Too many arguments.\n");
+                exit(1);
+            }
+            expr_add_child(expr, arg);
+        }
+        if (expr.child_count < sym.param_count) {
+            error_at(&expr.pos);
+            fprintf(stderr, "Not enough arguments provided (%d < %d).\n", expr.child_count, sym.param_count);
+            exit(1);
+        }
+        if (!sym.is_variadic && expr.child_count > sym.param_count) {
+            error_at(&expr.pos);
+            fprintf(stderr, "Too many arguments provided (%d > %d).\n", expr.child_count, sym.param_count);
+            exit(1);
+        }
+        var i = 0;
+        while (i < sym.param_count) {
+            check_type(expr.children[i], sym.params[i].type);
+            i += 1;
+        }
+        while (i < expr.child_count) {
+            if (!is_scalar(expr.children[i].type)) {
+                error_at(&self.tok_pos);
+                fprintf(stderr, "Variadic argument must be scalar.\n");
+                exit(1);
+            }
+            i += 1;
+        }
+        return expr;
+    } else {
+        if (sym.kind == Sym_Local || sym.kind == Sym_Global) {
+            var expr = mk_expr("<var>", sym.type, &self.tok_pos);
+            expr.sym = sym;
+            return expr;
+        } else if (sym.kind == Sym_Const) {
+            var expr = mk_expr("<int>", sym.type, &self.tok_pos);
+            expr.int_val = sym.value;
+            return expr;
+        } else {
+            error_at(&self.tok_pos);
+            fprintf(stderr, "'%s' is not a variable or constant.\n", name);
+            exit(1);
+        }
+    }
+}
+
+func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
+    var ift = p_expr(self, Prec_Cond);
+    expect(":", self);
+    var iff = p_expr(self, Prec_Cond);
+    check_type_bool(cond);
+    unify_types(ift, iff);
+    return mk_expr_3("_?_:_", cond, ift, iff, ift.type);
+}
+
+func p_cast_expr(self: *Parser, lhs: *Expr): *Expr {
+    var type = p_type(self);
+    if (!(is_scalar(type) && is_scalar(lhs.type))) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Invalid cast type.\n");
+        exit(1);
+    }
+    return mk_cast_expr(lhs, type);
+}
+
+func p_index_expr(self: *Parser, lhs: *Expr): *Expr {
+    var rhs = p_expr(self, 0);
+    expect("]", self);
+    if (lhs.type.kind != Type_Arr && lhs.type.kind != Type_Ptr) {
+        error_at(&lhs.pos);
+        fprintf(stderr, "Expression is not indexable.\n");
+        exit(1);
+    }
+    check_type_int(rhs);
+    return mk_expr_2("_[_]", lhs, rhs, lhs.type.base);
+}
+
+func p_field_expr(self: *Parser, lhs: *Expr): *Expr {
+    var field_name = p_ident(self);
+    if (lhs.type.kind == Type_Ptr && lhs.type.base.kind == Type_Struct) {
+        lhs = mk_expr_1("*_", lhs, lhs.type.base);
+    }
+    if (lhs.type.kind != Type_Struct) {
+        error_at(&lhs.pos);
+        fprintf(stderr, "Struct type expected.\n");
+        exit(1);
+    }
+    var field_index = find_field(lhs.type, field_name);
+    if (field_index == -1) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Unknown field '%s'.\n", field_name);
+        exit(1);
+    }
+    var field_type = lhs.type.field_types[field_index];
+    lhs = mk_expr_1("_._", lhs, field_type);
+    lhs.field_index = field_index;
+    return lhs;
+}
+
+func p_expr(self: *Parser, max_prec: Int): *Expr {
+    var lhs: *Expr;
+    if (eat("(", self)) {
+        lhs = p_expr(self, 0);
+        expect(")", self);
+    } else if (eat("null", self)) {
+        lhs = mk_expr("<int>", mk_ptr_type(mk_void_type()), &self.tok_pos);
+    } else if (at("true", self) || at("false", self)) {
+        lhs = mk_expr("<int>", mk_bool_type(), &self.tok_pos);
+        lhs.int_val = (eat("true", self) || !eat("false", self)) as Int;
+    } else if (self.tok == Tok_Int) {
+        lhs = mk_expr("<int>", mk_int_type(8), &self.tok_pos);
+        lhs.int_val = atoi(p_lexeme(self));
+    } else if (self.tok == Tok_Chr) {
+        lhs = mk_expr("<int>", mk_int_type(1), &self.tok_pos);
+        lhs.int_val = p_lexeme(self)[0];
+    } else if (self.tok == Tok_Str) {
+        lhs = mk_expr("<str>", mk_ptr_type(mk_int_type(1)), &self.tok_pos);
+        lhs.str_val = p_lexeme(self);
+    } else if (eat("sizeof", self)) {
+        expect("(", self);
+        var type = p_type(self);
+        expect(")", self);
+        lhs = mk_expr("<int>", mk_int_type(8), &self.tok_pos);
+        lhs.int_val = type_size(type);
+    } else if (self.tok == Tok_Wrd) {
+        lhs = p_var_or_call_expr(self);
+    } else if (max_prec <= Prec_Unary && eat("*", self)) {
+        lhs = build_unary_expr("*_", p_expr(self, Prec_Unary));
+    } else if (max_prec <= Prec_Unary && eat("&", self)) {
+        lhs = build_unary_expr("&_", p_expr(self, Prec_Unary));
+    } else if (max_prec <= Prec_Unary && (eat("!", self))) {
+        lhs = build_unary_expr("!_", p_expr(self, Prec_Unary));
+    } else if (max_prec <= Prec_Unary && eat("~", self)) {
+        lhs = build_unary_expr("~_", p_expr(self, Prec_Unary));
+    } else if (max_prec <= Prec_Unary && eat("-", self)) {
+        lhs = build_unary_expr("-_", p_expr(self, Prec_Unary));
+    } else {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Expression expected.\n");
+        exit(1);
+    }
+
+    while (true) {
+        if (max_prec <= Prec_Assign && eat("=", self)) {
+            lhs = build_binary_expr(lhs, "_=_", p_expr(self, Prec_Assign + 1));
+        } else if (max_prec <= Prec_Assign && eat("+=", self)) {
+            lhs = build_binary_expr(lhs, "_+=_", p_expr(self, Prec_Assign + 1));
+        } else if (max_prec <= Prec_Assign && eat("-=", self)) {
+            lhs = build_binary_expr(lhs, "_-=_", p_expr(self, Prec_Assign + 1));
+        } else if (max_prec <= Prec_Cond && eat("?", self)) {
+            lhs = p_ternary_expr(self, lhs);
+        } else if (max_prec <= Prec_CondOr && eat("||", self)) {
+            lhs = build_binary_expr(lhs, "_||_", p_expr(self, Prec_CondOr + 1));
+        } else if (max_prec <= Prec_CondAnd && eat("&&", self)) {
+            lhs = build_binary_expr(lhs, "_&&_", p_expr(self, Prec_CondAnd + 1));
+        } else if (max_prec <= Prec_BitOr && eat("|", self)) {
+            lhs = build_binary_expr(lhs, "_|_", p_expr(self, Prec_BitOr + 1));
+        } else if (max_prec <= Prec_BitXor && eat("^", self)) {
+            lhs = build_binary_expr(lhs, "_^_", p_expr(self, Prec_BitXor + 1));
+        } else if (max_prec <= Prec_BitAnd && eat("&", self)) {
+            lhs = build_binary_expr(lhs, "_&_", p_expr(self, Prec_BitAnd + 1));
+        } else if (max_prec <= Prec_Cmp && eat("==", self)) {
+            lhs = build_binary_expr(lhs, "_==_", p_expr(self, Prec_Cmp + 1));
+        } else if (max_prec <= Prec_Cmp && eat("!=", self)) {
+            lhs = build_binary_expr(lhs, "_!=_", p_expr(self, Prec_Cmp + 1));
+        } else if (max_prec <= Prec_Cmp && eat("<", self)) {
+            lhs = build_binary_expr(lhs, "_<_", p_expr(self, Prec_Cmp + 1));
+        } else if (max_prec <= Prec_Cmp && eat("<=", self)) {
+            lhs = build_binary_expr(lhs, "_<=_", p_expr(self, Prec_Cmp + 1));
+        } else if (max_prec <= Prec_Cmp && eat(">", self)) {
+            lhs = build_binary_expr(lhs, "_>_", p_expr(self, Prec_Cmp + 1));
+        } else if (max_prec <= Prec_Cmp && eat(">=", self)) {
+            lhs = build_binary_expr(lhs, "_>=_", p_expr(self, Prec_Cmp + 1));
+        } else if (max_prec <= Prec_Shift && eat("<<", self)) {
+            lhs = build_binary_expr(lhs, "_<<_", p_expr(self, Prec_Shift + 1));
+        } else if (max_prec <= Prec_Shift && eat(">>", self)) {
+            lhs = build_binary_expr(lhs, "_>>_", p_expr(self, Prec_Shift + 1));
+        } else if (max_prec <= Prec_Add && eat("+", self)) {
+            lhs = build_binary_expr(lhs, "_+_", p_expr(self, Prec_Add + 1));
+        } else if (max_prec <= Prec_Add && eat("-", self)) {
+            lhs = build_binary_expr(lhs, "_-_", p_expr(self, Prec_Add + 1));
+        } else if (max_prec <= Prec_Mul && eat("*", self)) {
+            lhs = build_binary_expr(lhs, "_*_", p_expr(self, Prec_Mul + 1));
+        } else if (max_prec <= Prec_Mul && eat("/", self)) {
+            lhs = build_binary_expr(lhs, "_/_", p_expr(self, Prec_Mul + 1));
+        } else if (max_prec <= Prec_Mul && eat("%", self)) {
+            lhs = build_binary_expr(lhs, "_%_", p_expr(self, Prec_Mul + 1));
+        } else if (max_prec <= Prec_Cast && eat("as", self)) {
+            lhs = p_cast_expr(self, lhs);
+        } else if (max_prec <= Prec_Postfix && eat("[", self)) {
+            lhs = p_index_expr(self, lhs);
+        } else if (max_prec <= Prec_Postfix && eat(".", self)) {
+            lhs = p_field_expr(self, lhs);
+        } else {
+            return lhs;
+        }
+    }
+}
+
+func p_const_expr(self: *Parser): Int {
+    var expr = p_expr(self, 0);
+    check_type_int(expr);
+    return const_eval(expr);
+}
+
+func p_stmt(self: *Parser): *Expr;
+
+func p_block_stmt(self: *Parser): *Expr {
+    var start_pos = self.tok_pos;
+    expect("{", self);
+    var block = mk_expr("<block>", mk_void_type(), &start_pos);
+    enter_scope(&self.env);
+    while (!eat("}", self)) {
+        var stmt = p_stmt(self);
+        expr_add_child(block, stmt);
+    }
+    leave_scope(&self.env);
+    return block;
+}
+
+func p_var_stmt(self: *Parser): *Expr {
+    var start_pos = self.tok_pos;
+    expect("var", self);
+
+    var name_pos = self.tok_pos;
+    var name = p_ident(self);
+    var type: *Type = null;
+    if (eat(":", self)) {
+        type = p_type(self);
+    }
+    var init: *Expr = null;
+    if (eat("=", self)) {
+        init = p_expr(self, 0);
+    }
+    expect(";", self);
+
+    if (type != null) {
+        if (init != null) {
+            check_type(init, type);
+        }
+    } else {
+        if (init != null) {
+            type = init.type;
+        } else {
+            error_at(&name_pos);
+            fprintf(stderr, "Type or initializer expected.\n");
+            exit(1);
+        }
+    }
+    if (type_size(type) == -1) {
+        error_at(&name_pos);
+        fprintf(stderr, "Variable must have a size.\n");
+        exit(1);
+    }
+
+    var sym = add_local(self.env, name, type, &name_pos);
+
+    if (init != null) {
+        var dest = mk_expr("<var>", type, &name_pos);
+        dest.sym = sym;
+        return build_binary_expr(dest, "_=_", init);
+    } else {
+        return mk_expr("<skip>", mk_void_type(), &start_pos);
+    }
+}
+
+func p_if_stmt(self: *Parser): *Expr {
+    expect("if", self);
+    expect("(", self);
+    var cond = p_expr(self, 0);
+    check_type_bool(cond);
+    expect(")", self);
+    var ift = p_stmt(self);
+    var iff: *Expr = null;
+    if (eat("else", self)) {
+        iff = p_stmt(self);
+    }
+    return mk_expr_3("_?_:_", cond, ift, iff, mk_void_type());
+}
+
+func p_while_stmt(self: *Parser): *Expr {
+    expect("while", self);
+    var outer_loop = self.env.current_loop;
+    self.env.current_loop = 1;
+    expect("(", self);
+    var cond = p_expr(self, 0);
+    check_type_bool(cond);
+    expect(")", self);
+    var body = p_stmt(self);
+    self.env.current_loop = outer_loop;
+    return mk_expr_2("<while>", cond, body, mk_void_type());
+}
+
+func p_break_stmt(self: *Parser): *Expr {
+    var start_pos = self.tok_pos;
+    expect("break", self);
+    expect(";", self);
+    if (self.env.current_loop == 0) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Break statement outside of loop.\n");
+        exit(1);
+    }
+    return mk_expr("<break>", mk_void_type(), &start_pos);
+}
+
+func p_continue_stmt(self: *Parser): *Expr {
+    var start_pos = self.tok_pos;
+    expect("continue", self);
+    expect(";", self);
+    if (self.env.current_loop == 0) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Continue statement outside of loop.\n");
+        exit(1);
+    }
+    return mk_expr("<continue>", mk_void_type(), &start_pos);
+}
+
+func p_return_stmt(self: *Parser): *Expr {
+    var start_pos = self.tok_pos;
+    expect("return", self);
+    var expr: *Expr = null;
+    if (!at(";", self)) {
+        expr = p_expr(self, 0);
+    }
+    expect(";", self);
+
+    var return_type = self.env.current_func.type;
+    if (expr) {
+        check_type(expr, return_type);
+    } else if (return_type.kind != Type_Void) {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Return value expected.\n");
+        exit(1);
+    }
+
+    var return_stmt = mk_expr("<return>", mk_void_type(), &start_pos);
+    expr_add_child(return_stmt, expr);
+    return return_stmt;
+}
+
+func p_stmt(self: *Parser): *Expr {
+    if (at("{", self)) {
+        return p_block_stmt(self);
+    } else if (at("var", self)) {
+        return p_var_stmt(self);
+    } else if (at("if", self)) {
+        return p_if_stmt(self);
+    } else if (at("while", self)) {
+        return p_while_stmt(self);
+    } else if (at("break", self)) {
+        return p_break_stmt(self);
+    } else if (at("continue", self)) {
+        return p_continue_stmt(self);
+    } else if (at("return", self)) {
+        return p_return_stmt(self);
+    } else {
+        var expr = p_expr(self, 0);
+        expect(";", self);
+        return expr;
+    }
+}
+
+func p_file(self: *Parser);
+
+func p_func_decl(self: *Parser) {
+    expect("func", self);
+    var name_pos = self.tok_pos;
+    var name = p_ident(self);
+    var sym = mk_sym(Sym_Func, name);
+    sym.type = mk_void_type();
+    self.env.current_func = sym;
+
+    enter_scope(&self.env);
+    add_sym(self.env, sym, &name_pos);
+    expect("(", self);
+    while (!at(")", self) && !at("...", self)) {
+        var param_pos = self.tok_pos;
+        var param_name = p_ident(self);
+        expect(":", self);
+        var param_type = p_type(self);
+        p_comma(")", self);
+
+        if (sym.param_count == MAX_PARAMS) {
+            error_at(&self.tok_pos);
+            fprintf(stderr, "Too many parameters.\n");
+            exit(1);
+        }
+        if (!is_scalar(param_type)) {
+            error_at(&param_pos);
+            fprintf(stderr, "Parameter must be of scalar type.\n");
+            exit(1);
+        }
+        sym.params[sym.param_count] = add_local(self.env, param_name, param_type, &param_pos);
+        sym.param_count += 1;
+    }
+    if (eat("...", self)) {
+        sym.is_variadic = true;
+    }
+    expect(")", self);
+    if (eat(":", self)) {
+        sym.type = p_type(self);
+    }
+
+    if (at("{", self)) {
+        sym.body = p_stmt(self);
+        sym.is_defined = true;
+    } else {
+        expect(";", self);
+    }
+    leave_scope(&self.env);
+    add_sym(self.env, sym, &name_pos);
+}
+
+func p_var_decl(self: *Parser, is_extern: Bool) {
+    expect("var", self);
+    var name = p_ident(self);
+    expect(":", self);
+    var type = p_type(self);
+    expect(";", self);
+    add_global(self.env, !is_extern, name, type, &self.tok_pos);
+}
+
+func p_const_decl(self: *Parser) {
+    expect("const", self);
+    var name = p_ident(self);
+    expect("=", self);
+    var value = p_const_expr(self);
+    expect(";", self);
+    add_const(self.env, name, value, &self.tok_pos);
+}
+
+func p_struct_decl(self: *Parser) {
+    expect("struct", self);
+    var name_pos = self.tok_pos;
+    var name = p_ident(self);
+
+    declare_struct(self.env, name, &name_pos);
+
+    if (eat("{", self)) {
+        var fields = mk_struct_type(name);
+        while (!eat("}", self)) {
+            var field_pos = self.tok_pos;
+            var field_name = p_ident(self);
+            expect(":", self);
+            var field_type = p_type(self);
+            p_comma("}", self);
+            add_field(fields, field_name, field_type, &field_pos);
+        }
+        if (fields.field_count == 0) {
+            error_at(&name_pos);
+            fprintf(stderr, "Struct must have at least one field.\n");
+            exit(1);
+        }
+        define_struct(self.env, name, fields, &name_pos);
+    } else {
+        expect(";", self);
+    }
+}
+
+func p_enum_decl(self: *Parser) {
+    expect("enum", self);
+    var value = 0;
+    expect("{", self);
+    while (!eat("}", self)) {
+        var name = p_ident(self);
+        if (eat("=", self)) {
+            value = p_const_expr(self);
+        }
+        p_comma("}", self);
+        add_const(self.env, name, value, &self.tok_pos);
+        value += 1;
+    }
+}
+
+func p_include(self: *Parser) {
+    var start_pos = self.tok_pos;
+    expect("include", self);
+    var file_name = p_str(self);
+    expect(";", self);
+
+    var input_file_path = self.tok_pos.file;
+    if (!input_file_path) {
+        input_file_path = ".";
+    }
+
+    var file_dir = get_directory(input_file_path);
+    var file_path = malloc(strlen(file_dir) + strlen(file_name) + 2);
+    sprintf(file_path, "%s/%s", file_dir, file_name);
+    var file = fopen(file_path, "r");
+    if (!file) {
+        error_at(&start_pos);
+        fprintf(stderr, "Unable to open file '%s'.\n", file_path);
+        exit(1);
+    }
+
+    var other = make_parser(file_path, file, self.env);
+    p_file(other);
+}
+
+func p_decl(self: *Parser) {
+    var is_extern = false;
+    if (eat("extern", self)) {
+        // FIXME: extern is now a storage class specifier, doesn't make sense for structs.
+        if (!at("func", self) && !at("var", self) && !at("struct", self)) {
+            error_at(&self.tok_pos);
+            fprintf(stderr, "External declaration expected.\n");
+            exit(1);
+        }
+        is_extern = true;
+    }
+
+    if (at("func", self)) {
+        p_func_decl(self);
+    } else if (at("var", self)) {
+        p_var_decl(self, is_extern);
+    } else if (at("const", self)) {
+        p_const_decl(self);
+    } else if (at("struct", self)) {
+        p_struct_decl(self);
+    } else if (at("enum", self)) {
+        p_enum_decl(self);
+    } else if (at("include", self)) {
+        p_include(self);
+    } else {
+        error_at(&self.tok_pos);
+        fprintf(stderr, "Declaration expected.\n");
+        exit(1);
+    }
+}
+
+func p_file(self: *Parser) {
+    while (self.tok != Tok_Eof) {
+        p_decl(self);
+    }
+}

@@ -1,0 +1,211 @@
+include "libc.cogs";
+
+//= misc.cog
+
+struct Pos {
+    file: *Char,
+    line: Int,
+    col: Int,
+}
+
+func error_at(pos: *Pos);
+func str_eq(a: *Char, b: *Char): Bool;
+func align_up(size: Int , align: Int): Int;
+func assert(cond: Bool, because: *Char);
+func ilog2(n: Int): Int;
+func int_min(a: Int, b: Int): Int;
+func sb_push(buf_p: *(*Char), c: Char): Void;
+func get_directory(path: *Char): *Char;
+func is_space(c: Char): Bool;
+func is_print(c: Char): Bool;
+func is_digit(c: Char): Bool;
+func is_alpha(c: Char): Bool;
+
+//= type.cog
+
+enum {
+    Type_Void,
+    Type_Bool,
+    Type_Int,
+    Type_Ptr,
+    Type_Arr,
+    Type_Struct,
+}
+
+struct Type {
+    kind: Int,
+    // Int
+    size: Int,
+    // Ptr, Array
+    base: *Type,
+    // Array
+    len: Int,
+    name: *Char,
+    field_names: *(*Char),
+    field_types: *(*Type),
+    field_offsets: *Int,
+    field_count: Int,
+    unpadded_size: Int,
+}
+
+func mk_type(kind: Int): *Type;
+func mk_void_type(): *Type;
+func mk_bool_type(): *Type;
+func mk_int_type(size: Int): *Type;
+func mk_ptr_type(base: *Type): *Type;
+func mk_array_type(base: *Type, len: Int): *Type;
+func mk_struct_type(name: *Char): *Type;
+func type_align(type: *Type): Int;
+func type_size(type: *Type): Int;
+func type_eq(t1: *Type, t2: *Type): Bool;
+func is_scalar(type: *Type): Bool;
+func type_le(t1: *Type, t2: *Type): Bool;
+func find_field(type: *Type, name: *Char): Int;
+func add_field(type: *Type, field_name: *Char, field_type: *Type, pos: *Pos);
+func print_type(file: *File, type: *Type);
+
+//= sym.cog
+
+const MAX_PARAMS = 8;
+
+enum {
+    Sym_Type,
+    Sym_Func,
+    Sym_Global,
+    Sym_Local,
+    Sym_Const,
+}
+
+struct Expr;
+
+struct Sym {
+    kind: Int,
+    name: *Char,
+    // Type, Function, Global, Local
+    type: *Type,
+    // Local variable
+    offset: Int,
+    // Function, Global, Type
+    is_defined: Bool,
+    // Global
+    value: Int,
+    // Function
+    params: [*Sym; MAX_PARAMS + 1],
+    param_count: Int,
+    is_variadic: Bool,
+    locals_size: Int,
+    body: *Expr,
+}
+
+struct Env {
+    parent: *Env,
+    syms: *(*Sym),
+    sym_count: Int,
+    current_func: *Sym,
+    current_loop: Int,
+}
+
+func mk_sym(kind: Int, name: *Char): *Sym;
+func enter_scope(env: *(*Env));
+func leave_scope(env: *(*Env));
+func find_sym_scoped(env: *Env, name: *Char): *Sym;
+func find_sym(env: *Env, name: *Char): *Sym;
+func func_eq(a: *Sym, b: *Sym): Bool;
+func decl_compat(existing: *Sym, new: *Sym): Bool;
+func sym_merge(existing: *Sym, new: *Sym);
+func add_sym(env: *Env, sym: *Sym, pos: *Pos);
+func add_local(env: *Env, name: *Char, type: *Type, pos: *Pos): *Sym;
+func add_global(env: *Env, is_defined: Bool, name: *Char, type: *Type, pos: *Pos);
+func add_const(env: *Env, name: *Char, value: Int, pos: *Pos);
+func declare_struct(env: *Env, name: *Char, pos: *Pos);
+func define_struct(env: *Env, name: *Char, fields: *Type, pos: *Pos);
+
+//= ast.cog
+
+struct Expr {
+    kind: *Char,
+    type: *Type,
+    pos: Pos,
+    // Null, Bool, Int
+    int_val: Int,
+    // Str
+    str_val: *Char,
+    // Var, Call
+    sym: *Sym,
+    // Subexpressions
+    children: *(*Expr),
+    child_count: Int,
+    // Field
+    field_index: Int,
+}
+
+func mk_expr(kind: *Char, type: *Type, pos: *Pos): *Expr;
+func expr_add_child(expr: *Expr, child: *Expr);
+func mk_expr_3(kind: *Char, e1: *Expr, e2: *Expr, e3: *Expr, type: *Type): *Expr;
+func mk_expr_2(kind: *Char, e1: *Expr, e2: *Expr, type: *Type): *Expr;
+func mk_expr_1(kind: *Char, e1: *Expr, type: *Type): *Expr;
+func mk_cast_expr(expr: *Expr, type: *Type): *Expr;
+func is_lvalue(expr: *Expr): Bool;
+func print_expr(file: *File, expr: *Expr);
+
+//= eval.cog
+
+func const_eval(e: *Expr): Int;
+
+//= elab.cog
+
+func copy_expr(expr: *Expr): *Expr;
+func try_coerce(expr: *Expr, target: *Type);
+func check_type(e: *Expr, expected: *Type);
+func check_type_int(e: *Expr);
+func check_type_bool(e: *Expr);
+func unify_types(e1: *Expr, e2: *Expr);
+
+//= lex.cog
+
+enum {
+    Tok_Eof,
+    Tok_Int,
+    Tok_Chr,
+    Tok_Str,
+    Tok_Wrd,
+    Tok_Sym,
+}
+
+struct Tok {
+    kind: Int,
+    pos: Pos,
+    lexeme: *Char,
+}
+
+struct Lexer {
+    file: *File,
+    pos: Pos,
+    chr: Char,
+}
+
+func lexer_init(self: *Lexer, file: *File, file_name: *Char);
+func next_char(self: *Lexer);
+func scan_tok(self: *Lexer, tok: *Tok);
+
+//= codegen.cog
+
+const FRAME_SIZE_MAX = 4096;
+const FRAME_TEMP_SIZE = 128;
+const FRAME_ARGS_SIZE = 64;
+const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_ARGS_SIZE - FRAME_TEMP_SIZE;
+
+func emit_program(env: *Env);
+
+//= parse.cog
+
+struct Parser {
+    lexer: *Lexer,
+    tok: Int,
+    tok_pos: Pos,
+    lexeme: *Char,
+    env: *Env,
+}
+
+func make_parser(file_path: *Char, file: *File, env: *Env): *Parser;
+func p_file(self: *Parser);

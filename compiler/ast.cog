@@ -1,0 +1,84 @@
+include "cog.cogs";
+
+func mk_expr(kind: *Char, type: *Type, pos: *Pos): *Expr {
+    var expr: *Expr = calloc(1, sizeof(Expr));
+    expr.kind = kind;
+    expr.type = type;
+    expr.pos = *pos;
+    return expr;
+}
+
+func expr_add_child(expr: *Expr, child: *Expr) {
+    expr.children = realloc(expr.children, (expr.child_count + 1) * sizeof(*Expr));
+    expr.children[expr.child_count] = child;
+    expr.child_count += 1;
+}
+
+func mk_expr_3(kind: *Char, e1: *Expr, e2: *Expr, e3: *Expr, type: *Type): *Expr {
+    var expr = mk_expr(kind, type, &e1.pos);
+    expr_add_child(expr, e1);
+    expr_add_child(expr, e2);
+    expr_add_child(expr, e3);
+    return expr;
+}
+
+func mk_expr_2(kind: *Char, e1: *Expr, e2: *Expr, type: *Type): *Expr {
+    var expr = mk_expr(kind, type, &e1.pos);
+    expr_add_child(expr, e1);
+    expr_add_child(expr, e2);
+    return expr;
+}
+
+func mk_expr_1(kind: *Char, e1: *Expr, type: *Type): *Expr {
+    var expr = mk_expr(kind, type, &e1.pos);
+    expr_add_child(expr, e1);
+    return expr;
+}
+
+func mk_cast_expr(expr: *Expr, type: *Type): *Expr {
+    var cast = mk_expr("<cast>", type, &expr.pos);
+    expr_add_child(cast, expr);
+    return cast;
+}
+
+func is_lvalue(expr: *Expr): Bool {
+    return str_eq(expr.kind, "<var>") || str_eq(expr.kind, "*_") || str_eq(expr.kind, "_._") || str_eq(expr.kind, "_[_]");
+}
+
+func print_expr(file: *File, expr: *Expr) {
+    if (!expr) {
+        fprintf(file, "<null>");
+    } else if (str_eq(expr.kind, "<int>")) {
+        fprintf(file, "%d", expr.int_val);
+    } else if (str_eq(expr.kind, "<str>")) {
+        fprintf(file, "\"%s\"", expr.str_val);
+    } else if (str_eq(expr.kind, "<var>")) {
+        fprintf(file, "%s", expr.sym.name);
+    } else if (str_eq(expr.kind, "_(_)")) {
+        fprintf(file, "(%s", expr.sym.name);
+        var i = 0;
+        while (i < expr.child_count) {
+            fprintf(file, " ");
+            print_expr(file, expr.children[i]);
+            i += 1;
+        }
+        fprintf(file, ")");
+    } else if (str_eq(expr.kind, "_._")) {
+        var lhs = expr.children[0];
+        var field_name = lhs.type.field_names[expr.field_index];
+        fprintf(file, "(.%s ", field_name);
+        print_expr(file, lhs);
+        fprintf(file, ")");
+    } else {
+        fprintf(file, "(%s ", expr.kind);
+        var i = 0;
+        while (i < expr.child_count) {
+            print_expr(file, expr.children[i]);
+            if (i < expr.child_count - 1) {
+                fprintf(file, " ");
+            }
+            i += 1;
+        }
+        fprintf(file, ")");
+    }
+}

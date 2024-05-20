@@ -1,0 +1,53 @@
+include "cog.cogs";
+
+func copy_expr(expr: *Expr): *Expr {
+    var copy = mk_expr(expr.kind, expr.type, &expr.pos);
+    *copy = *expr;
+    return copy;
+}
+
+func try_coerce(expr: *Expr, target: *Type) {
+    if (type_eq(expr.type, target))
+        return;
+    if (type_le(expr.type, target)) {
+        *expr = *mk_cast_expr(copy_expr(expr), target);
+    } else if (str_eq(expr.kind, "<int>") && target.kind == Type_Int) {
+        var size = ilog2(expr.int_val) + 1;
+        if (size < target.size) {
+            expr.type = target;
+        }
+    }
+}
+
+func check_type(e: *Expr, expected: *Type) {
+    try_coerce(e, expected);
+    if (expected.kind == Type_Ptr && expected.base.kind == Type_Void && e.type.kind == Type_Ptr)
+        return;
+    if (!type_eq(e.type, expected)) {
+        error_at(&e.pos);
+        fprintf(stderr, "Type mismatch: ");
+        print_type(stderr, e.type);
+        fprintf(stderr, " != ");
+        print_type(stderr, expected);
+        fprintf(stderr, ".\n");
+        exit(1);
+    }
+}
+
+func check_type_int(e: *Expr) {
+    if (e.type.kind != Type_Int) {
+        error_at(&e.pos);
+        fprintf(stderr, "Integer type expected.\n");
+        exit(1);
+    }
+}
+
+func check_type_bool(e: *Expr) {
+    check_type(e, mk_bool_type());
+}
+
+func unify_types(e1: *Expr, e2: *Expr) {
+    try_coerce(e2, e1.type);
+    try_coerce(e1, e2.type);
+    check_type(e2, e1.type);
+}

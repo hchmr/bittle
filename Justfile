@@ -21,5 +21,6 @@ bootstrap-next:
     make -C compiler "BUILD_DIR=../out/next/stage2" "COGC=../out/next/stage1/cogc"
     mkdir -p ./out/next/stage3
     make -C compiler "BUILD_DIR=../out/next/stage3" "COGC=../out/next/stage2/cogc"
-    diff ./out/next/stage2/cogc.s ./out/next/stage3/cogc.s
+    @test -n "$(find out/next/stage3 -name '*.s')" || (echo "No .s files found" && exit 1)
+    diff -r out/next/stage2 out/next/stage3 "--exclude=*.o" "--exclude=cogc"
     @echo "Success"
