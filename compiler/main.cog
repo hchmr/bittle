@@ -1181,6 +1181,10 @@ func emit_program() {
             emit_global(sym);
         } else if (sym.kind == Sym_Func && sym.def_kind == DefKind_Defined) {
             emit_func(sym);
+        } else if ((sym.kind == Sym_Type || sym.kind == Sym_Func || sym.kind == Sym_Global)
+            && sym.def_kind == DefKind_Declared) {
+            fprintf(stderr, "Undefined symbol '%s'.\n", sym.name);
+            exit(1);
         }
         i += 1;
     }
