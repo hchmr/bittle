@@ -204,19 +204,6 @@ func type_le(t1: *Type, t2: *Type): Bool {
     return false;
 }
 
-func add_field(type: *Type, field_name: *Char, field_type: *Type) {
-    assert(type.kind == Type_Struct, "add_field: type should be a struct.");
-    var i = type.field_count;
-    type.field_count += 1;
-    type.field_names = realloc(type.field_names, type.field_count * sizeof(*Char));
-    type.field_types = realloc(type.field_types, type.field_count * sizeof(*Type));
-    type.field_offsets = realloc(type.field_offsets, type.field_count * sizeof(Int));
-    type.field_names[i] = field_name;
-    type.field_types[i] = field_type;
-    type.field_offsets[i] = align_up(type.unpadded_size, type_align(field_type));
-    type.unpadded_size = type.field_offsets[i] + type_size(field_type);
-}
-
 func find_field(type: *Type, name: *Char): Int {
     assert(type.kind == Type_Struct, "find_field: type should be a struct.");
     var i = 0;
@@ -227,6 +214,33 @@ func find_field(type: *Type, name: *Char): Int {
         i += 1;
     }
     return -1;
+}
+
+func add_field(type: *Type, field_name: *Char, field_type: *Type, pos: *Pos) {
+    assert(type.kind == Type_Struct, "add_field: type should be a struct.");
+    
+    var existing = find_field(type, field_name);
+    if (existing != -1) {
+        error_at(pos);
+        fprintf(stderr, "Field '%s' is already defined.\n", field_name);
+        exit(1);
+    }
+
+    if (type_size(field_type) == -1) {
+        error_at(pos);
+        fprintf(stderr, "Field '%s' has incomplete type.\n", field_name);
+        exit(1);
+    }
+
+    var i = type.field_count;
+    type.field_count += 1;
+    type.field_names = realloc(type.field_names, type.field_count * sizeof(*Char));
+    type.field_types = realloc(type.field_types, type.field_count * sizeof(*Type));
+    type.field_offsets = realloc(type.field_offsets, type.field_count * sizeof(Int));
+    type.field_names[i] = field_name;
+    type.field_types[i] = field_type;
+    type.field_offsets[i] = align_up(type.unpadded_size, type_align(field_type));
+    type.unpadded_size = type.field_offsets[i] + type_size(field_type);
 }
 
 func print_type(file: *File, type: *Type) {
@@ -1664,19 +1678,29 @@ func p_const_decl() {
 
 func p_struct_decl(is_extern: Bool) {
     expect("struct");
+    var name_pos = tok_pos;
     var name = p_ident();
     var sym = mk_sym(Sym_Type, name);
     sym.type = mk_struct_type(name);
     add_sym(sym, &tok_pos);
+
     if (!is_extern) {
+        var builder = mk_struct_type(name);
         expect("{");
         while (!eat("}")) {
+            var field_pos = tok_pos;
             var field_name = p_ident();
             expect(":");
             var field_type = p_type();
             p_comma("}");
-            add_field(sym.type, field_name, field_type);
+            add_field(builder, field_name, field_type, &field_pos);
         }
+        if (builder.field_count == 0) {
+            error_at(&name_pos);
+            fprintf(stderr, "Struct must have at least one field.\n");
+            exit(1);
+        }
+        *sym.type = *builder;
     } else {
         expect(";");
     }
