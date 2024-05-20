@@ -277,6 +277,12 @@ enum {
     Sym_Const,
 }
 
+enum {
+    DefKind_Declared,
+    DefKind_Defined,
+    DefKind_Extern,
+}
+
 struct Sym {
     kind: Int,
     name: *Char,
@@ -284,8 +290,8 @@ struct Sym {
     type: *Type,
     // Local variable
     offset: Int,
-    // Function, Global
-    is_extern: Bool,
+    // Function, Global, Type
+    def_kind: Int,
     // Global
     value: Int,
     // Function
@@ -325,7 +331,20 @@ func leave_scope() {
     scope_depth -= 1;
 }
 
+func find_sym(name: *Char, depth: Int): *Sym {
+    var i = sym_count - 1;
+    while (i >= first_sym[depth]) {
+        if (str_eq(syms[i].name, name)) {
+            return syms[i];
+        }
+        i -= 1;
+    }
+    return null;
+}
+
 func func_eq(a: *Sym, b: *Sym): Bool {
+    if (!str_eq(a.name, b.name))
+        return false;
     if (a.param_count != b.param_count)
         return false;
     if (a.is_variadic != b.is_variadic)
@@ -341,27 +360,56 @@ func func_eq(a: *Sym, b: *Sym): Bool {
     return true;
 }
 
-func find_sym(name: *Char, depth: Int): *Sym {
-    var i = sym_count - 1;
-    while (i >= first_sym[depth]) {
-        if (str_eq(syms[i].name, name)) {
-            return syms[i];
-        }
-        i -= 1;
+func decl_compat(existing: *Sym, new: *Sym): Bool {
+    if (existing.kind != new.kind)
+        return false;
+    if (!str_eq(existing.name, new.name))
+        return false;
+
+    if (existing.kind == Sym_Type) {
+        if (!type_eq(existing.type, new.type))
+            return false;
+    } else if (existing.kind == Sym_Func) {
+        if (!func_eq(existing, new))
+            return false;
+    } else if (existing.kind == Sym_Global) {
+        if (!type_eq(existing.type, new.type))
+            return false;
+    } else if (existing.kind == Sym_Const || existing.kind == Sym_Local) {
+        return false;
+    } else {
+        assert(false, "decl_compat: Unreachable.");
     }
-    return null;
+
+    if (existing.def_kind == DefKind_Declared || new.def_kind == DefKind_Declared)
+        return true;
+    if (existing.def_kind == DefKind_Extern && new.def_kind == DefKind_Extern)
+        return true;
+    return false;
+}
+
+func sym_merge(existing: *Sym, new: *Sym) {
+    if (existing.def_kind == DefKind_Declared) {
+        *existing = *new;
+    }
 }
 
 func add_sym(sym: *Sym, pos: *Pos) {
     var existing = find_sym(sym.name, scope_depth);
-    if (existing && !(sym.kind == Sym_Func && existing.kind == Sym_Func && !existing.body && func_eq(sym, existing))) {
-        error_at(pos);
-        fprintf(stderr, "Symbol '%s' already defined.\n", sym.name);
-        exit(1);
+    
+    if (existing) {
+        if (decl_compat(existing, sym)) {
+            sym_merge(existing, sym);
+        } else {
+            error_at(pos);
+            fprintf(stderr, "Symbol '%s' already defined.\n", sym.name);
+            exit(1);
+        }
+    } else {
+        sym_count += 1;
+        syms = realloc(syms, sym_count * sizeof(Sym));
+        syms[sym_count - 1] = sym;
     }
-    sym_count += 1;
-    syms = realloc(syms, sym_count * sizeof(Sym));
-    syms[sym_count - 1] = sym;
 }
 
 func add_local(name: *Char, type: *Type, pos: *Pos): *Sym {
@@ -382,7 +430,7 @@ func add_local(name: *Char, type: *Type, pos: *Pos): *Sym {
 
 func add_global(is_extern: Bool, name: *Char, type: *Type, pos: *Pos) {
     var sym = mk_sym(Sym_Global, name);
-    sym.is_extern = is_extern;
+    sym.def_kind = is_extern ? DefKind_Extern : DefKind_Defined;
     sym.type = type;
     add_sym(sym, pos);
 }
@@ -392,6 +440,22 @@ func add_const(name: *Char, value: Int, pos: *Pos) {
     sym.type = mk_int_type(4);
     sym.value = value;
     add_sym(sym, pos);
+}
+
+func declare_struct(is_extern: Bool, name: *Char, pos: *Pos) {
+    var existing = find_sym(name, 0);
+    var sym = mk_sym(Sym_Type, name);
+    sym.def_kind = is_extern ? DefKind_Extern : DefKind_Declared;
+    sym.type = existing ? existing.type : mk_struct_type(name);
+    add_sym(sym, pos);
+}
+
+func define_struct(name: *Char, fields: *Type, pos: *Pos) {
+    var sym = mk_sym(Sym_Type, name);
+    sym.def_kind = DefKind_Defined;
+    sym.type = find_sym(name, 0).type;
+    add_sym(sym, pos);
+    *sym.type = *fields;
 }
 
 //= Abstract Syntax Tree
@@ -865,12 +929,16 @@ func emit_expr_lvalue(e: *Expr, t0: Int) {
         printf("  add x%d, sp, #%d // &%s\n", t0, frame_size - e.sym.offset, name);
     } else if (str_eq(e.kind, "<var>") && e.sym.kind == Sym_Global) {
         var name = e.sym.name;
-        if (e.sym.is_extern) {
+        if (e.sym.def_kind == DefKind_Extern) {
             printf("  adrp x%d, :got:%s\n", t0, name);
             printf("  ldr x%d, [x%d, :got_lo12:%s] // &%s\n", t0, t0, name, name);
-        } else {
+        } else if (e.sym.def_kind == DefKind_Defined) {
             printf("  adrp x%d, %s\n", t0, name);
             printf("  add x%d, x%d, :lo12:%s // &%s\n", t0, t0, name, name);
+        } else {
+            error_at(&e.pos);
+            fprintf(stderr, "Undefined symbol '%s'.\n", name);
+            exit(1);
         }
     } else if (str_eq(e.kind, "_._")) {
         var lhs_type = e.children[0].type;
@@ -1109,9 +1177,9 @@ func emit_program() {
     var i = 0;
     while (i < sym_count) {
         var sym = syms[i];
-        if (sym.kind == Sym_Global && !sym.is_extern) {
+        if (sym.kind == Sym_Global && sym.def_kind == DefKind_Defined) {
             emit_global(sym);
-        } else if (sym.kind == Sym_Func && sym.body) {
+        } else if (sym.kind == Sym_Func && sym.def_kind == DefKind_Defined) {
             emit_func(sym);
         }
         i += 1;
@@ -1615,7 +1683,7 @@ func p_func_decl(is_extern: Bool) {
     var name = p_ident();
     var sym = mk_sym(Sym_Func, name);
     sym.type = mk_void_type();
-    sym.is_extern = is_extern;
+    sym.def_kind = DefKind_Declared;
     current_func = sym;
 
     enter_scope();
@@ -1651,8 +1719,10 @@ func p_func_decl(is_extern: Bool) {
 
     if (!is_extern && at("{")) {
         sym.body = p_stmt();
+        sym.def_kind = DefKind_Defined;
     } else {
         expect(";");
+        sym.def_kind = is_extern ? DefKind_Extern : DefKind_Declared;
     }
     leave_scope();
     add_sym(sym, &name_pos);
@@ -1680,27 +1750,25 @@ func p_struct_decl(is_extern: Bool) {
     expect("struct");
     var name_pos = tok_pos;
     var name = p_ident();
-    var sym = mk_sym(Sym_Type, name);
-    sym.type = mk_struct_type(name);
-    add_sym(sym, &tok_pos);
 
-    if (!is_extern) {
-        var builder = mk_struct_type(name);
-        expect("{");
+    declare_struct(is_extern, name, &name_pos);
+
+    if (!is_extern && eat("{")) {
+        var fields = mk_struct_type(name);
         while (!eat("}")) {
             var field_pos = tok_pos;
             var field_name = p_ident();
             expect(":");
             var field_type = p_type();
             p_comma("}");
-            add_field(builder, field_name, field_type, &field_pos);
+            add_field(fields, field_name, field_type, &field_pos);
         }
-        if (builder.field_count == 0) {
+        if (fields.field_count == 0) {
             error_at(&name_pos);
             fprintf(stderr, "Struct must have at least one field.\n");
             exit(1);
         }
-        *sym.type = *builder;
+        define_struct(name, fields, &name_pos);
     } else {
         expect(";");
     }

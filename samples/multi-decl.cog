@@ -1,0 +1,22 @@
+struct Pair;
+struct Pair { x: Int, y: Int }
+struct Pair;
+
+struct File;
+extern struct File;
+extern struct File;
+struct File;
+
+func foo(x: Int);
+func foo(x: Int) {}
+func foo(x: Int);
+
+func bar(x: Int);
+extern func bar(x: Int);
+extern func bar(x: Int);
+func bar(x: Int);
+
+extern var x: Int;
+extern var x: Int;
+
+func main() {}
