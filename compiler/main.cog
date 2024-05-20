@@ -292,6 +292,8 @@ enum {
     Sym_Const,
 }
 
+struct Expr;
+
 struct Sym {
     kind: Int,
     name: *Char,
@@ -308,7 +310,7 @@ struct Sym {
     param_count: Int,
     is_variadic: Bool,
     locals_size: Int,
-    body: *Void, // FIXME: can't forward declare Expr
+    body: *Expr,
 }
 
 struct Env {
