@@ -266,7 +266,6 @@ func print_type(file: *File, type: *Type) {
 
 //= Symbols
 
-const MAX_SCOPES = 16;
 const MAX_PARAMS = 8;
 
 enum {
@@ -302,12 +301,13 @@ struct Sym {
     body: *Void, // FIXME: can't forward declare Expr
 }
 
-var syms: *(*Sym);
-var sym_count: Int;
-var first_sym: [Int; MAX_SCOPES];
-var scope_depth: Int;
-var current_func: *Sym;
-var current_loop: Int;
+struct Env {
+    parent: *Env,
+    syms: *(*Sym),
+    sym_count: Int,
+    current_func: *Sym,
+    current_loop: Int,
+}
 
 func mk_sym(kind: Int, name: *Char): *Sym {
     var sym: *Sym = calloc(1, sizeof(Sym));
@@ -316,30 +316,36 @@ func mk_sym(kind: Int, name: *Char): *Sym {
     return sym;
 }
 
-func enter_scope() {
-    if (scope_depth == MAX_SCOPES) {
-        fprintf(stderr, "Maximum scope depth exceeded.\n");
-        exit(1);
-    }
-    scope_depth += 1;
-    first_sym[scope_depth] = sym_count;
+func enter_scope(env: *(*Env)) {
+    var new_env = calloc(1, sizeof(Env)) as *Env;
+    new_env.parent = *env;
+    new_env.current_func = new_env.parent.current_func;
+    new_env.current_loop = new_env.parent.current_loop;
+    *env = new_env;
 }
 
-func leave_scope() {
-    assert(scope_depth > 0, "leave_scope: there should be a scope to pop.");
-    sym_count = first_sym[scope_depth];
-    scope_depth -= 1;
+func leave_scope(env: *(*Env)) {
+    var old_env = *env;
+    *env = old_env.parent;
 }
 
-func find_sym(name: *Char, depth: Int): *Sym {
-    var i = sym_count - 1;
-    while (i >= first_sym[depth]) {
-        if (str_eq(syms[i].name, name)) {
-            return syms[i];
-        }
+func find_sym_scoped(env: *Env, name: *Char): *Sym {
+    var i = env.sym_count;
+    while (i > 0) {
         i -= 1;
+        if (str_eq(env.syms[i].name, name))
+            return env.syms[i];
     }
     return null;
+}
+
+func find_sym(env: *Env, name: *Char): *Sym {
+    while (env) {
+        var sym = find_sym_scoped(env, name);
+        if (sym)
+            return sym;
+        env = env.parent;
+    }
 }
 
 func func_eq(a: *Sym, b: *Sym): Bool {
@@ -394,8 +400,8 @@ func sym_merge(existing: *Sym, new: *Sym) {
     }
 }
 
-func add_sym(sym: *Sym, pos: *Pos) {
-    var existing = find_sym(sym.name, scope_depth);
+func add_sym(env: *Env, sym: *Sym, pos: *Pos) {
+    var existing = find_sym_scoped(env, sym.name);
     
     if (existing) {
         if (decl_compat(existing, sym)) {
@@ -406,15 +412,16 @@ func add_sym(sym: *Sym, pos: *Pos) {
             exit(1);
         }
     } else {
-        sym_count += 1;
-        syms = realloc(syms, sym_count * sizeof(Sym));
-        syms[sym_count - 1] = sym;
+        env.sym_count += 1;
+        env.syms = realloc(env.syms, env.sym_count * sizeof(Sym));
+        env.syms[env.sym_count - 1] = sym;
     }
 }
 
-func add_local(name: *Char, type: *Type, pos: *Pos): *Sym {
-    current_func.locals_size = align_up(current_func.locals_size + type_size(type), type_align(type));
-    if (current_func.locals_size > FRAME_LOCALS_SIZE_MAX) {
+func add_local(env: *Env, name: *Char, type: *Type, pos: *Pos): *Sym {
+    var func_ = env.current_func;
+    func_.locals_size = align_up(func_.locals_size + type_size(type), type_align(type));
+    if (func_.locals_size > FRAME_LOCALS_SIZE_MAX) {
         error_at(pos);
         fprintf(stderr, "Maximum local size exceeded.\n");
         exit(1);
@@ -422,41 +429,42 @@ func add_local(name: *Char, type: *Type, pos: *Pos): *Sym {
 
     var sym = mk_sym(Sym_Local, name);
     sym.type = type;
-    sym.offset = current_func.locals_size;
+    sym.offset = func_.locals_size;
 
-    add_sym(sym, pos);
+    add_sym(env, sym, pos);
     return sym;
 }
 
-func add_global(is_extern: Bool, name: *Char, type: *Type, pos: *Pos) {
+func add_global(env: *Env, is_extern: Bool, name: *Char, type: *Type, pos: *Pos) {
     var sym = mk_sym(Sym_Global, name);
     sym.def_kind = is_extern ? DefKind_Extern : DefKind_Defined;
     sym.type = type;
-    add_sym(sym, pos);
+    add_sym(env, sym, pos);
 }
 
-func add_const(name: *Char, value: Int, pos: *Pos) {
+func add_const(env: *Env, name: *Char, value: Int, pos: *Pos) {
     var sym = mk_sym(Sym_Const, name);
     sym.type = mk_int_type(4);
     sym.value = value;
-    add_sym(sym, pos);
+    add_sym(env, sym, pos);
 }
 
-func declare_struct(is_extern: Bool, name: *Char, pos: *Pos) {
-    var existing = find_sym(name, 0);
+func declare_struct(env: *Env, is_extern: Bool, name: *Char, pos: *Pos) {
+    var existing = find_sym(env, name);
     var sym = mk_sym(Sym_Type, name);
     sym.def_kind = is_extern ? DefKind_Extern : DefKind_Declared;
     sym.type = existing ? existing.type : mk_struct_type(name);
-    add_sym(sym, pos);
+    add_sym(env, sym, pos);
 }
 
-func define_struct(name: *Char, fields: *Type, pos: *Pos) {
+func define_struct(env: *Env, name: *Char, fields: *Type, pos: *Pos) {
     var sym = mk_sym(Sym_Type, name);
     sym.def_kind = DefKind_Defined;
-    sym.type = find_sym(name, 0).type;
-    add_sym(sym, pos);
+    sym.type = find_sym(env, name).type;
+    add_sym(env, sym, pos);
     *sym.type = *fields;
 }
+
 
 //= Abstract Syntax Tree
 
@@ -1177,11 +1185,11 @@ func emit_global(ctx: *CodegenCtx, sym: *Sym) {
     printf("  .zero %d\n", type_size(sym.type));
 }
 
-func emit_program() {
+func emit_program(env: *Env) {
     var ctx = calloc(1, sizeof(CodegenCtx)) as *CodegenCtx;
     var i = 0;
-    while (i < sym_count) {
-        var sym = syms[i];
+    while (i < env.sym_count) {
+        var sym = env.syms[i];
         if (sym.kind == Sym_Global && sym.def_kind == DefKind_Defined) {
             emit_global(ctx, sym);
         } else if (sym.kind == Sym_Func && sym.def_kind == DefKind_Defined) {
@@ -1197,11 +1205,11 @@ func emit_program() {
 
 //= Grammar
 
-func p_const_expr(): Int;
+func p_const_expr(env: *Env): Int;
 
-func p_type(): *Type {
+func p_type(env: *Env): *Type {
     if (eat("(")) {
-        var type = p_type();
+        var type = p_type(env);
         expect(")");
         return type;
     } else if (eat("Void")) {
@@ -1217,15 +1225,15 @@ func p_type(): *Type {
     } else if (eat("Int") || eat("Int64")) {
         return mk_int_type(8);
     } else if (eat("*")) {
-        return mk_ptr_type(p_type());
+        return mk_ptr_type(p_type(env));
     } else if (eat("[")) {
-        var type = p_type();
+        var type = p_type(env);
         expect(";");
-        var len = p_const_expr();
+        var len = p_const_expr(env);
         expect("]");
         return mk_array_type(type, len);
     } else if (tok == Tok_Wrd) {
-        var sym = find_sym(lexeme, 0);
+        var sym = find_sym(env, lexeme);
         if (!sym) {
             error_at(&tok_pos);
             fprintf(stderr, "Undeclared symbol '%s'.\n", lexeme);
@@ -1327,12 +1335,12 @@ func build_binary_expr(lhs: *Expr, op: *Char, rhs: *Expr): *Expr {
     }
 }
 
-func p_expr(max_prec: Int): *Expr;
+func p_expr(env: *Env, max_prec: Int): *Expr;
 
-func p_var_or_call_expr(): *Expr {
+func p_var_or_call_expr(env: *Env, ): *Expr {
     var name_pos = tok_pos;
     var name = p_ident();
-    var sym = find_sym(name, 0);
+    var sym = find_sym(env, name);
     if (!sym) {
         error_at(&name_pos);
         fprintf(stderr, "Undeclared symbol '%s'.\n", name);
@@ -1347,7 +1355,7 @@ func p_var_or_call_expr(): *Expr {
         var expr = mk_expr("_(_)", sym.type, &name_pos);
         expr.sym = sym;
         while (!eat(")")) {
-            var arg = p_expr(0);
+            var arg = p_expr(env, 0);
             p_comma(")");
             if (expr.child_count == MAX_PARAMS) {
                 error_at(&arg.pos);
@@ -1397,17 +1405,17 @@ func p_var_or_call_expr(): *Expr {
     }
 }
 
-func p_ternary_expr(cond: *Expr): *Expr {
-    var ift = p_expr(Prec_Cond);
+func p_ternary_expr(env: *Env, cond: *Expr): *Expr {
+    var ift = p_expr(env, Prec_Cond);
     expect(":");
-    var iff = p_expr(Prec_Cond);
+    var iff = p_expr(env, Prec_Cond);
     check_type_bool(cond);
     unify_types(ift, iff);
     return mk_expr_3("_?_:_", cond, ift, iff, ift.type);
 }
 
-func p_cast_expr(lhs: *Expr): *Expr {
-    var type = p_type();
+func p_cast_expr(env: *Env, lhs: *Expr): *Expr {
+    var type = p_type(env);
     if (!(is_scalar(type) && is_scalar(lhs.type))) {
         error_at(&tok_pos);
         fprintf(stderr, "Invalid cast type.\n");
@@ -1416,8 +1424,8 @@ func p_cast_expr(lhs: *Expr): *Expr {
     return mk_cast_expr(lhs, type);
 }
 
-func p_index_expr(lhs: *Expr): *Expr {
-    var rhs = p_expr(0);
+func p_index_expr(env: *Env, lhs: *Expr): *Expr {
+    var rhs = p_expr(env, 0);
     expect("]");
     if (lhs.type.kind != Type_Arr && lhs.type.kind != Type_Ptr) {
         error_at(&lhs.pos);
@@ -1428,7 +1436,7 @@ func p_index_expr(lhs: *Expr): *Expr {
     return mk_expr_2("_[_]", lhs, rhs, lhs.type.base);
 }
 
-func p_field_expr(lhs: *Expr): *Expr {
+func p_field_expr(env: *Env, lhs: *Expr): *Expr {
     var field_name = p_ident();
     if (lhs.type.kind == Type_Ptr && lhs.type.base.kind == Type_Struct) {
         lhs = mk_expr_1("*_", lhs, lhs.type.base);
@@ -1450,10 +1458,10 @@ func p_field_expr(lhs: *Expr): *Expr {
     return lhs;
 }
 
-func p_expr(max_prec: Int): *Expr {
+func p_expr(env: *Env, max_prec: Int): *Expr {
     var lhs: *Expr;
     if (eat("(")) {
-        lhs = p_expr(0);
+        lhs = p_expr(env, 0);
         expect(")");
     } else if (eat("null")) {
         lhs = mk_expr("<int>", mk_ptr_type(mk_void_type()), &tok_pos);
@@ -1471,22 +1479,22 @@ func p_expr(max_prec: Int): *Expr {
         lhs.str_val = p_lexeme();
     } else if (eat("sizeof")) {
         expect("(");
-        var type = p_type();
+        var type = p_type(env);
         expect(")");
         lhs = mk_expr("<int>", mk_int_type(8), &tok_pos);
         lhs.int_val = type_size(type);
     } else if (tok == Tok_Wrd) {
-        lhs = p_var_or_call_expr();
+        lhs = p_var_or_call_expr(env);
     } else if (max_prec <= Prec_Unary && eat("*")) {
-        lhs = build_unary_expr("*_", p_expr(Prec_Unary));
+        lhs = build_unary_expr("*_", p_expr(env, Prec_Unary));
     } else if (max_prec <= Prec_Unary && eat("&")) {
-        lhs = build_unary_expr("&_", p_expr(Prec_Unary));
+        lhs = build_unary_expr("&_", p_expr(env, Prec_Unary));
     } else if (max_prec <= Prec_Unary && (eat("!"))) {
-        lhs = build_unary_expr("!_", p_expr(Prec_Unary));
+        lhs = build_unary_expr("!_", p_expr(env, Prec_Unary));
     } else if (max_prec <= Prec_Unary && eat("~")) {
-        lhs = build_unary_expr("~_", p_expr(Prec_Unary));
+        lhs = build_unary_expr("~_", p_expr(env, Prec_Unary));
     } else if (max_prec <= Prec_Unary && eat("-")) {
-        lhs = build_unary_expr("-_", p_expr(Prec_Unary));
+        lhs = build_unary_expr("-_", p_expr(env, Prec_Unary));
     } else {
         error_at(&tok_pos);
         fprintf(stderr, "Expression expected.\n");
@@ -1495,83 +1503,83 @@ func p_expr(max_prec: Int): *Expr {
 
     while (true) {
         if (max_prec <= Prec_Assign && eat("=")) {
-            lhs = build_binary_expr(lhs, "_=_", p_expr(Prec_Assign + 1));
+            lhs = build_binary_expr(lhs, "_=_", p_expr(env, Prec_Assign + 1));
         } else if (max_prec <= Prec_Assign && eat("+=")) {
-            lhs = build_binary_expr(lhs, "_+=_", p_expr(Prec_Assign + 1));
+            lhs = build_binary_expr(lhs, "_+=_", p_expr(env, Prec_Assign + 1));
         } else if (max_prec <= Prec_Assign && eat("-=")) {
-            lhs = build_binary_expr(lhs, "_-=_", p_expr(Prec_Assign + 1));
+            lhs = build_binary_expr(lhs, "_-=_", p_expr(env, Prec_Assign + 1));
         } else if (max_prec <= Prec_Cond && eat("?")) {
-            lhs = p_ternary_expr(lhs);
+            lhs = p_ternary_expr(env, lhs);
         } else if (max_prec <= Prec_CondOr && eat("||")) {
-            lhs = build_binary_expr(lhs, "_||_", p_expr(Prec_CondOr + 1));
+            lhs = build_binary_expr(lhs, "_||_", p_expr(env, Prec_CondOr + 1));
         } else if (max_prec <= Prec_CondAnd && eat("&&")) {
-            lhs = build_binary_expr(lhs, "_&&_", p_expr(Prec_CondAnd + 1));
+            lhs = build_binary_expr(lhs, "_&&_", p_expr(env, Prec_CondAnd + 1));
         } else if (max_prec <= Prec_BitOr && eat("|")) {
-            lhs = build_binary_expr(lhs, "_|_", p_expr(Prec_BitOr + 1));
+            lhs = build_binary_expr(lhs, "_|_", p_expr(env, Prec_BitOr + 1));
         } else if (max_prec <= Prec_BitXor && eat("^")) {
-            lhs = build_binary_expr(lhs, "_^_", p_expr(Prec_BitXor + 1));
+            lhs = build_binary_expr(lhs, "_^_", p_expr(env, Prec_BitXor + 1));
         } else if (max_prec <= Prec_BitAnd && eat("&")) {
-            lhs = build_binary_expr(lhs, "_&_", p_expr(Prec_BitAnd + 1));
+            lhs = build_binary_expr(lhs, "_&_", p_expr(env, Prec_BitAnd + 1));
         } else if (max_prec <= Prec_Cmp && eat("==")) {
-            lhs = build_binary_expr(lhs, "_==_", p_expr(Prec_Cmp + 1));
+            lhs = build_binary_expr(lhs, "_==_", p_expr(env, Prec_Cmp + 1));
         } else if (max_prec <= Prec_Cmp && eat("!=")) {
-            lhs = build_binary_expr(lhs, "_!=_", p_expr(Prec_Cmp + 1));
+            lhs = build_binary_expr(lhs, "_!=_", p_expr(env, Prec_Cmp + 1));
         } else if (max_prec <= Prec_Cmp && eat("<")) {
-            lhs = build_binary_expr(lhs, "_<_", p_expr(Prec_Cmp + 1));
+            lhs = build_binary_expr(lhs, "_<_", p_expr(env, Prec_Cmp + 1));
         } else if (max_prec <= Prec_Cmp && eat("<=")) {
-            lhs = build_binary_expr(lhs, "_<=_", p_expr(Prec_Cmp + 1));
+            lhs = build_binary_expr(lhs, "_<=_", p_expr(env, Prec_Cmp + 1));
         } else if (max_prec <= Prec_Cmp && eat(">")) {
-            lhs = build_binary_expr(lhs, "_>_", p_expr(Prec_Cmp + 1));
+            lhs = build_binary_expr(lhs, "_>_", p_expr(env, Prec_Cmp + 1));
         } else if (max_prec <= Prec_Cmp && eat(">=")) {
-            lhs = build_binary_expr(lhs, "_>=_", p_expr(Prec_Cmp + 1));
+            lhs = build_binary_expr(lhs, "_>=_", p_expr(env, Prec_Cmp + 1));
         } else if (max_prec <= Prec_Shift && eat("<<")) {
-            lhs = build_binary_expr(lhs, "_<<_", p_expr(Prec_Shift + 1));
+            lhs = build_binary_expr(lhs, "_<<_", p_expr(env, Prec_Shift + 1));
         } else if (max_prec <= Prec_Shift && eat(">>")) {
-            lhs = build_binary_expr(lhs, "_>>_", p_expr(Prec_Shift + 1));
+            lhs = build_binary_expr(lhs, "_>>_", p_expr(env, Prec_Shift + 1));
         } else if (max_prec <= Prec_Add && eat("+")) {
-            lhs = build_binary_expr(lhs, "_+_", p_expr(Prec_Add + 1));
+            lhs = build_binary_expr(lhs, "_+_", p_expr(env, Prec_Add + 1));
         } else if (max_prec <= Prec_Add && eat("-")) {
-            lhs = build_binary_expr(lhs, "_-_", p_expr(Prec_Add + 1));
+            lhs = build_binary_expr(lhs, "_-_", p_expr(env, Prec_Add + 1));
         } else if (max_prec <= Prec_Mul && eat("*")) {
-            lhs = build_binary_expr(lhs, "_*_", p_expr(Prec_Mul + 1));
+            lhs = build_binary_expr(lhs, "_*_", p_expr(env, Prec_Mul + 1));
         } else if (max_prec <= Prec_Mul && eat("/")) {
-            lhs = build_binary_expr(lhs, "_/_", p_expr(Prec_Mul + 1));
+            lhs = build_binary_expr(lhs, "_/_", p_expr(env, Prec_Mul + 1));
         } else if (max_prec <= Prec_Mul && eat("%")) {
-            lhs = build_binary_expr(lhs, "_%_", p_expr(Prec_Mul + 1));
+            lhs = build_binary_expr(lhs, "_%_", p_expr(env, Prec_Mul + 1));
         } else if (max_prec <= Prec_Cast && eat("as")) {
-            lhs = p_cast_expr(lhs);
+            lhs = p_cast_expr(env, lhs);
         } else if (max_prec <= Prec_Postfix && eat("[")) {
-            lhs = p_index_expr(lhs);
+            lhs = p_index_expr(env, lhs);
         } else if (max_prec <= Prec_Postfix && eat(".")) {
-            lhs = p_field_expr(lhs);
+            lhs = p_field_expr(env, lhs);
         } else {
             return lhs;
         }
     }
 }
 
-func p_const_expr(): Int {
-    var expr = p_expr(0);
+func p_const_expr(env: *Env): Int {
+    var expr = p_expr(env, 0);
     check_type_int(expr);
     return const_eval(expr);
 }
 
-func p_stmt(): *Expr;
+func p_stmt(env: *Env): *Expr;
 
-func p_block_stmt(): *Expr {
+func p_block_stmt(env: *Env): *Expr {
     var start_pos = tok_pos;
     expect("{");
     var block = mk_expr("<block>", mk_void_type(), &start_pos);
-    enter_scope();
+    enter_scope(&env);
     while (!eat("}")) {
-        var stmt = p_stmt();
+        var stmt = p_stmt(env);
         expr_add_child(block, stmt);
     }
-    leave_scope();
+    leave_scope(&env);
     return block;
 }
 
-func p_var_stmt(): *Expr {
+func p_var_stmt(env: *Env): *Expr {
     var start_pos = tok_pos;
     expect("var");
     
@@ -1579,11 +1587,11 @@ func p_var_stmt(): *Expr {
     var name = p_ident();
     var type: *Type = null;
     if (eat(":")) {
-        type = p_type();
+        type = p_type(env);
     }
     var init: *Expr = null;
     if (eat("=")) {
-        init = p_expr(0);
+        init = p_expr(env, 0);
     }
     expect(";");
 
@@ -1606,7 +1614,7 @@ func p_var_stmt(): *Expr {
         exit(1);
     }
 
-    var sym = add_local(name, type, &name_pos);
+    var sym = add_local(env, name, type, &name_pos);
 
     if (init != null) {
         var dest = mk_expr("<var>", type, &name_pos);
@@ -1617,38 +1625,38 @@ func p_var_stmt(): *Expr {
     }
 }
 
-func p_if_stmt(): *Expr {
+func p_if_stmt(env: *Env): *Expr {
     expect("if");
     expect("(");
-    var cond = p_expr(0);
+    var cond = p_expr(env, 0);
     check_type_bool(cond);
     expect(")");
-    var ift = p_stmt();
+    var ift = p_stmt(env);
     var iff: *Expr = null;
     if (eat("else")) {
-        iff = p_stmt();
+        iff = p_stmt(env);
     }
     return mk_expr_3("_?_:_", cond, ift, iff, mk_void_type());
 }
 
-func p_while_stmt(): *Expr {
+func p_while_stmt(env: *Env): *Expr {
     expect("while");
-    var outer_loop = current_loop;
-    current_loop = 1;
+    var outer_loop = env.current_loop;
+    env.current_loop = 1;
     expect("(");
-    var cond = p_expr(0);
+    var cond = p_expr(env, 0);
     check_type_bool(cond);
     expect(")");
-    var body = p_stmt();
-    current_loop = outer_loop;
+    var body = p_stmt(env);
+    env.current_loop = outer_loop;
     return mk_expr_2("<while>", cond, body, mk_void_type());
 }
 
-func p_break_stmt(): *Expr {
+func p_break_stmt(env: *Env): *Expr {
     var start_pos = tok_pos;
     expect("break");
     expect(";");
-    if (current_loop == 0) {
+    if (env.current_loop == 0) {
         error_at(&tok_pos);
         fprintf(stderr, "Break statement outside of loop.\n");
         exit(1);
@@ -1656,11 +1664,11 @@ func p_break_stmt(): *Expr {
     return mk_expr("<break>", mk_void_type(), &start_pos);
 }
 
-func p_continue_stmt(): *Expr {
+func p_continue_stmt(env: *Env): *Expr {
     var start_pos = tok_pos;
     expect("continue");
     expect(";");
-    if (current_loop == 0) {
+    if (env.current_loop == 0) {
         error_at(&tok_pos);
         fprintf(stderr, "Continue statement outside of loop.\n");
         exit(1);
@@ -1668,18 +1676,18 @@ func p_continue_stmt(): *Expr {
     return mk_expr("<continue>", mk_void_type(), &start_pos);
 }
 
-func p_return_stmt(): *Expr {
+func p_return_stmt(env: *Env): *Expr {
     var start_pos = tok_pos;
     expect("return");
     var expr: *Expr = null;
     if (!at(";")) {
-        expr = p_expr(0);
+        expr = p_expr(env, 0);
     }
     expect(";");
 
     if (expr) {
-        check_type(expr, current_func.type);
-    } else if (current_func.type.kind != Type_Void) {
+        check_type(expr, env.current_func.type);
+    } else if (env.current_func.type.kind != Type_Void) {
         error_at(&tok_pos);
         fprintf(stderr, "Return value expected.\n");
         exit(1);
@@ -1690,45 +1698,45 @@ func p_return_stmt(): *Expr {
     return return_stmt;
 }
 
-func p_stmt(): *Expr {
+func p_stmt(env: *Env): *Expr {
     if (at("{")) {
-        return p_block_stmt();
+        return p_block_stmt(env);
     } else if (at("var")) {
-        return p_var_stmt();
+        return p_var_stmt(env);
     } else if (at("if")) {
-        return p_if_stmt();
+        return p_if_stmt(env);
     } else if (at("while")) {
-        return p_while_stmt();
+        return p_while_stmt(env);
     } else if (at("break")) {
-        return p_break_stmt();
+        return p_break_stmt(env);
     } else if (at("continue")) {
-        return p_continue_stmt();
+        return p_continue_stmt(env);
     } else if (at("return")) {
-        return p_return_stmt();
+        return p_return_stmt(env);
     } else {
-        var expr = p_expr(0);
+        var expr = p_expr(env, 0);
         expect(";");
         return expr;
     }
 }
 
-func p_func_decl(is_extern: Bool) {
+func p_func_decl(env: *Env, is_extern: Bool) {
     expect("func");
     var name_pos = tok_pos;
     var name = p_ident();
     var sym = mk_sym(Sym_Func, name);
     sym.type = mk_void_type();
     sym.def_kind = DefKind_Declared;
-    current_func = sym;
+    env.current_func = sym;
 
-    enter_scope();
-    add_sym(sym, &name_pos);
+    enter_scope(&env);
+    add_sym(env, sym, &name_pos);
     expect("(");
     while (!at(")") && !at("...")) {
         var param_pos = tok_pos;
         var param_name = p_ident();
         expect(":");
-        var param_type = p_type();
+        var param_type = p_type(env);
         p_comma(")");
 
         if (sym.param_count == MAX_PARAMS) {
@@ -1741,7 +1749,7 @@ func p_func_decl(is_extern: Bool) {
             fprintf(stderr, "Parameter must be of scalar type.\n");
             exit(1);
         }
-        sym.params[sym.param_count] = add_local(param_name, param_type, &param_pos);
+        sym.params[sym.param_count] = add_local(env, param_name, param_type, &param_pos);
         sym.param_count += 1;
     }
     if (eat("...")) {
@@ -1749,44 +1757,44 @@ func p_func_decl(is_extern: Bool) {
     }
     expect(")");
     if (eat(":")) {
-        sym.type = p_type();
+        sym.type = p_type(env);
     }
 
     if (!is_extern && at("{")) {
-        sym.body = p_stmt();
+        sym.body = p_stmt(env);
         sym.def_kind = DefKind_Defined;
     } else {
         expect(";");
         sym.def_kind = is_extern ? DefKind_Extern : DefKind_Declared;
     }
-    leave_scope();
-    add_sym(sym, &name_pos);
+    leave_scope(&env);
+    add_sym(env, sym, &name_pos);
 }
 
-func p_var_decl(is_extern: Bool) {
+func p_var_decl(env: *Env, is_extern: Bool) {
     expect("var");
     var name = p_ident();
     expect(":");
-    var type = p_type();
+    var type = p_type(env);
     expect(";");
-    add_global(is_extern, name, type, &tok_pos);
+    add_global(env, is_extern, name, type, &tok_pos);
 }
 
-func p_const_decl() {
+func p_const_decl(env: *Env, ) {
     expect("const");
     var name = p_ident();
     expect("=");
-    var value = p_const_expr();
+    var value = p_const_expr(env);
     expect(";");
-    add_const(name, value, &tok_pos);
+    add_const(env, name, value, &tok_pos);
 }
 
-func p_struct_decl(is_extern: Bool) {
+func p_struct_decl(env: *Env, is_extern: Bool) {
     expect("struct");
     var name_pos = tok_pos;
     var name = p_ident();
 
-    declare_struct(is_extern, name, &name_pos);
+    declare_struct(env, is_extern, name, &name_pos);
 
     if (!is_extern && eat("{")) {
         var fields = mk_struct_type(name);
@@ -1794,7 +1802,7 @@ func p_struct_decl(is_extern: Bool) {
             var field_pos = tok_pos;
             var field_name = p_ident();
             expect(":");
-            var field_type = p_type();
+            var field_type = p_type(env);
             p_comma("}");
             add_field(fields, field_name, field_type, &field_pos);
         }
@@ -1803,28 +1811,28 @@ func p_struct_decl(is_extern: Bool) {
             fprintf(stderr, "Struct must have at least one field.\n");
             exit(1);
         }
-        define_struct(name, fields, &name_pos);
+        define_struct(env, name, fields, &name_pos);
     } else {
         expect(";");
     }
 }
 
-func p_enum_decl() {
+func p_enum_decl(env: *Env) {
     expect("enum");
     var value = 0;
     expect("{");
     while (!eat("}")) {
         var name = p_ident();
         if (eat("=")) {
-            value = p_const_expr();
+            value = p_const_expr(env);
         }
         p_comma("}");
-        add_const(name, value, &tok_pos);
+        add_const(env, name, value, &tok_pos);
         value += 1;
     }
 }
 
-func p_decl() {
+func p_decl(env: *Env) {
     var is_extern = false;
     if (eat("extern")) {
         if (!at("func") && !at("var") && !at("struct")) {
@@ -1836,15 +1844,15 @@ func p_decl() {
     }
 
     if (at("func")) {
-        p_func_decl(is_extern);
+        p_func_decl(env, is_extern);
     } else if (at("var")) {
-        p_var_decl(is_extern);
+        p_var_decl(env, is_extern);
     } else if (at("const")) {
-        p_const_decl();
+        p_const_decl(env);
     } else if (at("struct")) {
-        p_struct_decl(is_extern);
+        p_struct_decl(env, is_extern);
     } else if (at("enum")) {
-        p_enum_decl();
+        p_enum_decl(env);
     } else {
         error_at(&tok_pos);
         fprintf(stderr, "Declaration expected.\n");
@@ -1852,11 +1860,11 @@ func p_decl() {
     }
 }
 
-func p_program() {
+func p_program(env: *Env) {
     next_char();
     next_tok();
     while (tok != Tok_Eof) {
-        p_decl();
+        p_decl(env);
     }
 }
 
@@ -1877,7 +1885,8 @@ func main(argc: Int32, argv: *(*Char)): Int32 {
         input_name = "<stdin>";
     }
 
-    p_program();
-    emit_program();
+    var env = calloc(1, sizeof(Env)) as *Env;
+    p_program(env);
+    emit_program(env);
     return 0;
 }
