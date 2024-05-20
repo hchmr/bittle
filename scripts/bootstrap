@@ -11,10 +11,29 @@ src_dir="$bootstrap_dir/src"
 build_dir="$bootstrap_dir/build"
 repo_url="${COG_REPO:-file://$root_dir}"
 
+prev_stage=
+
 section() {
     echo
     echo "==> $1"
     echo
+}
+
+checkout() {
+    local commit
+    if git rev-parse --quiet --verify "$1" >/dev/null; then
+        commit="$1"
+    else
+        pattern="^$(sed 's/[$\.*[\^]/\\&/g' <<<"$1")$"
+        commit="$(git rev-list master --grep "$pattern" --max-count=1)"
+        if [[ -z "$commit" ]]; then
+            echo "Commit not found: $1"
+            exit 1
+        fi
+    fi
+
+    echo "Checking out \"$(git log --format="%h %s" -n 1 "$commit")\""
+    git checkout --quiet "$commit"
 }
 
 stage() {
@@ -25,16 +44,29 @@ stage() {
 
     local stage_dir="$build_dir/stage$i/"
     mkdir -p "$stage_dir"
-    
-    echo "Checking out $ref"
-    git checkout --quiet --detach "$ref"
+
+    checkout "$ref"
 
     local cogc=""
-    if [ "$i" -gt 0 ]; then
-        cogc=$(realpath "$build_dir/stage$((i - 1))/cogc")
+    if [ -n "$prev_stage" ]; then
+        cogc=$(realpath "$build_dir/$prev_stage/cogc")
     fi
 
     make -C compiler "BUILD_DIR=$stage_dir" "COGC=$cogc"
+
+    prev_stage="stage$i"
+}
+
+verify() {
+    section "Verifying final stage"
+
+    mkdir -p "$build_dir/verify"
+
+    make -C compiler "BUILD_DIR=$build_dir/verify" "COGC=$(realpath "$build_dir/$prev_stage/cogc")"
+
+    echo "Comparing assembly output"
+
+    diff "$build_dir/verify/cogc.s" "$build_dir/$prev_stage/cogc.s" && echo "No difference"
 }
 
 rm -rf "$bootstrap_dir"
@@ -43,18 +75,16 @@ cd "$src_dir"
 
 git clone --quiet --filter=tree:0 "$repo_url" .
 
-stage 0 ":/Make compilation of bootstrap compiler stricter"
+stage 0 "Make compilation of bootstrap compiler stricter"
 
-stage 1 ":/Replace bootstrap compiler with self-host compiler"
+stage 1 "Replace bootstrap compiler with self-host compiler"
 
-stage 2 ":/Replace bootstrap compiler with self-host compiler"
+stage 2 "Replace bootstrap compiler with self-host compiler"
 
-echo "Verifying final stage"
-
-diff "$build_dir/stage2/cogc.s" "$build_dir/stage1/cogc.s"
+verify
 
 mkdir -p "$bootstrap_dir/bin"
 
-cp "$build_dir/stage2/cogc" "$bootstrap_dir/bin/cogc"
+cp "$build_dir/$prev_stage/cogc" "$bootstrap_dir/bin/cogc"
 
 section "Done"
