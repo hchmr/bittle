@@ -1,5 +1,6 @@
 {
     "name": "vscode-cog",
+    "publisher": "anon",
     "version": "0.0.1",
     "displayName": "Cog",
     "description": "Language support for Cog",
