@@ -1,102 +1,14 @@
-import { window, languages, workspace, Diagnostic, DiagnosticSeverity, Range, Location, SymbolInformation, SymbolKind, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, WorkspaceConfiguration, Uri } from 'vscode';
-import { spawn } from 'child_process';
+import { window, languages, workspace, Range, Location, SymbolInformation, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, Uri } from 'vscode';
+import { checkFile } from './compiler-check';
+import { findDefinitionsInSource } from './definitions';
 
 module.exports = {
     activate,
 };
 
-let log: OutputChannel;
+export let log: OutputChannel;
 
 let diagnosticsCollection: DiagnosticCollection;
-
-async function compile(document: TextDocument) {
-    log.appendLine('Invoking compiler');
-
-    const cogc = workspace.getConfiguration().get<string>('cog.compilerPath', 'cogc');
-    const process = spawn(
-        cogc,
-        [document.fileName],
-        {
-            stdio: ['ignore', 'ignore', 'pipe'],
-            timeout: 1000,
-        }
-    );
-
-    let stderr = '';
-    process.stderr.on('data', data => {
-        stderr += data.toString();
-    });
-
-    const code = await new Promise(resolve => {
-        process.on('close', code => {
-            resolve(code ?? 'unknown');
-        });
-    });
-    log.appendLine(`Compiler exited with code ${code}`);
-
-    return { ok: code == 0, stderr };
-}
-function makeDiagnostic(stderr: string, document: TextDocument) {
-    const match = /^(.*?):(\d+):(\d+):(.*)/s.exec(stderr);
-    if (match) {
-        let fileName = match[1];
-        if (fileName === '<stdin>') {
-            fileName = document.fileName;
-        }
-        const row = parseInt(match[2]) - 1;
-        const col = parseInt(match[3]) - 1;
-        return {
-            fileName,
-            diagnostic: new Diagnostic(
-                new Range(row, col, row, col),
-                match[4].trim(),
-                DiagnosticSeverity.Error
-            )
-        };
-    } else {
-        return {
-            fileName: document.fileName,
-            diagnostic: new Diagnostic(
-                new Range(0, 0, 0, 0),
-                stderr,
-                DiagnosticSeverity.Error
-            )
-        };
-    }
-}
-
-function findDefinitionsInSource(document: TextDocument) {
-    const definitions = [];
-
-    for (const match of document.getText().matchAll(/^(struct|func|var|const)\s*(\w+)/gm)) {
-        definitions.push({
-            index: match.index + match[0].length - match[2].length,
-            name: match[2],
-            kind: {
-                'struct': SymbolKind.Struct,
-                'func': SymbolKind.Function,
-                'var': SymbolKind.Variable,
-                'const': SymbolKind.Constant,
-            }[match[1]]!,
-        });
-    }
-
-    // enums
-    for (const match of document.getText().matchAll(/^enum\s*\{([^}]*)\}/gm)) {
-        for (const part of match[1].split(',')) {
-            const name = part.trim();
-            if (name) {
-                definitions.push({
-                    index: match.index + match[0].indexOf(name),
-                    name: name,
-                    kind: SymbolKind.EnumMember,
-                });
-            }
-        }
-    }
-
-    return definitions;
-}
 
 function searchDefinitions(document: TextDocument, position: Position) {
     const definitions = findDefinitionsInSource(document);
@@ -117,13 +29,7 @@ async function refreshDiagnostics(document: TextDocument) {
     if (document.languageId !== 'cog')
         return;
 
-    const { ok, stderr } = await compile(document);
-
-    log.appendLine(`Compiler output: ${ok}, '${stderr}'`);
-
-    let diagnostic = !ok
-        ? makeDiagnostic(stderr, document)
-        : undefined;
+    const diagnostic = await checkFile(document);
 
     if (!diagnostic) {
         diagnosticsCollection.delete(document.uri);
