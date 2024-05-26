@@ -24,6 +24,10 @@ async function compile(document: TextDocument) {
         process.on('close', code => {
             resolve(code ?? 'unknown');
         });
+        process.on('error', error => {
+            log.appendLine(`Error invoking compiler: ${error}`);
+            resolve('unknown');
+        });
     });
     log.appendLine(`Compiler exited with code ${code}`);
 
@@ -60,6 +64,12 @@ function makeDiagnostic(stderr: string, document: TextDocument) {
 }
 
 export async function checkFile(document: TextDocument) {
+    if (!(process.platform === 'linux' && process.arch === 'arm64')) {
+        return undefined;
+    }
+    if (document.uri.scheme !== 'file') {
+        return undefined;
+    }
     const { ok, stderr } = await compile(document);
 
     log.appendLine(`Compiler output: ${ok}, '${stderr}'`);
