@@ -38,12 +38,17 @@
     ],
     "scripts": {
         "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
+        "prepare": "lezer-generator src/cog.grammar --typeScript --output src/parser.ts",
+        "compile": "npm run prepare && tsc -p ./",
         "watch": "tsc -watch -p ./"
+    },
+    "dependencies": {
+        "@lezer/lr": "^1.4.0"
     },
     "devDependencies": {
         "@types/node": "^20.12.11",
         "@types/vscode": "^1.89.0",
-        "typescript": "^5.4.5"
+        "typescript": "^5.4.5",
+        "@lezer/generator": "^1.7.0"
     }
 }

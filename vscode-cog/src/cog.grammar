@@ -1,0 +1,156 @@
+@precedence {
+  prefix
+  postfix
+  mul @left
+  add @left
+  shift @left
+  cmp @left
+  bit_and @left
+  bit_xor @left
+  bit_or @left
+  and @left
+  or @left
+  ternary @right
+  assign @right
+  else @right
+}
+
+@top File { decl* }
+
+//= Declarations
+
+decl {
+  IncludeDecl
+  | FuncDecl
+  | GlobalDecl
+  | ConstDecl
+  | EnumDecl
+  | StructDecl
+}
+
+IncludeDecl {kw<"include"> String ";" }
+FuncDecl { kw<"extern">? kw<"func"> Identifier "(" commaSep<ParamDecl> ")" (":" Type)? ( BlockStmt | ";") }
+GlobalDecl { kw<"extern">? kw<"var"> Identifier ":" Type ";" }
+ConstDecl { kw<"const"> Identifier "=" Expr ";" }
+EnumDecl { kw<"enum"> "{" commaSep<EnumMember> "}" }
+StructDecl { kw<"extern">? kw<"struct"> Identifier (StructBody | ";") }
+
+EnumMember {
+  Identifier ("=" Expr)?
+}
+
+ParamDecl {
+  Identifier ":" Type
+  | "..."
+}
+
+StructBody {
+  "{" commaSep<StructMember> "}"
+}
+
+StructMember {
+  Identifier ":" Type
+}
+
+// Statements
+
+Stmt {
+  BlockStmt
+  | LocalStmt
+  | IfStmt
+  | WhileStmt
+  | BreakStmt
+  | ContinueStmt
+  | ReturnStmt
+  | ExprStmt
+}
+
+BlockStmt {
+  "{" (Stmt)* "}"
+}
+
+LocalStmt {
+  kw<"var"> Identifier (":" Type)? ("=" Expr)? ";"
+}
+
+IfStmt {
+  kw<"if"> "(" Expr ")" Stmt (!else kw<"else"> Stmt)?
+}
+WhileStmt {
+  kw<"while"> "(" Expr ")" Stmt
+}
+BreakStmt {
+  kw<"break"> ";"
+}
+ContinueStmt {
+  kw<"continue"> ";"
+}
+ReturnStmt {
+  kw<"return"> Expr? ";"
+}
+
+ExprStmt {
+  Expr ";"
+}
+
+//= Expressions
+
+Expr {
+  "(" Expr ")"
+  | Number
+  | String
+  | Char
+  | Identifier
+  | FuncCall { Identifier "(" commaSep<Arg> ")" }
+  | Index { Expr !postfix "[" Expr "]" }
+  | Member { Expr !postfix "." Identifier }
+  | Cast { Expr kw<"as"> Type }
+  | UnaryExp { ("+" | "-" | "!" | "^" | "*" | "&") !prefix Expr }
+  | BinaryExp {
+      Expr !mul ("*" | "/" | "%") Expr
+    | Expr !add ("+" | "-") Expr
+    | Expr !shift ("<<" | ">>") Expr
+    | Expr !cmp ("==" | "!=" | "<" | "<=" | ">" | ">=") Expr
+    | Expr !bit_and "&" Expr
+    | Expr !bit_xor "^" Expr
+    | Expr !bit_or "|" Expr
+    | Expr !and "&&" Expr
+    | Expr !or "||" Expr
+    | Expr !ternary "?" Expr ":" Expr
+    | Expr !assign ("=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>=" | "&=" | "|=" | "^=") Expr
+  }
+}
+
+Arg {
+  Expr
+  | "..."
+}
+
+//= Types
+
+Type {
+  Identifier
+  | "*" Type
+  | "[" Type ";" Expr "]"
+  | "(" Type ")"
+}
+
+//= Other
+
+kw<word> { @specialize[@name={word}]<Identifier, word> }
+
+commaSep<x> { (x ",")* x? }
+
+@skip { space | LineComment }
+
+@tokens {
+  space { @whitespace+ }
+  LineComment[isolate] { "//" ![\n]* }
+  Identifier { $[a-zA-Z_] $[a-zA-Z_0-9]* }
+  Number { $[0-9]+ }
+  String { '"' ("\\" $["\\] | !["])* '"' }
+  Char { "'" ("\\" $['\\] | !['\n])* "'" }
+  @precedence { LineComment, "/" }
+}
+
+@detectDelim

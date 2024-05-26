@@ -1,6 +1,8 @@
-import { window, languages, workspace, Range, Location, SymbolInformation, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, Uri } from 'vscode';
-import { checkFile } from './compiler-check';
+import { window, languages, workspace, Range, Location, SymbolInformation, OutputChannel, DiagnosticCollection, ExtensionContext, TextDocument, Position, Uri, DiagnosticSeverity, Diagnostic } from 'vscode';
+import { checkFile as compilerCheck } from './compiler-check';
 import { findDefinitionsInSource } from './definitions';
+import { parser } from './parser';
+import { Tree } from '@lezer/common';
 
 module.exports = {
     activate,
@@ -8,7 +10,9 @@ module.exports = {
 
 export let log: OutputChannel;
 
-let diagnosticsCollection: DiagnosticCollection;
+let compilerDiagnostics: DiagnosticCollection;
+
+let parserDiagnostics: DiagnosticCollection;
 
 function searchDefinitions(document: TextDocument, position: Position) {
     const definitions = findDefinitionsInSource(document);
@@ -25,20 +29,50 @@ function searchDefinitions(document: TextDocument, position: Position) {
     return filtered;
 }
 
-async function refreshDiagnostics(document: TextDocument) {
+async function refreshCompilerDiagnostics(document: TextDocument) {
     if (document.languageId !== 'cog')
         return;
 
-    const diagnostic = await checkFile(document);
+    const diagnostic = await compilerCheck(document);
 
     if (!diagnostic) {
-        diagnosticsCollection.delete(document.uri);
+        compilerDiagnostics.delete(document.uri);
     } else {
-        diagnosticsCollection.set(
+        compilerDiagnostics.set(
             Uri.file(diagnostic.fileName),
             [diagnostic.diagnostic]
         );
     }
+}
+
+function updateParserErrors(document: TextDocument, tree: Tree) {
+    const diagnostics = []
+    const cursor = tree.cursor()
+    do {
+        if (!cursor.type.isError)
+            continue;
+        diagnostics.push(new Diagnostic(
+            new Range(
+                document.positionAt(cursor.from),
+                document.positionAt(cursor.to),
+            ),
+            'Syntax error',
+            DiagnosticSeverity.Error,
+        ));
+    } while (cursor.next());
+
+    parserDiagnostics.set(document.uri, diagnostics);
+}
+
+async function refreshFile(document: TextDocument) {
+    if (document.languageId !== 'cog')
+        return;
+
+    log.appendLine(`Refreshing file ${document.fileName}`);
+
+    const tree = parser.parse(document.getText());
+    updateParserErrors(document, tree);
+    await refreshCompilerDiagnostics(document);
 }
 
 function activate(context: ExtensionContext) {
@@ -47,12 +81,15 @@ function activate(context: ExtensionContext) {
 
     log.appendLine('Cog activated');
 
-    diagnosticsCollection = languages.createDiagnosticCollection('Cog');
-    context.subscriptions.push(diagnosticsCollection);
+    compilerDiagnostics = languages.createDiagnosticCollection('Cog Compiler');
+    context.subscriptions.push(compilerDiagnostics);
 
-    workspace.onDidOpenTextDocument(e => refreshDiagnostics(e), null, context.subscriptions);
-    workspace.onDidChangeTextDocument(e => refreshDiagnostics(e.document), null, context.subscriptions);
-    workspace.textDocuments.forEach(refreshDiagnostics);
+    parserDiagnostics = languages.createDiagnosticCollection('Cog Syntax');
+    context.subscriptions.push(parserDiagnostics);
+
+    workspace.onDidOpenTextDocument(e => refreshFile(e), null, context.subscriptions);
+    workspace.onDidChangeTextDocument(e => refreshFile(e.document), null, context.subscriptions);
+    workspace.textDocuments.forEach(refreshFile);
 
     context.subscriptions.push(languages.registerDefinitionProvider('cog', {
         provideDefinition(document, position) {
