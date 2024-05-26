@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { Diagnostic, DiagnosticSeverity, TextDocument, Range, workspace } from "vscode";
+import { workspace, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, TextDocument, Range, Location } from "vscode";
 import { log } from "./extension";
 
 async function compile(document: TextDocument) {
@@ -43,13 +43,22 @@ function makeDiagnostic(stderr: string, document: TextDocument) {
         }
         const row = parseInt(match[2]) - 1;
         const col = parseInt(match[3]) - 1;
+        const diagnostic = new Diagnostic(
+            new Range(row, col, row, col),
+            match[4].trim(),
+            DiagnosticSeverity.Error
+        );
+        if (fileName !== document.fileName) {
+            diagnostic.relatedInformation = [
+                new DiagnosticRelatedInformation(
+                    new Location(document.uri, new Range(0, 0, 0, 0)),
+                    `From compiler output for ${fileName}`
+                )
+            ];
+        }
         return {
             fileName,
-            diagnostic: new Diagnostic(
-                new Range(row, col, row, col),
-                match[4].trim(),
-                DiagnosticSeverity.Error
-            )
+            diagnostic
         };
     } else {
         return {
@@ -63,18 +72,18 @@ function makeDiagnostic(stderr: string, document: TextDocument) {
     }
 }
 
-export async function checkFile(document: TextDocument) {
+export async function getCompilerDiagnostics(document: TextDocument) {
     if (!(process.platform === 'linux' && process.arch === 'arm64')) {
-        return undefined;
+        return [];
     }
     if (document.uri.scheme !== 'file') {
-        return undefined;
+        return [];
     }
     const { ok, stderr } = await compile(document);
 
     log.appendLine(`Compiler output: ${ok}, '${stderr}'`);
 
     return !ok
-        ? makeDiagnostic(stderr, document)
-        : undefined;
+        ? [makeDiagnostic(stderr, document)]
+        : [];
 }
