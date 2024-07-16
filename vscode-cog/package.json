@@ -4,12 +4,18 @@
     "description": "Cog language support for Visual Studio Code",
     "version": "0.0.1",
     "publisher": "anon",
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./"
+    },
     "engines": {
         "vscode": "^1.91.0"
     },
     "categories": [
         "Programming Languages"
     ],
+    "main": "./out/extension.js",
     "contributes": {
         "languages": [
             {
@@ -32,5 +38,10 @@
                 "path": "./cog.tmLanguage.json"
             }
         ]
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.91.0",
+        "@types/node": "^20.14.10",
+        "typescript": "^5.5.3"
     }
 }

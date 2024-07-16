@@ -8,4 +8,6 @@ __pycache__/
 .devcontainer/
 docker-compose.yml
 Dockerfile
+node_modules/
+/vscode-cog/out/
 .DS_Store
