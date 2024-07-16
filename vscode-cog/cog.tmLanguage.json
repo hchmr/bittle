@@ -1,0 +1,57 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "scopeName": "source.cog",
+    "patterns": [
+        {
+            "name": "comment.line.cog",
+            "match": "//.*"
+        },
+        {
+            "name": "comment.block.cog",
+            "begin": "/\\*",
+            "end": "\\*/"
+        },
+        {
+            "name": "string.quoted.double.cog",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.cog",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        {
+            "name": "string.quoted.single.cog",
+            "begin": "'",
+            "end": "'",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.cog",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        {
+            "name": "keyword.control.cog",
+            "match": "(?:break|continue|do|else|if|return|while)\\b"
+        },
+        {
+            "name": "keyword.cog",
+            "match": "(?:const|enum|func|struct|var)\\b"
+        },
+        {
+            "name": "constant.language.cog",
+            "match": "(?:true|false)\\b"
+        },
+        {
+            "name": "variable.other.cog",
+            "match": "[^\\W\\d]\\w*"
+        },
+        {
+            "name": "constant.numeric.cog",
+            "match": "\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?"
+        }
+    ]
+}
