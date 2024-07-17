@@ -79,6 +79,58 @@ class HoverProvider implements vscode.HoverProvider {
     }
 };
 
+class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
+    private readonly symbolKindMapping = {
+        'enum_member': vscode.SymbolKind.Constant,
+        'struct_decl': vscode.SymbolKind.Struct,
+        'struct_member': vscode.SymbolKind.Field,
+        'func_decl': vscode.SymbolKind.Function,
+        'param_decl': vscode.SymbolKind.Variable,
+        'global_decl': vscode.SymbolKind.Variable,
+        'const_decl': vscode.SymbolKind.Constant,
+        'local_decl': vscode.SymbolKind.Variable,
+    };
+
+    provideDocumentSymbols(document: vscode.TextDocument) {
+        const tree = parser.parse(document.getText());
+
+        const rootSymbols: vscode.DocumentSymbol[] = [];
+
+        const visit = (node: Parser.SyntaxNode, currentSymbol: vscode.DocumentSymbol | null) => {
+            if (node.type in this.symbolKindMapping) {
+                const symbol = this.generateDocumentSymbol(node);
+                (currentSymbol?.children ?? rootSymbols).push(symbol);
+                currentSymbol = symbol;
+            }
+
+            for (const child of node.children) {
+                visit(child, currentSymbol);
+            }
+        };
+
+        visit(tree.rootNode, null);
+
+        return rootSymbols;
+    }
+
+    private generateDocumentSymbol(node: Parser.SyntaxNode) {
+        const nameNode = node.children.find(child => child.type === 'identifier');
+        const symbol = new vscode.DocumentSymbol(
+            nameNode?.text ?? '',
+            '',
+            this.convertSymbolKind(node.type),
+            buildRange(node),
+            buildRange(nameNode ?? node)
+        );
+        return symbol;
+    }
+
+    private convertSymbolKind(type: string) {
+        const symbolKindMapping: Record<string, vscode.SymbolKind> = this.symbolKindMapping;
+        return symbolKindMapping[type] ?? null;
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     // Hover
     context.subscriptions.push(
@@ -114,4 +166,10 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidCloseTextDocument(document => diagnosticsCollection.delete(document.uri)),
     );
     vscode.workspace.textDocuments.forEach(refreshDiagnostics);
+
+    // Document symbols
+
+    context.subscriptions.push(
+        vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider())
+    );
 }
