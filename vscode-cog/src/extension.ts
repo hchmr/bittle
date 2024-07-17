@@ -8,6 +8,15 @@ import * as path from 'path';
 const parser = new Parser();
 parser.setLanguage(Cog);
 
+function buildRange(node: Parser.SyntaxNode): vscode.Range {
+    return new vscode.Range(
+        node.startPosition.row,
+        node.startPosition.column,
+        node.endPosition.row,
+        node.endPosition.column
+    );
+}
+
 class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
     private readonly highlightsQuery: Query;
     public readonly tokenTypes = ['type', 'function'];
@@ -31,12 +40,7 @@ class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
                 continue;
 
             builder.push(
-                new vscode.Range(
-                    capture.node.startPosition.row,
-                    capture.node.startPosition.column,
-                    capture.node.endPosition.row,
-                    capture.node.endPosition.column
-                ),
+                buildRange(capture.node),
                 capture.name
             );
         }
@@ -53,12 +57,7 @@ class ParseErrorProvider {
 
         for (const error of this.errorQuery.captures(tree.rootNode)) {
             const diagnostic = new vscode.Diagnostic(
-                new vscode.Range(
-                    error.node.startPosition.row,
-                    error.node.startPosition.column,
-                    error.node.endPosition.row,
-                    error.node.endPosition.column
-                ),
+                buildRange(error.node),
                 'Syntax error',
                 vscode.DiagnosticSeverity.Error
             );
