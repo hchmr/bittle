@@ -533,32 +533,6 @@
     }
   },
   {
-    "type": "function_param",
-    "named": true,
-    "fields": {
-      "name": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
-      "type": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "_type",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "global_decl",
     "named": true,
     "fields": {
@@ -764,6 +738,32 @@
     }
   },
   {
+    "type": "param_decl",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "param_list",
     "named": true,
     "fields": {},
@@ -772,7 +772,7 @@
       "required": false,
       "types": [
         {
-          "type": "function_param",
+          "type": "param_decl",
           "named": true
         },
         {

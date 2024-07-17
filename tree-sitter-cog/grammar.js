@@ -95,13 +95,13 @@ module.exports = grammar({
     param_list: $ => seq(
       '(',
       commaSep(choice(
-        $.function_param,
+        $.param_decl,
         $.variadic_param,
       )),
       ')',
     ),
 
-    function_param: $ => seq(
+    param_decl: $ => seq(
       field('name', $.identifier),
       ':',
       field('type', $._type),
