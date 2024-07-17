@@ -2,7 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
-    "outDir": "out"
+    "outDir": "out",
+    "sourceMap": true
   },
   "include": ["src/**/*.ts"],
 }
