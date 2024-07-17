@@ -17,6 +17,7 @@
 ] @constant.builtin
 
 [
+    "as"
     "break"
     "const"
     "continue"

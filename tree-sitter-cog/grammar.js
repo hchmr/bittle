@@ -2,8 +2,9 @@
 // @ts-check
 
 const PREC = {
-  primary: 7,
-  unary: 6,
+  primary: 8,
+  unary: 7,
+  cast: 6,
   multiplicative: 5,
   additive: 4,
   comparative: 3,
@@ -80,6 +81,7 @@ module.exports = grammar({
     ),
 
     func_decl: $ => seq(
+      optional('extern'),
       'func',
       field('name', $.identifier),
       field('params', $.param_list),
@@ -95,8 +97,8 @@ module.exports = grammar({
       commaSep(choice(
         $.function_param,
         $.variadic_param,
-        ')',
-      ))
+      )),
+      ')',
     ),
 
     function_param: $ => seq(
@@ -220,6 +222,7 @@ module.exports = grammar({
       $.call_expr,
       $.index_expr,
       $.field_expr,
+      $.cast_expr,
     ),
 
     grouped_expr: $ => seq('(', $._expr, ')'),
@@ -272,6 +275,12 @@ module.exports = grammar({
       field('name', $.identifier),
     )),
 
+    cast_expr: $ => prec(PREC.cast, seq(
+      field('expr', $._expr),
+      'as',
+      field('type', $._type),
+    )),
+
     _literal: $ => choice(
       $.string_literal,
       $.char_literal,
@@ -315,4 +324,3 @@ function commaSep(rule) {
 function commaSep1(rule) {
   return seq(repeat(seq(rule, ',')), optional(rule));
 }
-
