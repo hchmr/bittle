@@ -1,0 +1,14 @@
+====================
+Const declaration
+====================
+
+const FORTY_TWO = 40 + 2;
+
+---
+
+(source_file
+  (const_decl
+    (identifier)
+    (binary_expr
+      (number_literal)
+      (number_literal))))

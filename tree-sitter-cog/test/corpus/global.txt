@@ -1,0 +1,14 @@
+====================
+Global declaration
+====================
+
+extern var stdin: *FILE;
+
+---
+
+(source_file
+  (global_decl
+    (identifier)
+    (pointer_type
+      (name_type
+        (identifier)))))

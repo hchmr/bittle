@@ -1,0 +1,19 @@
+====================
+Function declaration
+====================
+
+func x(): Int {
+  return 1;
+}
+
+---
+
+(source_file
+  (func_decl
+    (identifier)
+    (param_list)
+    (name_type
+      (identifier))
+    (block_stmt
+      (return_stmt
+        (number_literal)))))

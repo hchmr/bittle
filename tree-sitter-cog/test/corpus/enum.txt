@@ -1,0 +1,24 @@
+====================
+Enum declaration
+====================
+
+enum {
+    DIR_NORTH = 1,
+    DIR_WEST,
+    DIR_SOUTH,
+    DIR_EAST,
+}
+
+---
+
+(source_file
+  (enum_decl
+    (enum_member
+      (identifier)
+      (number_literal))
+    (enum_member
+      (identifier))
+    (enum_member
+      (identifier))
+    (enum_member
+      (identifier))))

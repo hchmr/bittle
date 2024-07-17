@@ -1,0 +1,11 @@
+====================
+Include declaration
+====================
+
+include "cstdio.cogh";
+
+---
+
+(source_file
+  (include_decl
+    (string_literal)))

@@ -1,0 +1,29 @@
+====================
+Hello world
+====================
+
+include "cstdio.cogh";
+
+func main(): Int {
+  printf("Hello, World!");
+  return 0;
+}
+
+---
+
+(source_file
+  (include_decl
+    (string_literal))
+  (func_decl
+    (identifier)
+    (param_list)
+    (name_type
+      (identifier))
+    (block_stmt
+      (expr_stmt
+        (call_expr
+          (name_expr
+            (identifier))
+          (string_literal)))
+      (return_stmt
+        (number_literal)))))
