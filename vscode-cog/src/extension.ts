@@ -6,11 +6,13 @@ import { SemanticTokensProvider } from './features/semanticTokens';
 
 export function activate(context: vscode.ExtensionContext) {
     // Hover
+
     context.subscriptions.push(
         vscode.languages.registerHoverProvider('cog', new HoverProvider()),
     );
 
     // Semantic tokens
+
     const semanticTokensProvider = new SemanticTokensProvider();
     context.subscriptions.push(
         vscode.languages.registerDocumentSemanticTokensProvider(
@@ -20,7 +22,7 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // Parse errors
+    // Syntax errors
 
     const diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
     context.subscriptions.push(diagnosticsCollection);
