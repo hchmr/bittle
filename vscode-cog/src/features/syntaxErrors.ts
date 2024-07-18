@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import Cog from 'tree-sitter-cog';
 import { Query } from 'tree-sitter';
 import { parser } from '../parser';
-import { buildRange } from '../utils';
+import { toVscRange } from '../utils';
 
 export class SyntaxErrorProvider {
     private readonly errorQuery = new Query(Cog, '(ERROR) @error');
@@ -13,7 +13,7 @@ export class SyntaxErrorProvider {
 
         for (const error of this.errorQuery.captures(tree.rootNode)) {
             const diagnostic = new vscode.Diagnostic(
-                buildRange(error.node),
+                toVscRange(error.node),
                 'Syntax error',
                 vscode.DiagnosticSeverity.Error
             );

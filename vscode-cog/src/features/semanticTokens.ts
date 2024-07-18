@@ -4,7 +4,7 @@ import { Query } from 'tree-sitter';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parser } from '../parser';
-import { buildRange } from '../utils';
+import { toVscRange } from '../utils';
 
 export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
     private readonly highlightsQuery: Query;
@@ -13,7 +13,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
 
     constructor() {
         this.highlightsQuery = (() => {
-            const queryPath = path.join(__dirname, '../node_modules/tree-sitter-cog/queries/highlights.scm');
+            const queryPath = path.join(__dirname, '../../node_modules/tree-sitter-cog/queries/highlights.scm');
             const querySource = fs.readFileSync(queryPath, 'utf8');
             return new Query(Cog, querySource);
         })();
@@ -29,7 +29,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
                 continue;
 
             builder.push(
-                buildRange(capture.node),
+                toVscRange(capture.node),
                 capture.name
             );
         }

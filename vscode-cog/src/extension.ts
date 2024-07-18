@@ -3,6 +3,7 @@ import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
+import { CodeActionsProvider } from './features/codeActions';
 
 export function activate(context: vscode.ExtensionContext) {
     // Hover
@@ -47,4 +48,17 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider())
     );
+
+    // Code actions
+
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider())
+    );
+
+    // TODO:
+    // - Go to definition
+    // - Find references
+    // - Rename
+    // - Auto-completion
+    // - More code actions
 }

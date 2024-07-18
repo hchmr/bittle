@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import Parser from 'tree-sitter';
 import { parser } from '../parser';
-import { buildRange } from '../utils';
+import { toVscRange } from '../utils';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
     private readonly symbolKindMapping = {
@@ -43,8 +43,8 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
             nameNode?.text ?? '',
             '',
             this.convertSymbolKind(node.type),
-            buildRange(node),
-            buildRange(nameNode ?? node)
+            toVscRange(node),
+            toVscRange(nameNode ?? node)
         );
         return symbol;
     }
