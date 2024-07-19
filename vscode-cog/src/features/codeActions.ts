@@ -29,7 +29,7 @@ function tryFlipComma(document: vscode.TextDocument, vscRange: vscode.Range): vs
         .map(createCodeAction);
 
     function canSwapSides(node: SyntaxNode) {
-        return ','
+        return node.text === ','
             && node.previousSibling
             && node.nextSibling
             && !isClosingDelimiter(node.nextSibling)
