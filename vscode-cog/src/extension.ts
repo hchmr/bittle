@@ -4,6 +4,8 @@ import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { CodeActionsProvider } from './features/codeActions';
+import { IncludeDefinitionProvider } from './features/gotoDefinition';
+import { createVirtualFileSystem } from './vfs';
 
 export function activate(context: vscode.ExtensionContext) {
     // Hover
@@ -53,6 +55,15 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider())
+    );
+
+    // Resolve include
+
+    const vfs = createVirtualFileSystem();
+    context.subscriptions.push(vfs);
+
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs))
     );
 
     // TODO:
