@@ -31,14 +31,26 @@ export function createVirtualFileSystem(): VirtualFileSystem & vscode.Disposable
     return {
         readFile(path: string): string | undefined {
             if (!fileCache.has(path)) {
-                try {
-                    const fileContent = fs.readFileSync(path, 'utf8');
+                const fileContent = getFromWorkspace() || getFromFileSystem();
+                if (fileContent) {
                     fileCache.set(path, fileContent);
-                } catch (e) {
-                    return undefined;
                 }
             }
             return fileCache.get(path);
+
+            function getFromWorkspace() {
+                return vscode.workspace.textDocuments
+                    .find(doc => doc.uri.fsPath === path)
+                    ?.getText();
+            }
+
+            function getFromFileSystem() {
+                try {
+                    return fs.readFileSync(path, 'utf8');
+                } catch (err) {
+                    return undefined;
+                }
+            }
         },
         dispose() {
             disposables.forEach(d => d.dispose());
