@@ -1,19 +1,19 @@
+import path from "path";
 import * as vscode from "vscode";
-import { parser } from "../parser";
-import { VirtualFileSystem } from "../vfs";
+import { ParsingService } from "../parser";
 import { fromVscPosition, toVscRange } from "../utils";
 import { getNodesAtPosition } from "../utils/nodeSearch";
-import path from "path";
+import { VirtualFileSystem } from "../vfs";
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
-    constructor(private vfs: VirtualFileSystem) { }
+    constructor(private vfs: VirtualFileSystem, private parsingService: ParsingService) { }
 
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
         token: vscode.CancellationToken
     ) {
-        const tree = parser.parse(document.getText());
+        const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
         return getNodesAtPosition(tree, position)
             .filter(node => node.type === "string_literal"

@@ -1,5 +1,6 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as vscode from 'vscode';
+import { ReactiveCache } from './reactiveCache';
 
 /** A virtual file system that keeps files in with changes in memory. */
 export interface VirtualFileSystem {
@@ -7,36 +8,40 @@ export interface VirtualFileSystem {
     readFile(path: string): string | undefined;
 }
 
-export function createVirtualFileSystem(): VirtualFileSystem & vscode.Disposable {
+export function createVirtualFileSystem(cache: ReactiveCache): VirtualFileSystem & vscode.Disposable {
     const disposables: vscode.Disposable[] = [];
 
-    const fileCache = new Map<string, string>();
+    vscode.workspace.onDidChangeTextDocument((event) => {
+        if (event.document.languageId !== 'cog' || event.contentChanges.length === 0)
+            return;
 
-    vscode.workspace.onDidChangeTextDocument(({ document }) => {
-        if (fileCache.has(document.uri.fsPath)) {
-            fileCache.set(document.uri.fsPath, document.getText());
-        }
+        const path = event.document.uri.fsPath;
+        cache.delete(`vfs:${path}`);
     }, disposables)
 
     const watcher = vscode.workspace.createFileSystemWatcher('**/*.{cog,cogs}');
     watcher.onDidChange((uri) => {
+        if (vscode.workspace.textDocuments.some(doc => doc.uri.fsPath === uri.fsPath)) {
+            return; // Already handled by onDidChangeTextDocument
+        }
+
         const path = uri.fsPath;
-        fileCache.delete(path);
+        cache.delete(`vfs:${path}`);
     });
     watcher.onDidDelete((uri) => {
         const path = uri.fsPath;
-        fileCache.delete(path);
+        cache.delete(`vfs:${path}`);
+    });
+    watcher.onDidCreate((uri) => {
+        const path = uri.fsPath;
+        cache.delete(`vfs:${path}`);
     });
 
     return {
         readFile(path: string): string | undefined {
-            if (!fileCache.has(path)) {
-                const fileContent = getFromWorkspace() || getFromFileSystem();
-                if (fileContent) {
-                    fileCache.set(path, fileContent);
-                }
-            }
-            return fileCache.get(path);
+            return cache.compute(`vfs:${path}`, () =>
+                getFromWorkspace() ?? getFromFileSystem()
+            );
 
             function getFromWorkspace() {
                 return vscode.workspace.textDocuments

@@ -1,4 +1,4 @@
-import { Tree, Point, SyntaxNode } from "tree-sitter";
+import { Point, SyntaxNode, Tree } from "tree-sitter";
 import { nodeContains, PointRange, rangeContains } from ".";
 
 /**

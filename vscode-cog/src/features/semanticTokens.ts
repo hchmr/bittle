@@ -1,9 +1,9 @@
-import * as vscode from 'vscode';
-import Cog from 'tree-sitter-cog';
-import { Query } from 'tree-sitter';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parser } from '../parser';
+import { Query } from 'tree-sitter';
+import Cog from 'tree-sitter-cog';
+import * as vscode from 'vscode';
+import { ParsingService } from '../parser';
 import { toVscRange } from '../utils';
 
 export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
@@ -11,7 +11,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
     public readonly tokenTypes = ['type', 'function'];
     public readonly legend = new vscode.SemanticTokensLegend(this.tokenTypes);
 
-    constructor() {
+    constructor(private parsingService: ParsingService) {
         this.highlightsQuery = (() => {
             const queryPath = path.join(__dirname, '../../node_modules/tree-sitter-cog/queries/highlights.scm');
             const querySource = fs.readFileSync(queryPath, 'utf8');
@@ -20,7 +20,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
     }
 
     provideDocumentSemanticTokens(document: vscode.TextDocument) {
-        const tree = parser.parse(document.getText());
+        const tree = this.parsingService.parse(document.uri.fsPath);
         const builder = new vscode.SemanticTokensBuilder(this.legend);
         for (const capture of this.highlightsQuery.captures(tree.rootNode)) {
             if (!this.tokenTypes.includes(capture.name))

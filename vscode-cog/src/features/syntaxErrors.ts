@@ -1,14 +1,16 @@
-import * as vscode from 'vscode';
-import Cog from 'tree-sitter-cog';
 import { Query } from 'tree-sitter';
-import { parser } from '../parser';
+import Cog from 'tree-sitter-cog';
+import * as vscode from 'vscode';
+import { ParsingService } from '../parser';
 import { toVscRange } from '../utils';
 
 export class SyntaxErrorProvider {
     private readonly errorQuery = new Query(Cog, '(ERROR) @error');
 
+    constructor(private parsingService: ParsingService) { }
+
     provideDiagnostics(document: vscode.TextDocument) {
-        const tree = parser.parse(document.getText());
+        const tree = this.parsingService.parse(document.fileName);
         const diagnostics: vscode.Diagnostic[] = [];
 
         for (const error of this.errorQuery.captures(tree.rootNode)) {

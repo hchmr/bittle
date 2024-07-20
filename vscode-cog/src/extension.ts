@@ -1,22 +1,31 @@
 import * as vscode from 'vscode';
-import { SyntaxErrorProvider } from './features/syntaxErrors';
+import { ReactiveCache } from './reactiveCache';
+import { CodeActionsProvider } from './features/codeActions';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
+import { IncludeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
-import { CodeActionsProvider } from './features/codeActions';
-import { IncludeDefinitionProvider } from './features/gotoDefinition';
+import { SyntaxErrorProvider } from './features/syntaxErrors';
+import { createParsingService } from './parser';
 import { createVirtualFileSystem } from './vfs';
 
 export function activate(context: vscode.ExtensionContext) {
+    const cache = new ReactiveCache();
+
+    const vfs = createVirtualFileSystem(cache);
+    context.subscriptions.push(vfs);
+
+    const parsingService = createParsingService(cache, vfs);
+
     // Hover
 
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider('cog', new HoverProvider()),
+        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService)),
     );
 
     // Semantic tokens
 
-    const semanticTokensProvider = new SemanticTokensProvider();
+    const semanticTokensProvider = new SemanticTokensProvider(parsingService);
     context.subscriptions.push(
         vscode.languages.registerDocumentSemanticTokensProvider(
             'cog',
@@ -37,7 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
         diagnosticsCollection.set(document.uri, diagnostics);
     }
 
-    const syntaxErrorProvider = new SyntaxErrorProvider();
+    const syntaxErrorProvider = new SyntaxErrorProvider(parsingService);
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(document => refreshDiagnostics(document)),
         vscode.workspace.onDidChangeTextDocument(event => refreshDiagnostics(event.document)),
@@ -48,22 +57,19 @@ export function activate(context: vscode.ExtensionContext) {
     // Document symbols
 
     context.subscriptions.push(
-        vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider())
+        vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider(parsingService))
     );
 
     // Code actions
 
     context.subscriptions.push(
-        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider())
+        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider(parsingService))
     );
 
     // Resolve include
 
-    const vfs = createVirtualFileSystem();
-    context.subscriptions.push(vfs);
-
     context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs))
+        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService))
     );
 
     // TODO:

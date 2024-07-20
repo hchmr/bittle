@@ -1,25 +1,27 @@
-import { SyntaxNode } from 'tree-sitter';
+import { SyntaxNode, Tree } from 'tree-sitter';
 import * as vscode from 'vscode';
-import { parser } from '../parser';
+import { ParsingService } from '../parser';
 import { fromVscRange, rangeEmpty, toVscRange } from '../utils';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CodeActionsProvider implements vscode.CodeActionProvider {
+    constructor(private parsingService: ParsingService) { }
+
     provideCodeActions(
         document: vscode.TextDocument,
         range: vscode.Range,
         context: vscode.CodeActionContext,
         token: vscode.CancellationToken
     ) {
+        const tree = this.parsingService.parse(document.fileName);
+
         return [
-            tryFlipComma(document, range)
+            tryFlipComma(tree, document.uri, range)
         ].flatMap(action => action);
     }
 }
 
-function tryFlipComma(document: vscode.TextDocument, vscRange: vscode.Range): vscode.CodeAction[] {
-    const tree = parser.parse(document.getText());
-
+function tryFlipComma(tree: Tree, documentUri: vscode.Uri, vscRange: vscode.Range): vscode.CodeAction[] {
     const range = fromVscRange(vscRange);
     if (!rangeEmpty(range))
         return [];
@@ -47,12 +49,12 @@ function tryFlipComma(document: vscode.TextDocument, vscRange: vscode.Range): vs
     function createSwapEdit(node: SyntaxNode) {
         const edit = new vscode.WorkspaceEdit();
         edit.replace(
-            document.uri,
+            documentUri,
             toVscRange(node.previousSibling!),
             node.nextSibling!.text
         );
         edit.replace(
-            document.uri,
+            documentUri,
             toVscRange(node.nextSibling!),
             node.previousSibling!.text
         );

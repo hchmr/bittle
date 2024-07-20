@@ -1,5 +1,5 @@
-import * as vscode from 'vscode';
 import { Point, SyntaxNode } from 'tree-sitter';
+import * as vscode from 'vscode';
 
 // Point utilities
 

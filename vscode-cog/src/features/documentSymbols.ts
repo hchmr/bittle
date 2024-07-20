@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
 import Parser from 'tree-sitter';
-import { parser } from '../parser';
+import * as vscode from 'vscode';
+import { ParsingService } from '../parser';
 import { toVscRange } from '../utils';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
@@ -15,8 +15,10 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
         'local_decl': vscode.SymbolKind.Variable,
     };
 
+    constructor(private parsingService: ParsingService) { }
+
     provideDocumentSymbols(document: vscode.TextDocument) {
-        const tree = parser.parse(document.getText());
+        const tree = this.parsingService.parse(document.uri.fsPath);
 
         const rootSymbols: vscode.DocumentSymbol[] = [];
 
