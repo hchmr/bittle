@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
-import { ReactiveCache } from './reactiveCache';
+import { ReactiveCache } from './utils/reactiveCache';
 import { CodeActionsProvider } from './features/codeActions';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
-import { IncludeDefinitionProvider } from './features/gotoDefinition';
+import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { createParsingService } from './parser';
 import { createVirtualFileSystem } from './vfs';
+import { FileIndexService } from './indexing';
 
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();
@@ -16,6 +17,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vfs);
 
     const parsingService = createParsingService(cache, vfs);
+
+    const indexService = new FileIndexService(cache, vfs, parsingService);
 
     // Hover
 
@@ -69,7 +72,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Resolve include
 
     context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService))
+        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
+        vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(indexService, parsingService)),
     );
 
     // TODO:

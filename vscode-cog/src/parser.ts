@@ -1,6 +1,6 @@
 import Parser, { Tree } from 'tree-sitter';
 import Cog from 'tree-sitter-cog';
-import { ReactiveCache } from './reactiveCache';
+import { ReactiveCache } from './utils/reactiveCache';
 import { VirtualFileSystem } from './vfs';
 
 export const parser = new Parser();

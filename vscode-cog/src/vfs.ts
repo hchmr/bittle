@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { ReactiveCache } from './reactiveCache';
+import { ReactiveCache } from './utils/reactiveCache';
 
 /** A virtual file system that keeps files in with changes in memory. */
 export interface VirtualFileSystem {
