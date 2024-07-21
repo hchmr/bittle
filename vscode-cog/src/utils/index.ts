@@ -68,3 +68,4 @@ export function nodeContains(x1: SyntaxNode, x2: SyntaxNode): boolean {
 
     return false;
 }
+export type Nullish = null | undefined;

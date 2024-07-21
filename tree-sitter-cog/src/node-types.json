@@ -36,6 +36,14 @@
         "named": true
       },
       {
+        "type": "sizeof_expr",
+        "named": true
+      },
+      {
+        "type": "ternary_expr",
+        "named": true
+      },
+      {
         "type": "unary_expr",
         "named": true
       }
@@ -188,10 +196,6 @@
             "named": false
           },
           {
-            "type": "&=",
-            "named": false
-          },
-          {
             "type": "*",
             "named": false
           },
@@ -232,10 +236,6 @@
             "named": false
           },
           {
-            "type": "<<=",
-            "named": false
-          },
-          {
             "type": "<=",
             "named": false
           },
@@ -260,23 +260,11 @@
             "named": false
           },
           {
-            "type": ">>=",
-            "named": false
-          },
-          {
             "type": "^",
             "named": false
           },
           {
-            "type": "^=",
-            "named": false
-          },
-          {
             "type": "|",
-            "named": false
-          },
-          {
-            "type": "|=",
             "named": false
           },
           {
@@ -536,6 +524,16 @@
     "type": "global_decl",
     "named": true,
     "fields": {
+      "externModifier": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "extern",
+            "named": false
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -561,31 +559,33 @@
   {
     "type": "grouped_expr",
     "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "_expr",
-          "named": true
-        }
-      ]
+    "fields": {
+      "expr": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_expr",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
     "type": "grouped_type",
     "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "_type",
-          "named": true
-        }
-      ]
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -786,7 +786,7 @@
     "type": "pointer_type",
     "named": true,
     "fields": {
-      "type": {
+      "pointee": {
         "multiple": false,
         "required": true,
         "types": [
@@ -811,6 +811,22 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "sizeof_expr",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_type",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -849,19 +865,30 @@
     }
   },
   {
+    "type": "struct_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "struct_member",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "struct_decl",
     "named": true,
     "fields": {
       "body": {
-        "multiple": true,
+        "multiple": false,
         "required": false,
         "types": [
           {
-            "type": ",",
-            "named": false
-          },
-          {
-            "type": "struct_member",
+            "type": "struct_body",
             "named": true
           }
         ]
@@ -905,6 +932,42 @@
     }
   },
   {
+    "type": "ternary_expr",
+    "named": true,
+    "fields": {
+      "cond": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_expr",
+            "named": true
+          }
+        ]
+      },
+      "else": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_expr",
+            "named": true
+          }
+        ]
+      },
+      "then": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "_expr",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "unary_expr",
     "named": true,
     "fields": {
@@ -936,10 +999,6 @@
           },
           {
             "type": "-",
-            "named": false
-          },
-          {
-            "type": "^",
             "named": false
           }
         ]
@@ -994,10 +1053,6 @@
   },
   {
     "type": "&&",
-    "named": false
-  },
-  {
-    "type": "&=",
     "named": false
   },
   {
@@ -1065,10 +1120,6 @@
     "named": false
   },
   {
-    "type": "<<=",
-    "named": false
-  },
-  {
     "type": "<=",
     "named": false
   },
@@ -1093,7 +1144,7 @@
     "named": false
   },
   {
-    "type": ">>=",
+    "type": "?",
     "named": false
   },
   {
@@ -1106,10 +1157,6 @@
   },
   {
     "type": "^",
-    "named": false
-  },
-  {
-    "type": "^=",
     "named": false
   },
   {
@@ -1181,6 +1228,10 @@
     "named": false
   },
   {
+    "type": "sizeof",
+    "named": false
+  },
+  {
     "type": "string_literal",
     "named": true
   },
@@ -1210,10 +1261,6 @@
   },
   {
     "type": "|",
-    "named": false
-  },
-  {
-    "type": "|=",
     "named": false
   },
   {

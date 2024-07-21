@@ -39,7 +39,7 @@
         },
         {
             "name": "keyword.cog",
-            "match": "(?:as|const|enum|func|struct|var)\\b"
+            "match": "(?:as|const|enum|extern|func|sizeof|struct|var)\\b"
         },
         {
             "name": "constant.language.cog",

@@ -2,18 +2,27 @@
 // @ts-check
 
 const PREC = {
-  primary: 8,
-  unary: 7,
-  cast: 6,
-  multiplicative: 5,
-  additive: 4,
-  comparative: 3,
-  and: 2,
-  or: 1,
+  assign: 1,
+  cond: 2,
+  condOr: 3,
+  condAnd: 4,
+  bitOr: 5,
+  bitXor: 6,
+  bitAnd: 7,
+  cmp: 8,
+  shift: 9,
+  add: 10,
+  mul: 11,
+  cast: 12,
+  unary: 13,
+  postfix: 14,
+  primary: 15,
 };
 
-const multiplicativeOperators = ['*', '/', '%', '<<', '>>', '&'];
-const additiveOperators = ['+', '-', '|', '^'];
+const multiplicativeOperators = ['*', '/', '%'];
+const additiveOperators = ['+', '-'];
+const shiftOperators = ['<<', '>>'];
+const bitwiseOperators = ['&', '|', '^'];
 const comparativeOperators = ['==', '!=', '<', '<=', '>', '>='];
 const assignmentOperators = [...multiplicativeOperators, ...additiveOperators, ''].map(operator => operator + '=');
 
@@ -69,8 +78,15 @@ module.exports = grammar({
     struct_decl: $ => seq(
       'struct',
       field('name', $.identifier),
+      choice(
+        field('body', optional($.struct_body)),
+        ';',
+      ),
+    ),
+
+    struct_body: $ => seq(
       '{',
-      field('body', commaSep($.struct_member)),
+      commaSep($.struct_member),
       '}',
     ),
 
@@ -110,7 +126,7 @@ module.exports = grammar({
     variadic_param: $ => '...',
 
     global_decl: $ => seq(
-      optional('extern'),
+      field('externModifier', optional('extern')),
       'var',
       field('name', $.identifier),
       ':',
@@ -133,13 +149,17 @@ module.exports = grammar({
       $.array_type,
     ),
 
-    grouped_type: $ => seq('(', $._type, ')'),
+    grouped_type: $ => seq(
+      '(',
+      field('type', $._type),
+      ')'
+    ),
 
     name_type: $ => $.identifier,
 
     pointer_type: $ => seq(
       '*',
-      field('type', $._type),
+      field('pointee', $._type),
     ),
 
     array_type: $ => seq(
@@ -217,7 +237,9 @@ module.exports = grammar({
       $.grouped_expr,
       $.name_expr,
       $._literal,
+      $.sizeof_expr,
       $.binary_expr,
+      $.ternary_expr,
       $.unary_expr,
       $.call_expr,
       $.index_expr,
@@ -225,18 +247,41 @@ module.exports = grammar({
       $.cast_expr,
     ),
 
-    grouped_expr: $ => seq('(', $._expr, ')'),
+    grouped_expr: $ => seq(
+      '(',
+      field('expr', $._expr),
+      ')'
+    ),
 
     name_expr: $ => $.identifier,
 
+    sizeof_expr: $ => seq(
+      'sizeof',
+      '(',
+      field('type', $._type),
+      ')',
+    ),
+
+    ternary_expr: $ => prec.right(PREC.cond, seq(
+      field('cond', $._expr),
+      '?',
+      field('then', $._expr),
+      ':',
+      field('else', $._expr),
+    )),
+
     binary_expr: $ => {
       const table = [
-        [PREC.multiplicative, choice(...multiplicativeOperators)],
-        [PREC.additive, choice(...additiveOperators)],
-        [PREC.comparative, choice(...comparativeOperators)],
-        [PREC.and, '&&'],
-        [PREC.or, '||'],
-        [PREC.primary, choice(...assignmentOperators)],
+        [PREC.assign, choice(...assignmentOperators)],
+        [PREC.condOr, '||'],
+        [PREC.condAnd, '&&'],
+        [PREC.bitOr, '|'],
+        [PREC.bitXor, '^'],
+        [PREC.bitAnd, '&'],
+        [PREC.cmp, choice(...comparativeOperators)],
+        [PREC.shift, choice(...shiftOperators)],
+        [PREC.add, choice(...additiveOperators)],
+        [PREC.mul, choice(...multiplicativeOperators)],
       ];
 
       return choice(...table.map(([precedence, operator]) =>
@@ -251,7 +296,7 @@ module.exports = grammar({
     },
 
     unary_expr: $ => prec(PREC.unary, seq(
-      field('operator', choice('-', '!', '^', '*', '&')),
+      field('operator', choice('-', '!', '*', '&')),
       field('operand', $._expr),
     )),
 

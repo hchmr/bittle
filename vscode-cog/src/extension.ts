@@ -1,14 +1,16 @@
 import * as vscode from 'vscode';
-import { ReactiveCache } from './utils/reactiveCache';
 import { CodeActionsProvider } from './features/codeActions';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
+import { IncludeResolver } from './IncludeResolver';
 import { createParsingService } from './parser';
+import { IndexingService } from './semantics/IndexingService';
+import { Elaborator } from './semantics/SymbolResolver';
+import { ReactiveCache } from './utils/reactiveCache';
 import { createVirtualFileSystem } from './vfs';
-import { FileIndexService } from './indexing';
 
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();
@@ -18,12 +20,16 @@ export function activate(context: vscode.ExtensionContext) {
 
     const parsingService = createParsingService(cache, vfs);
 
-    const indexService = new FileIndexService(cache, vfs, parsingService);
+    const includeResolver = new IncludeResolver(vfs);
+
+    const indexService = new IndexingService(cache, includeResolver, parsingService);
+
+    const elaborator = new Elaborator(indexService);
 
     // Hover
 
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService)),
+        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, elaborator)),
     );
 
     // Semantic tokens
@@ -73,7 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
-        vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(indexService, parsingService)),
+        vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborator)),
     );
 
     // TODO:
