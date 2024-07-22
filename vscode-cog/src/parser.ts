@@ -23,3 +23,28 @@ export function createParsingService(cache: ReactiveCache, vfs: VirtualFileSyste
         }
     };
 }
+
+export function isExprNode(node: any): boolean {
+    return [
+        "grouped_expr",
+        "name_expr",
+        "literal_expr",
+        "sizeof_expr",
+        "binary_expr",
+        "ternary_expr",
+        "unary_expr",
+        "call_expr",
+        "index_expr",
+        "field_expr",
+        "cast_expr",
+    ].includes(node.type);
+}
+
+export function isTypeNode(node: any): boolean {
+    return [
+        "grouped_type",
+        "name_type",
+        "pointer_type",
+        "array_type",
+    ].includes(node.type);
+}

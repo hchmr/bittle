@@ -236,7 +236,7 @@ module.exports = grammar({
     _expr: $ => choice(
       $.grouped_expr,
       $.name_expr,
-      $._literal,
+      $.literal_expr,
       $.sizeof_expr,
       $.binary_expr,
       $.ternary_expr,
@@ -254,6 +254,8 @@ module.exports = grammar({
     ),
 
     name_expr: $ => $.identifier,
+
+    literal_expr: $ => $._literal,
 
     sizeof_expr: $ => seq(
       'sizeof',

@@ -3,12 +3,12 @@ import { prettyType, Type } from "./type";
 
 export type Symbol =
     | StructSymbol
+    | StructFieldSymbol
     | FuncSymbol
+    | FuncParamSymbol
     | GlobalSymbol
     | LocalSymbol
     | ConstSymbol
-    | FieldSymbol
-    | FuncParamSymbol
     ;
 
 export type SymbolType = Symbol["kind"];
@@ -20,10 +20,10 @@ type DefineSymbol<T extends { kind: string }> = T & {
 
 export type StructSymbol = DefineSymbol<{
     kind: "struct";
-    fields: FieldSymbol[] | undefined;
+    fields: StructFieldSymbol[] | undefined;
 }>
 
-export type FieldSymbol = DefineSymbol<{
+export type StructFieldSymbol = DefineSymbol<{
     kind: "struct_field";
     type: Type;
 }>

@@ -3,7 +3,7 @@ import { SyntaxNode } from "tree-sitter";
 import { Nullish, rangeContains } from "../utils";
 import { stream } from "../utils/stream";
 import { IndexEntry, IndexingService } from "./IndexingService";
-import { ConstSymbol, FieldSymbol, FuncParamSymbol, FuncSymbol, GlobalSymbol, StructSymbol, Symbol, SymbolType, valueSymbolType } from "./sym";
+import { ConstSymbol, FuncParamSymbol, FuncSymbol, GlobalSymbol, StructFieldSymbol, StructSymbol, Symbol, SymbolType, valueSymbolType } from "./sym";
 import { Type, unifyTypes } from "./type";
 
 export class Elaborator {
@@ -30,15 +30,10 @@ export class Elaborator {
     resolveValueName(path: string, nameNode: SyntaxNode): Symbol | undefined {
         let node: SyntaxNode | undefined = nameNode.parent!;
 
-        const symbol = this.lookupSymbolFromNode(path, node, nameNode, SymbolNamespace.Value);
-        if (symbol) {
-            return symbol;
-        }
-
-        return this.lookupGlobalSymbol(path, nameNode.text, SymbolNamespace.Value);
+        return this.lookupSymbolFromNode(path, node, nameNode, SymbolNamespace.Value);
     }
 
-    resolveFieldName(path: string, nameNode: SyntaxNode): FieldSymbol | undefined {
+    resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSymbol | undefined {
         const left = nameNode.parent!.childForFieldName("left");
         if (!left) {
             return;
@@ -72,16 +67,24 @@ export class Elaborator {
                 return { kind: "error" };
             }
             return valueSymbolType(symbol);
-        } else if (exprNode.type === "string_literal") {
-            return { kind: "pointer", elementType: { kind: "int", size: 8 } };
-        } else if (exprNode.type === "char_literal") {
-            return { kind: "int", size: 8 };
-        } else if (exprNode.type === "number_literal") {
-            return { kind: "int", size: 64 };
-        } else if (exprNode.type === "bool_literal") {
-            return { kind: "bool" };
-        } else if (exprNode.type === "null_literal") {
-            return { kind: "pointer", elementType: { kind: "void" } };
+        } else if (exprNode.type === "literal_expr") {
+            const literalNode = exprNode.firstNamedChild;
+            if (!literalNode) {
+                return { kind: "error" };
+            }
+            if (literalNode.type === "string_literal") {
+                return { kind: "pointer", elementType: { kind: "int", size: 8 } };
+            } else if (literalNode.type === "char_literal") {
+                return { kind: "int", size: 8 };
+            } else if (literalNode.type === "number_literal") {
+                return { kind: "int", size: 64 };
+            } else if (literalNode.type === "bool_literal") {
+                return { kind: "bool" };
+            } else if (literalNode.type === "null_literal") {
+                return { kind: "pointer", elementType: { kind: "void" } };
+            } else {
+                throw new Error(`Unreachable: ${literalNode.type}`);
+            }
         } else if (exprNode.type === "ternary_expr") {
             const thenNode = exprNode.childForFieldName("then");
             const elseNode = exprNode.childForFieldName("else");
@@ -167,7 +170,7 @@ export class Elaborator {
             : { kind: "error" };
     }
 
-    private evalType(path: string, node: SyntaxNode | Nullish): Type {
+    evalType(path: string, node: SyntaxNode | Nullish): Type {
         if (!node) {
             return { kind: "error" };
         }
@@ -239,6 +242,7 @@ export class Elaborator {
             }
             scopeNode = scopeNode.parent;
         } while (scopeNode);
+        return this.lookupGlobalSymbol(path, nameNode.text, namespace);
     }
 
     private lookupSymbolInNode(path: string, node: SyntaxNode, searchNode: SyntaxNode, namespace: SymbolNamespace): Symbol | 'loop' | undefined {
@@ -308,7 +312,7 @@ export class Elaborator {
         };
     }
 
-    private createstructFieldSymbol(structEntry: IndexEntry, node: SyntaxNode): FieldSymbol {
+    private createstructFieldSymbol(structEntry: IndexEntry, node: SyntaxNode): StructFieldSymbol {
         const nameNode = node.childForFieldName("name") ?? undefined;
         const typeNode = node.childForFieldName("type");
         return {
@@ -376,6 +380,10 @@ export class Elaborator {
         };
     }
 
+    private createEnumMemberSymbol(entry: IndexEntry): Symbol {
+        return this.createConstSymbol(entry); // TODO
+    }
+
     private createLocalSymbol(path: string, node: SyntaxNode): Symbol {
         const nameNode = node.childForFieldName("name") ?? undefined;
         const typeNode = node.childForFieldName("type");
@@ -396,8 +404,14 @@ export class Elaborator {
         if (!node) {
             return;
         }
-        if (node.type === "int_literal") {
-            return parseInt(node.text, 10);
+        if (node.type === "literal_expr") {
+            const literalNode = node.firstNamedChild;
+            if (!literalNode) {
+                return;
+            }
+            if (literalNode.type === "int_literal") {
+                return parseInt(literalNode.text);
+            }
         } else if (node.type === "unary_expr") {
             const operandNode = node.childForFieldName("operand");
             const operator = node.childForFieldName("operator")?.text;
@@ -463,14 +477,14 @@ function tryMergeStructSymbol(existing: StructSymbol, sym: StructSymbol): Struct
     };
 }
 
-function mergeFieldSymbols(fields1: FieldSymbol[], fields2: FieldSymbol[]): FieldSymbol[] {
+function mergeFieldSymbols(fields1: StructFieldSymbol[], fields2: StructFieldSymbol[]): StructFieldSymbol[] {
     return stream(fields1).concat(fields2)
         .groupBy(field => field.name)
         .map(([_, fields]) => fields.reduce(mergeFieldSymbol))
         .toArray();
 }
 
-function mergeFieldSymbol(field1: FieldSymbol, field2: FieldSymbol): FieldSymbol {
+function mergeFieldSymbol(field1: StructFieldSymbol, field2: StructFieldSymbol): StructFieldSymbol {
     return {
         kind: "struct_field",
         name: field1.name,

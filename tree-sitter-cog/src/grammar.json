@@ -909,7 +909,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "_literal"
+          "name": "literal_expr"
         },
         {
           "type": "SYMBOL",
@@ -969,6 +969,10 @@
     "name_expr": {
       "type": "SYMBOL",
       "name": "identifier"
+    },
+    "literal_expr": {
+      "type": "SYMBOL",
+      "name": "_literal"
     },
     "sizeof_expr": {
       "type": "SEQ",
