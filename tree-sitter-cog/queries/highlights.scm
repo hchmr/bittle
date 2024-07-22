@@ -1,5 +1,7 @@
 ; Types
 
+(struct_decl
+  name: (identifier) @type)
 (name_type) @type
 
 ; Functions
