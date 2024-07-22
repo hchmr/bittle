@@ -31,7 +31,7 @@ export class Elaborator {
         let node: SyntaxNode | undefined = nameNode.parent!;
 
         const name = nameNode.text;
-        const symbol = this.lookupSymbolInScopes(path, node, name, SymbolNamespace.Value);
+        const symbol = this.lookupSymbolFromNode(path, node, name, SymbolNamespace.Value);
         if (symbol) {
             return symbol;
         }
@@ -228,39 +228,43 @@ export class Elaborator {
         return symbols[0];
     }
 
-    private lookupSymbolInScopes(path: string, node: SyntaxNode, name: string, namespace: SymbolNamespace): Symbol | undefined {
+    private lookupSymbolFromNode(path: string, node: SyntaxNode, name: string, namespace: SymbolNamespace): Symbol | undefined {
         let scopeNode: SyntaxNode | null = node;
-        while (scopeNode) {
-            const scope = this.makeScope(path, scopeNode, node.startIndex);
-            const symbol = scope.find(s => s.name === name);
+        do {
+            const symbol = this.lookupSymbolInNode(path, scopeNode, name, namespace);
             if (symbol) {
                 return symbol;
             }
             scopeNode = scopeNode.parent;
-        }
+        } while (scopeNode);
     }
 
-    private makeScope(path: string, node: SyntaxNode, limit: number): Symbol[] {
-        const symbols = [];
+    private lookupSymbolInNode(path: string, node: SyntaxNode, name: string, namespace: SymbolNamespace): Symbol | undefined {
+        if (namespace !== SymbolNamespace.Value)
+            return;
+
         if (node.type === "block_stmt") {
             for (const child of node.namedChildren) {
-                if (child.startIndex >= limit) {
-                    break;
-                }
                 if (child.type === "local_decl") {
-                    const localSymbol = this.createLocalSymbol(path, child);
-                    if (localSymbol) {
-                        symbols.push(localSymbol);
+                    const nameNode = child.childForFieldName("name");
+                    if (nameNode && nameNode.text === name) {
+                        return this.createLocalSymbol(path, child);
                     }
                 }
             }
         } else if (node.type === "func_decl") {
             const paramsNode = node.childForFieldName("params");
             if (paramsNode) {
-                symbols.push(...this.createFuncParams(path, paramsNode));
+                for (const child of paramsNode.namedChildren) {
+                    if (child.type === "param_decl") {
+                        const nameNode = child.childForFieldName("name");
+                        if (nameNode && nameNode.text === name) {
+                            return this.createFuncParamSymbol(path, child);
+                        }
+                    }
+                }
             }
         }
-        return symbols;
     }
 
     private createSymbolFromEntries(type: SymbolType, entries: IndexEntry[]): Symbol {
@@ -413,7 +417,7 @@ export class Elaborator {
                 return leftValue - rightValue;
             }
         } else if (node.type === "name_expr") {
-            const symbol = this.lookupSymbolInScopes(path, node, node.text, SymbolNamespace.Value);
+            const symbol = this.lookupSymbolFromNode(path, node, node.text, SymbolNamespace.Value);
             if (symbol?.kind !== "const") {
                 return;
             }
