@@ -1,7 +1,7 @@
 import path from "path";
 import * as vscode from "vscode";
 import { ParsingService } from "../parser";
-import { Elaborator } from "../semantics/SymbolResolver";
+import { ElaborationService } from "../semantics/ElaborationService";
 import { fromVscPosition, toVscRange } from "../utils";
 import { getNodesAtPosition } from "../utils/nodeSearch";
 import { VirtualFileSystem } from "../vfs";
@@ -44,7 +44,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
 export class NameDefinitionProvider implements vscode.DefinitionProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborator: Elaborator
+        private elaborator: ElaborationService
     ) { }
 
     provideDefinition(

@@ -1,14 +1,15 @@
 import { SyntaxNode } from 'tree-sitter';
 import * as vscode from 'vscode';
 import { isExprNode, isTypeNode, ParsingService } from '../parser';
-import { Elaborator } from '../semantics/SymbolResolver';
+import { ElaborationService } from '../semantics/ElaborationService';
 import { prettySymbol, Symbol } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
+import { toVscRange } from '../utils';
 
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborator: Elaborator
+        private elaborator: ElaborationService
     ) { }
 
     provideHover(document: vscode.TextDocument, position: vscode.Position) {
@@ -61,5 +62,5 @@ function toHover(hoverDetail: HoverDetail): vscode.Hover {
     const text = hoverDetail.kind === 'symbol'
         ? prettySymbol(hoverDetail.symbol)
         : prettyType(hoverDetail.type);
-    return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(text, 'cog'));
+    return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(text, 'cog'), toVscRange(hoverDetail.node));
 }

@@ -6,7 +6,7 @@ import { IndexEntry, IndexingService } from "./IndexingService";
 import { ConstSymbol, FuncParamSymbol, FuncSymbol, GlobalSymbol, StructFieldSymbol, StructSymbol, Symbol, SymbolType, valueSymbolType } from "./sym";
 import { Type, unifyTypes } from "./type";
 
-export class Elaborator {
+export class ElaborationService {
     constructor(
         private indexService: IndexingService,
     ) { }
@@ -120,6 +120,8 @@ export class Elaborator {
                 const rightType = this.inferIntegerType(path, rightNode);
                 return unifyTypes(leftType, rightType);
             }
+        } else if (exprNode.type === "sizeof_expr") {
+            return { kind: "int", size: 64 };
         } else if (exprNode.type === "unary_expr") {
             const operandNode = exprNode.childForFieldName("operand");
             const operator = exprNode.childForFieldName("operator")?.text;
@@ -136,8 +138,6 @@ export class Elaborator {
                 return this.inferIntegerType(path, operandNode);
             } else if (operator === "!") {
                 return { kind: "bool" };
-            } else if (operator === "sizeof") {
-                return { kind: "int", size: 64 };
             } else {
                 throw new Error(`Unreachable: ${operator}`);
             }
@@ -440,6 +440,8 @@ export class Elaborator {
             if (literalNode.type === "int_literal") {
                 return parseInt(literalNode.text);
             }
+        } else if (node.type === "sizeof_expr") {
+            throw new Error("Not implemented");
         } else if (node.type === "unary_expr") {
             const operandNode = node.childForFieldName("operand");
             const operator = node.childForFieldName("operator")?.text;
@@ -474,12 +476,22 @@ export class Elaborator {
     }
 }
 
+//= Symbol namespaces
+
 enum SymbolNamespace {
     Type,
     Value,
 }
 
-//= Symbol merging
+function isInNamespace(type: SymbolType, namespace: SymbolNamespace): boolean {
+    if (namespace === SymbolNamespace.Type) {
+        return type === "struct";
+    } else {
+        return type !== "struct";
+    }
+}
+
+//== Symbol merging
 
 
 function mergeSymbol<S extends Symbol>(existing: S, sym: S): Symbol {
@@ -572,6 +584,8 @@ function mergeConstSymbol(existing: ConstSymbol, sym: ConstSymbol): ConstSymbol 
     }
 }
 
+//= Helpers
+
 function isFieldName(nameNode: SyntaxNode): boolean {
     return nameNode.parent!.type === "field_expr"
 }
@@ -593,12 +607,3 @@ function isValueName(nameNode: SyntaxNode): boolean {
         "name_expr",
     ].includes(nameNode.parent!.type);
 }
-
-function isInNamespace(type: SymbolType, namespace: SymbolNamespace): boolean {
-    if (namespace === SymbolNamespace.Type) {
-        return type === "struct";
-    } else {
-        return type !== "struct";
-    }
-}
-

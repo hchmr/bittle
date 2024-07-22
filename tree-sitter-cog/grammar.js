@@ -236,8 +236,8 @@ module.exports = grammar({
     _expr: $ => choice(
       $.grouped_expr,
       $.name_expr,
-      $.literal_expr,
       $.sizeof_expr,
+      $.literal_expr,
       $.binary_expr,
       $.ternary_expr,
       $.unary_expr,

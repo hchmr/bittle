@@ -7,8 +7,8 @@ import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { IncludeResolver } from './IncludeResolver';
 import { createParsingService } from './parser';
+import { ElaborationService } from './semantics/ElaborationService';
 import { IndexingService } from './semantics/IndexingService';
-import { Elaborator } from './semantics/SymbolResolver';
 import { ReactiveCache } from './utils/reactiveCache';
 import { createVirtualFileSystem } from './vfs';
 
@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const indexService = new IndexingService(cache, includeResolver, parsingService);
 
-    const elaborator = new Elaborator(indexService);
+    const elaborator = new ElaborationService(indexService);
 
     // Hover
 
