@@ -53,6 +53,22 @@ export class Elaborator {
         return symbol.fields?.find(f => f.name === nameNode.text);
     }
 
+    resolveStructMemberName(path: string, nameNode: SyntaxNode): StructFieldSymbol | undefined {
+        const structNode = nameNode.parent!.parent!;
+        assert(structNode.type === "struct_member");
+
+        const structNameNode = structNode.childForFieldName("name");
+        if (!structNameNode) {
+            return;
+        }
+
+        const symbol = this.resolveTypeName(path, structNameNode);
+        if (symbol?.kind !== "struct") {
+            return;
+        }
+        return symbol.fields?.find(f => f.name === nameNode.text);
+    }
+
     inferType(path: string, exprNode: SyntaxNode | Nullish): Type {
         if (!exprNode) {
             return { kind: "error" };
@@ -274,6 +290,18 @@ export class Elaborator {
                     }
                 }
             }
+        } else if (node.type === "struct_decl") {
+            const body = node.childForFieldName("body");
+            if (body) {
+                for (const child of body.namedChildren) {
+                    if (child.type === "struct_member") {
+                        const nameNode = child.childForFieldName("name");
+                        if (nameNode && nameNode.text === searchNode.text) {
+                            return this.createstructFieldSymbol(path, child);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -306,20 +334,20 @@ export class Elaborator {
             origins: [entry.origin],
             fields: body
                 ? stream(body.namedChildren)
-                    .filterMap(child => this.createstructFieldSymbol(entry, child))
+                    .filterMap(child => this.createstructFieldSymbol(entry.origin.file, child))
                     .toArray()
                 : undefined,
         };
     }
 
-    private createstructFieldSymbol(structEntry: IndexEntry, node: SyntaxNode): StructFieldSymbol {
+    private createstructFieldSymbol(path: string, node: SyntaxNode): StructFieldSymbol {
         const nameNode = node.childForFieldName("name") ?? undefined;
         const typeNode = node.childForFieldName("type");
         return {
             kind: "struct_field",
             name: nameNode?.text ?? "{unknown}",
-            origins: [{ file: structEntry.origin.file, nameNode, node }],
-            type: this.evalType(structEntry.origin.file, typeNode),
+            origins: [{ file: path, nameNode, node }],
+            type: this.evalType(path, typeNode),
         };
     }
 
@@ -549,7 +577,7 @@ function isFieldName(nameNode: SyntaxNode): boolean {
 }
 
 function isTypeName(nameNode: SyntaxNode): boolean {
-    return nameNode.parent!.type === "name_type";
+    return nameNode.parent!.type === "name_type" || nameNode.parent!.type === "struct_decl";
 }
 
 function isValueName(nameNode: SyntaxNode): boolean {
