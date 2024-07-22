@@ -44,10 +44,9 @@ export type ErrorType = {
 //= Type merging
 
 export function unifyTypes(t1: Type, t2: Type): Type {
-    if (t1.kind === "error") {
+    if (typeLe(t1, t2)) {
         return t2;
-    }
-    if (t2.kind === "error") {
+    } else if (typeLe(t2, t1)) {
         return t1;
     }
 
@@ -55,27 +54,23 @@ export function unifyTypes(t1: Type, t2: Type): Type {
         return { kind: "error" };
     }
 
-    if (t1.kind === "int") {
-        t2 = t2 as IntType;
+    if (t1.kind === "int" && t2.kind == t1.kind) {
         return {
             kind: "int",
             size: unifySize(t1.size, t2.size),
         };
-    } else if (t1.kind === "pointer") {
-        t2 = t2 as PointerType;
+    } else if (t1.kind === "pointer" && t2.kind == t1.kind) {
         return {
             kind: "pointer",
             elementType: unifyTypes(t1.elementType, t2.elementType),
         };
-    } else if (t1.kind === "array") {
-        t2 = t2 as ArrayType;
+    } else if (t1.kind === "array" && t2.kind == t1.kind) {
         return {
             kind: "array",
             elementType: unifyTypes(t1.elementType, t2.elementType),
             size: unifySize(t1.size, t2.size),
         };
-    } else if (t1.kind === "struct") {
-        t2 = t2 as StructType;
+    } else if (t1.kind === "struct" && t2.kind == t1.kind) {
         if (t1.name !== t2.name) {
             return { kind: "error" };
         }
@@ -90,32 +85,39 @@ export function unifyTypes(t1: Type, t2: Type): Type {
     }
 }
 
-export function typeEquals(t1: Type, t2: Type): boolean {
-    if (t1.kind === "error" || t2.kind === "error") {
-        return true;
-    }
+function typeEquals(t1: Type, t2: Type): boolean {
     if (t1.kind !== t2.kind) {
         return false;
     }
     if (t1.kind === "int") {
         t2 = t2 as IntType;
-        return sizeEquals(t1.size, t2.size);
+        return t1.size === t2.size;
     } else if (t1.kind === "pointer") {
         t2 = t2 as PointerType;
         return typeEquals(t1.elementType, t2.elementType);
     } else if (t1.kind === "array") {
         t2 = t2 as ArrayType;
-        return typeEquals(t1.elementType, t2.elementType) && sizeEquals(t1.size, t2.size);
+        return typeEquals(t1.elementType, t2.elementType) && t1.size === t2.size;
     } else if (t1.kind === "struct") {
         t2 = t2 as StructType;
         return t1.name === t2.name;
     } else {
         return true;
     }
+}
 
-    function sizeEquals(size1: number | undefined, size2: number | undefined) {
-        return size1 === undefined || size2 === undefined || size1 === size2;
-    }
+function isScalarType(type: Type): boolean {
+    return type.kind === "bool"
+        || type.kind === "int"
+        || type.kind === "pointer";
+}
+
+function typeLe(t1: Type, t2: Type): boolean {
+    return (t1.kind === "error")
+        || (isScalarType(t1) && t2.kind === "bool")
+        || (t1.kind === "int" && t2.kind === "int" && t1.size! <= t2.size!)
+        || (t1.kind === "pointer" && t2.kind === "pointer" && t1.elementType.kind === "void")
+        || typeEquals(t1, t2);
 }
 
 export function prettyType(t: Type): string {

@@ -1,6 +1,6 @@
 import assert from "assert";
 import { SyntaxNode } from "tree-sitter";
-import { Nullish } from "../utils";
+import { Nullish, rangeContains } from "../utils";
 import { stream } from "../utils/stream";
 import { IndexEntry, IndexingService } from "./IndexingService";
 import { ConstSymbol, FieldSymbol, FuncParamSymbol, FuncSymbol, GlobalSymbol, StructSymbol, Symbol, SymbolType, valueSymbolType } from "./sym";
@@ -30,8 +30,7 @@ export class Elaborator {
     resolveValueName(path: string, nameNode: SyntaxNode): Symbol | undefined {
         let node: SyntaxNode | undefined = nameNode.parent!;
 
-        const name = nameNode.text;
-        const symbol = this.lookupSymbolFromNode(path, node, name, SymbolNamespace.Value);
+        const symbol = this.lookupSymbolFromNode(path, node, nameNode, SymbolNamespace.Value);
         if (symbol) {
             return symbol;
         }
@@ -228,10 +227,13 @@ export class Elaborator {
         return symbols[0];
     }
 
-    private lookupSymbolFromNode(path: string, node: SyntaxNode, name: string, namespace: SymbolNamespace): Symbol | undefined {
+    private lookupSymbolFromNode(path: string, node: SyntaxNode, nameNode: SyntaxNode, namespace: SymbolNamespace): Symbol | undefined {
         let scopeNode: SyntaxNode | null = node;
         do {
-            const symbol = this.lookupSymbolInNode(path, scopeNode, name, namespace);
+            const symbol = this.lookupSymbolInNode(path, scopeNode, nameNode, namespace);
+            if (symbol === 'loop') {
+                return;
+            }
             if (symbol) {
                 return symbol;
             }
@@ -239,7 +241,7 @@ export class Elaborator {
         } while (scopeNode);
     }
 
-    private lookupSymbolInNode(path: string, node: SyntaxNode, name: string, namespace: SymbolNamespace): Symbol | undefined {
+    private lookupSymbolInNode(path: string, node: SyntaxNode, searchNode: SyntaxNode, namespace: SymbolNamespace): Symbol | 'loop' | undefined {
         if (namespace !== SymbolNamespace.Value)
             return;
 
@@ -247,7 +249,11 @@ export class Elaborator {
             for (const child of node.namedChildren) {
                 if (child.type === "local_decl") {
                     const nameNode = child.childForFieldName("name");
-                    if (nameNode && nameNode.text === name) {
+                    if (nameNode && nameNode.text === searchNode.text) {
+                        const valueNode = child.childForFieldName("value");
+                        if (valueNode && rangeContains(valueNode, searchNode)) {
+                            return 'loop';
+                        }
                         return this.createLocalSymbol(path, child);
                     }
                 }
@@ -258,7 +264,7 @@ export class Elaborator {
                 for (const child of paramsNode.namedChildren) {
                     if (child.type === "param_decl") {
                         const nameNode = child.childForFieldName("name");
-                        if (nameNode && nameNode.text === name) {
+                        if (nameNode && nameNode.text === searchNode.text) {
                             return this.createFuncParamSymbol(path, child);
                         }
                     }
@@ -417,7 +423,7 @@ export class Elaborator {
                 return leftValue - rightValue;
             }
         } else if (node.type === "name_expr") {
-            const symbol = this.lookupSymbolFromNode(path, node, node.text, SymbolNamespace.Value);
+            const symbol = this.lookupSymbolFromNode(path, node.parent!, node, SymbolNamespace.Value);
             if (symbol?.kind !== "const") {
                 return;
             }
