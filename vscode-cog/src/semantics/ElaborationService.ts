@@ -69,6 +69,9 @@ export class ElaborationService {
         return symbol.fields?.find(f => f.name === nameNode.text);
     }
 
+    //==========================================================================
+    //= Type Inference
+
     inferType(path: string, exprNode: SyntaxNode | Nullish): Type {
         if (!exprNode) {
             return { kind: "error" };
@@ -186,6 +189,9 @@ export class ElaborationService {
             : { kind: "error" };
     }
 
+    //==========================================================================
+    //= Type Evaluation
+
     evalType(path: string, node: SyntaxNode | Nullish): Type {
         if (!node) {
             return { kind: "error" };
@@ -227,6 +233,59 @@ export class ElaborationService {
             throw new Error(`Unreachable: ${node.type}`);
         }
     }
+
+    //==========================================================================
+    //= Constant Evaluation
+
+    private evalConst(path: string, node: SyntaxNode | Nullish): number | undefined {
+        if (!node) {
+            return;
+        }
+        if (node.type === "literal_expr") {
+            const literalNode = node.firstNamedChild;
+            if (!literalNode) {
+                return;
+            }
+            if (literalNode.type === "int_literal") {
+                return parseInt(literalNode.text);
+            }
+        } else if (node.type === "sizeof_expr") {
+            throw new Error("Not implemented");
+        } else if (node.type === "unary_expr") {
+            const operandNode = node.childForFieldName("operand");
+            const operator = node.childForFieldName("operator")?.text;
+            const operandValue = this.evalConst(path, operandNode);
+            if (!operandValue) {
+                return undefined;
+            }
+            if (operator === "-") {
+                return -operandValue;
+            }
+        } else if (node.type === "binary_expr") {
+            const leftNode = node.childForFieldName("left");
+            const rightNode = node.childForFieldName("right");
+            const operator = node.childForFieldName("operator")?.text;
+            const leftValue = this.evalConst(path, leftNode);
+            const rightValue = this.evalConst(path, rightNode);
+            if (!leftValue || !rightValue) {
+                return;
+            }
+            if (operator === "+") {
+                return leftValue + rightValue;
+            } else if (operator === "-") {
+                return leftValue - rightValue;
+            }
+        } else if (node.type === "name_expr") {
+            const symbol = this.lookupSymbolFromNode(path, node.parent!, node, SymbolNamespace.Value);
+            if (symbol?.kind !== "const") {
+                return;
+            }
+            return symbol.value;
+        }
+    }
+
+    //==========================================================================
+    //= Symbol Lookup
 
     private existsStruct(path: string, name: string): boolean {
         return !stream(this.indexService.index(path).entries)
@@ -304,6 +363,9 @@ export class ElaborationService {
             }
         }
     }
+
+    //==========================================================================
+    //= Creating symbols
 
     private createSymbolFromEntries(type: SymbolType, entries: IndexEntry[]): Symbol {
         return stream(entries)
@@ -408,10 +470,6 @@ export class ElaborationService {
         };
     }
 
-    private createEnumMemberSymbol(entry: IndexEntry): Symbol {
-        return this.createConstSymbol(entry); // TODO
-    }
-
     private createLocalSymbol(path: string, node: SyntaxNode): Symbol {
         const nameNode = node.childForFieldName("name") ?? undefined;
         const typeNode = node.childForFieldName("type");
@@ -427,55 +485,9 @@ export class ElaborationService {
                     : { kind: "error" },
         };
     }
-
-    private evalConst(path: string, node: SyntaxNode | Nullish): number | undefined {
-        if (!node) {
-            return;
-        }
-        if (node.type === "literal_expr") {
-            const literalNode = node.firstNamedChild;
-            if (!literalNode) {
-                return;
-            }
-            if (literalNode.type === "int_literal") {
-                return parseInt(literalNode.text);
-            }
-        } else if (node.type === "sizeof_expr") {
-            throw new Error("Not implemented");
-        } else if (node.type === "unary_expr") {
-            const operandNode = node.childForFieldName("operand");
-            const operator = node.childForFieldName("operator")?.text;
-            const operandValue = this.evalConst(path, operandNode);
-            if (!operandValue) {
-                return undefined;
-            }
-            if (operator === "-") {
-                return -operandValue;
-            }
-        } else if (node.type === "binary_expr") {
-            const leftNode = node.childForFieldName("left");
-            const rightNode = node.childForFieldName("right");
-            const operator = node.childForFieldName("operator")?.text;
-            const leftValue = this.evalConst(path, leftNode);
-            const rightValue = this.evalConst(path, rightNode);
-            if (!leftValue || !rightValue) {
-                return;
-            }
-            if (operator === "+") {
-                return leftValue + rightValue;
-            } else if (operator === "-") {
-                return leftValue - rightValue;
-            }
-        } else if (node.type === "name_expr") {
-            const symbol = this.lookupSymbolFromNode(path, node.parent!, node, SymbolNamespace.Value);
-            if (symbol?.kind !== "const") {
-                return;
-            }
-            return symbol.value;
-        }
-    }
 }
 
+//================================================================================
 //= Symbol namespaces
 
 enum SymbolNamespace {
@@ -491,8 +503,8 @@ function isInNamespace(type: SymbolType, namespace: SymbolNamespace): boolean {
     }
 }
 
+//================================================================================
 //== Symbol merging
-
 
 function mergeSymbol<S extends Symbol>(existing: S, sym: S): Symbol {
     if (existing.kind === "struct") {
@@ -584,6 +596,7 @@ function mergeConstSymbol(existing: ConstSymbol, sym: ConstSymbol): ConstSymbol 
     }
 }
 
+//================================================================================
 //= Helpers
 
 function isFieldName(nameNode: SyntaxNode): boolean {
