@@ -2,7 +2,7 @@ import { SyntaxNode } from 'tree-sitter';
 import * as vscode from 'vscode';
 import { isExprNode, isTypeNode, ParsingService } from '../parser';
 import { ElaborationService } from '../semantics/ElaborationService';
-import { prettySymbol, Symbol } from '../semantics/sym';
+import { prettySym, Sym } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
 import { toVscRange } from '../utils';
 
@@ -34,9 +34,9 @@ export class HoverProvider implements vscode.HoverProvider {
 
     getDetailForNode(document: vscode.TextDocument, node: SyntaxNode): HoverDetail | undefined {
         if (node.type === 'identifier') {
-            const symbol = this.elaborator.resolveSymbol(document.fileName, node);
-            if (symbol) {
-                return { kind: 'symbol', symbol, node }
+            const sym = this.elaborator.resolveSymbol(document.fileName, node);
+            if (sym) {
+                return { kind: 'sym', sym, node }
             }
         }
         if (isExprNode(node)) {
@@ -55,12 +55,12 @@ export class HoverProvider implements vscode.HoverProvider {
 };
 
 type HoverDetail =
-    | { kind: 'symbol', symbol: Symbol, node: SyntaxNode }
+    | { kind: 'sym', sym: Sym, node: SyntaxNode }
     | { kind: 'type', type: Type, node: SyntaxNode };
 
 function toHover(hoverDetail: HoverDetail): vscode.Hover {
-    const text = hoverDetail.kind === 'symbol'
-        ? prettySymbol(hoverDetail.symbol)
+    const text = hoverDetail.kind === 'sym'
+        ? prettySym(hoverDetail.sym)
         : prettyType(hoverDetail.type);
     return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(text, 'cog'), toVscRange(hoverDetail.node));
 }

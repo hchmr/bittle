@@ -8,7 +8,11 @@ export function pointEquals(x1: Point, x2: Point): boolean {
 }
 
 export function pointLe(x1: Point, x2: Point): boolean {
-    return x1.row <= x2.row && x1.column <= x2.column;
+    return x1.row < x2.row || (x1.row === x2.row && x1.column <= x2.column);
+}
+
+export function pointLt(x1: Point, x2: Point): boolean {
+    return !pointLe(x2, x1);
 }
 
 export function fromVscPosition(position: vscode.Position): Point {
@@ -33,6 +37,11 @@ export function rangeEquals(x1: PointRange, x2: PointRange): boolean {
 export function rangeContains(x1: PointRange, x2: PointRange): boolean {
     return pointLe(x1.startPosition, x2.startPosition)
         && pointLe(x2.endPosition, x1.endPosition);
+}
+
+export function rangeContainsPoint(range: PointRange, point: Point): boolean {
+    return pointLe(range.startPosition, point)
+        && pointLe(point, range.endPosition);
 }
 
 export function rangeEmpty(range: PointRange): boolean {

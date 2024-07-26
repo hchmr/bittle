@@ -44,6 +44,10 @@ export type ErrorType = {
 //= Type merging
 
 export function unifyTypes(t1: Type, t2: Type): Type {
+    return tryUnifyTypes(t1, t2, () => { });
+}
+
+export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
     if (typeLe(t1, t2)) {
         return t2;
     } else if (typeLe(t2, t1)) {
@@ -51,27 +55,23 @@ export function unifyTypes(t1: Type, t2: Type): Type {
     }
 
     if (t1.kind !== t2.kind) {
+        onError();
         return { kind: "error" };
     }
 
     if (t1.kind === "int" && t2.kind == t1.kind) {
-        return {
-            kind: "int",
-            size: unifySize(t1.size, t2.size),
-        };
+        const size = unifySize(t1.size, t2.size, onError);
+        return { kind: "int", size: size };
     } else if (t1.kind === "pointer" && t2.kind == t1.kind) {
-        return {
-            kind: "pointer",
-            elementType: unifyTypes(t1.elementType, t2.elementType),
-        };
+        const elementType = tryUnifyTypes(t1.elementType, t2.elementType, onError);
+        return { kind: "pointer", elementType: elementType };
     } else if (t1.kind === "array" && t2.kind == t1.kind) {
-        return {
-            kind: "array",
-            elementType: unifyTypes(t1.elementType, t2.elementType),
-            size: unifySize(t1.size, t2.size),
-        };
+        const elementType = tryUnifyTypes(t1.elementType, t2.elementType, onError);
+        const size = unifySize(t1.size, t2.size, onError);
+        return { kind: "array", elementType: elementType, size: size };
     } else if (t1.kind === "struct" && t2.kind == t1.kind) {
         if (t1.name !== t2.name) {
+            onError();
             return { kind: "error" };
         }
         return t1;
@@ -79,13 +79,19 @@ export function unifyTypes(t1: Type, t2: Type): Type {
         return t1;
     }
 
-    function unifySize(size1: number | undefined, size2: number | undefined) {
-        size1 ??= size2;
-        return size1 === size2 ? size1 : undefined;
+    function unifySize(size1: number | undefined, size2: number | undefined, onError: () => void): number | undefined {
+        if (size1 !== undefined && size2 !== undefined && size1 !== size2) {
+            onError();
+            return undefined;
+        }
+        return size1 ?? size2;
     }
 }
 
 function typeEquals(t1: Type, t2: Type): boolean {
+    if (t1 === t2) {
+        return true;
+    }
     if (t1.kind !== t2.kind) {
         return false;
     }
@@ -106,18 +112,18 @@ function typeEquals(t1: Type, t2: Type): boolean {
     }
 }
 
-function isScalarType(type: Type): boolean {
+export function isScalarType(type: Type): boolean {
     return type.kind === "bool"
         || type.kind === "int"
         || type.kind === "pointer";
 }
 
-function typeLe(t1: Type, t2: Type): boolean {
-    return (t1.kind === "error")
+export function typeLe(t1: Type, t2: Type): boolean {
+    return typeEquals(t1, t2)
+        || (t1.kind === "error")
         || (isScalarType(t1) && t2.kind === "bool")
         || (t1.kind === "int" && t2.kind === "int" && t1.size! <= t2.size!)
         || (t1.kind === "pointer" && t2.kind === "pointer" && t1.elementType.kind === "void")
-        || typeEquals(t1, t2);
 }
 
 export function prettyType(t: Type): string {

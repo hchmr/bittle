@@ -8,7 +8,6 @@ import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { IncludeResolver } from './IncludeResolver';
 import { createParsingService } from './parser';
 import { ElaborationService } from './semantics/ElaborationService';
-import { IndexingService } from './semantics/IndexingService';
 import { ReactiveCache } from './utils/reactiveCache';
 import { createVirtualFileSystem } from './vfs';
 
@@ -22,14 +21,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     const includeResolver = new IncludeResolver(vfs);
 
-    const indexService = new IndexingService(cache, includeResolver, parsingService);
-
-    const elaborator = new ElaborationService(indexService);
+    const elaborationService = new ElaborationService(parsingService, includeResolver);
 
     // Hover
 
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, elaborator)),
+        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, elaborationService)),
     );
 
     // Semantic tokens
@@ -79,7 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
-        vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborator)),
+        vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborationService)),
     );
 
     // TODO:

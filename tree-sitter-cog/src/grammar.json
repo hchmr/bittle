@@ -343,8 +343,12 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "SYMBOL",
-              "name": "block_stmt"
+              "type": "FIELD",
+              "name": "body",
+              "content": {
+                "type": "SYMBOL",
+                "name": "block_stmt"
+              }
             },
             {
               "type": "STRING",
@@ -909,11 +913,11 @@
         },
         {
           "type": "SYMBOL",
-          "name": "literal_expr"
+          "name": "sizeof_expr"
         },
         {
           "type": "SYMBOL",
-          "name": "sizeof_expr"
+          "name": "literal_expr"
         },
         {
           "type": "SYMBOL",
@@ -1690,7 +1694,7 @@
     },
     "char_literal": {
       "type": "PATTERN",
-      "value": "'([^'\\\\]|\\\\.)"
+      "value": "'([^'\\\\]|\\\\.)'"
     },
     "number_literal": {
       "type": "TOKEN",

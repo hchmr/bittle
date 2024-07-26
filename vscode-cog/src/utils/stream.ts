@@ -14,6 +14,7 @@ export interface Stream<T> extends Iterable<T> {
     some(p: (x: T) => unknown): boolean;
     every(p: (x: T) => unknown): boolean;
     isEmpty(): boolean;
+    first(): T | undefined;
     toArray(): T[];
     forEach(f: (x: T) => void): void;
 }
@@ -136,6 +137,9 @@ class StreamImpl<T> implements Stream<T> {
     }
     isEmpty(): boolean {
         return !this.some(() => true);
+    }
+    first(): T | undefined {
+        return this.find(() => true);
     }
     toArray(): T[] {
         return Array.from(this.source);

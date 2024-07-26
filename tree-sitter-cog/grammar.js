@@ -22,7 +22,6 @@ const PREC = {
 const multiplicativeOperators = ['*', '/', '%'];
 const additiveOperators = ['+', '-'];
 const shiftOperators = ['<<', '>>'];
-const bitwiseOperators = ['&', '|', '^'];
 const comparativeOperators = ['==', '!=', '<', '<=', '>', '>='];
 const assignmentOperators = [...multiplicativeOperators, ...additiveOperators, ''].map(operator => operator + '=');
 
@@ -103,7 +102,7 @@ module.exports = grammar({
       field('params', $.param_list),
       optional(seq(':', field('return_type', $._type))),
       choice(
-        $.block_stmt,
+        field('body', $.block_stmt),
         ';',
       ),
     ),
@@ -336,9 +335,9 @@ module.exports = grammar({
       $.null_literal,
     ),
 
-    string_literal: $ => /"([^"\\]|\\.)*"/,
+    string_literal: _ => /"([^"\\]|\\.)*"/,
 
-    char_literal: $ => /'([^'\\]|\\.)/,
+    char_literal: _ => /'([^'\\]|\\.)'/,
 
     number_literal: _ => token(choice(
       /\d+/,
