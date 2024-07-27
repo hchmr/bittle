@@ -1,6 +1,6 @@
 import { SyntaxNode, Tree } from 'tree-sitter';
 import * as vscode from 'vscode';
-import { ParsingService } from '../parser';
+import { ParsingService } from '../services/parsingService';
 import { fromVscRange, rangeEmpty, toVscRange } from '../utils';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 

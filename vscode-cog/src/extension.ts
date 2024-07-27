@@ -5,9 +5,9 @@ import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/go
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
-import { IncludeResolver } from './IncludeResolver';
-import { createParsingService } from './parser';
-import { ElaborationService } from './semantics/ElaborationService';
+import { ElaborationService } from './services/elaborationService';
+import { IncludeResolver } from './services/IncludeResolver';
+import { createParsingService } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
 import { createVirtualFileSystem } from './vfs';
 

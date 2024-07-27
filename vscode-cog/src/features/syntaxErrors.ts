@@ -1,7 +1,7 @@
 import { Query } from 'tree-sitter';
 import Cog from 'tree-sitter-cog';
 import * as vscode from 'vscode';
-import { ParsingService } from '../parser';
+import { ParsingService } from '../services/parsingService';
 import { toVscRange } from '../utils';
 
 export class SyntaxErrorProvider {

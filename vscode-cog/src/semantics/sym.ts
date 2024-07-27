@@ -71,7 +71,7 @@ export type Origin = {
     nameNode?: SyntaxNode;
 }
 
-export function valueSymType(sym: Sym): Type {
+export function valueSymType(sym: Sym): Type | undefined {
     if (sym.kind === SymKind.Func) {
         return sym.returnType;
     } else if (sym.kind === SymKind.Global) {
@@ -83,7 +83,7 @@ export function valueSymType(sym: Sym): Type {
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {
-        throw new Error(`Unreachable: ${sym.kind}`);
+        throw undefined;
     }
 }
 
@@ -103,7 +103,7 @@ export function prettySym(sym: Sym): string {
     } else if (sym.kind === SymKind.Local) {
         return `var ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Const) {
-        return `const ${sym.name}: ${prettyType(valueSymType(sym))} = ${sym.value}`;
+        return `const ${sym.name}: ${prettyType(valueSymType(sym)!)} = ${sym.value}`;
     } else if (sym.kind === SymKind.FuncParam) {
         return `(parameter) ${sym.name}: ${prettyType(sym.type)}`;
     } else {

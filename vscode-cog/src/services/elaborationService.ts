@@ -1,9 +1,9 @@
 import { SyntaxNode } from "tree-sitter";
-import { IncludeResolver } from "../IncludeResolver";
-import { ParsingService } from "../parser";
-import { Elaborator } from "./Elaborator";
-import { StructFieldSym, Sym } from "./sym";
-import { Type } from "./type";
+import { IncludeResolver } from "./IncludeResolver";
+import { ParsingService } from './parsingService';
+import { ElaborationError, Elaborator, TypeLayout } from "../semantics/Elaborator";
+import { StructFieldSym, Sym } from "../semantics/sym";
+import { Type } from "../semantics/type";
 
 interface IElaborationService {
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined;
@@ -16,6 +16,10 @@ export class ElaborationService implements IElaborationService {
         private parsingService: ParsingService,
         private includeResolver: IncludeResolver,
     ) { }
+
+    getErrors(path: string): ElaborationError[] {
+        return this.createElaborator(path).errors;
+    }
 
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
         if (isFieldName(nameNode)) {
@@ -53,17 +57,26 @@ export class ElaborationService implements IElaborationService {
         return this.createElaboratorForScope(path, node).typeEval(node);
     }
 
+    getLayout(path: string, type: Type): TypeLayout {
+        return this.createElaborator(path).typeLayout(type);
+    }
+
     private lookup(path: string, node: SyntaxNode | null, name: string): Sym | undefined {
         return this.createElaboratorForScope(path, node).scope.lookup(name);
     }
 
     private createElaboratorForScope(path: string, node: SyntaxNode | null): Elaborator {
-        const tree = this.parsingService.parse(path);
-        const elaborator = new Elaborator(this.parsingService, this.includeResolver, path);
-        elaborator.elab(tree);
+        const elaborator = this.createElaborator(path);
         if (!node || !elaborator.gotoPosition(node.startPosition)) {
             throw new Error("Failed to create elaborator for scope");
         }
+        return elaborator;
+    }
+
+    private createElaborator(path: string) {
+        const tree = this.parsingService.parse(path);
+        const elaborator = new Elaborator(this.parsingService, this.includeResolver, path);
+        elaborator.elab(tree);
         return elaborator;
     }
 }

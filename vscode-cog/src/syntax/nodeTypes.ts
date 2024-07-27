@@ -1,5 +1,7 @@
 // Node types
 
+import { SyntaxNode } from "tree-sitter";
+
 export enum TopLevelNodeType {
     Include = "include_decl",
     Enum = "enum_decl",
@@ -46,4 +48,20 @@ export enum LiteralNodeType {
     Char = "char_literal",
     String = "string_literal",
     Null = "null_literal",
+}
+
+export function isTopLevelNode(node: SyntaxNode): boolean {
+    return Object.values(<Record<string, string>>TopLevelNodeType).includes(node.type);
+}
+
+export function isTypeNode(node: SyntaxNode): boolean {
+    return Object.values(<Record<string, string>>TypeNodeType).includes(node.type);
+}
+
+export function isStmtNode(node: SyntaxNode): boolean {
+    return Object.values(<Record<string, string>>StmtNodeType).includes(node.type);
+}
+
+export function isExprNode(node: SyntaxNode): boolean {
+    return Object.values(<Record<string, string>>ExprNodeType).includes(node.type);
 }

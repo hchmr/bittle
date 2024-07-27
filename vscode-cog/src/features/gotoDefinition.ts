@@ -1,7 +1,7 @@
 import path from "path";
 import * as vscode from "vscode";
-import { ParsingService } from "../parser";
-import { ElaborationService } from "../semantics/ElaborationService";
+import { ParsingService } from '../services/parsingService';
+import { ElaborationService } from "../services/elaborationService";
 import { fromVscPosition, toVscRange } from "../utils";
 import { getNodesAtPosition } from "../utils/nodeSearch";
 import { VirtualFileSystem } from "../vfs";

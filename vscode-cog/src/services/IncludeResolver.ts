@@ -1,6 +1,6 @@
 import path from "path";
 import { SyntaxNode } from "tree-sitter";
-import { VirtualFileSystem } from "./vfs";
+import { VirtualFileSystem } from "../vfs";
 
 // IncludeResolver
 

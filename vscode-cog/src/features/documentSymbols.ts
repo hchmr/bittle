@@ -1,6 +1,6 @@
 import Parser from 'tree-sitter';
 import * as vscode from 'vscode';
-import { ParsingService } from '../parser';
+import { ParsingService } from '../services/parsingService';
 import { toVscRange } from '../utils';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {

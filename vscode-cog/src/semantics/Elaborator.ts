@@ -1,9 +1,16 @@
 import assert from "assert"
 import { Point, SyntaxNode, Tree } from "tree-sitter"
-import { IncludeResolver } from "../IncludeResolver"
-import { ParsingService } from "../parser"
-import { Nullish, PointRange, rangeContainsPoint } from "../utils"
+import { IncludeResolver } from "../services/IncludeResolver"
+import { ParsingService } from '../services/parsingService'
+import {
+    ExprNodeType,
+    isStmtNode,
+    isTopLevelNode,
+    LiteralNodeType, StmtNodeType, TopLevelNodeType, TypeNodeType
+} from "../syntax/nodeTypes"
+import { Nullish, PointRange } from "../utils"
 import { stream } from "../utils/stream"
+import { Scope } from "./Scope"
 import {
     ConstSym,
     FuncParamSym,
@@ -16,51 +23,20 @@ import {
     SymKind
 } from './sym'
 import { isScalarType, prettyType, tryUnifyTypes, Type, typeLe } from "./type"
-import { ExprNodeType, LiteralNodeType, StmtNodeType, TopLevelNodeType, TypeNodeType } from "./TypeNodeType"
 
-export class Scope {
-    symbols: Map<string, Sym> = new Map();
-    children: Scope[] = [];
-
-    constructor(public file: string, public range: PointRange, public parent?: Scope) {
-        parent?.children.push(this)
-    }
-
-    add(sym: Sym) {
-        this.symbols.set(sym.name, sym)
-    }
-
-    lookup(name: string): Sym | undefined {
-        return this.symbols.get(name) ?? this.parent?.lookup(name);
-    }
-
-    get(name: string): Sym | undefined {
-        return this.symbols.get(name);
-    }
-
-    findScopeForPosition(file: string, position: Point): Scope | undefined {
-        if (file !== this.file || !rangeContainsPoint(this.range, position))
-            return;
-
-        for (const child of this.children) {
-            const scope = child.findScopeForPosition(file, position);
-            if (scope) {
-                return scope;
-            }
-        }
-
-        return this;
-    }
-}
-
-type Location = {
+export type ErrorLocation = {
     file: string,
     range: PointRange,
 }
 
-type ElaborationError = {
+export type ElaborationError = {
     message: string,
-    location: Location,
+    location: ErrorLocation,
+}
+
+export type TypeLayout = {
+    size: number,
+    align: number,
 }
 
 export class Elaborator {
@@ -218,7 +194,7 @@ export class Elaborator {
         }
     }
 
-    typeLayout(type: Type): { size: number, align: number } {
+    typeLayout(type: Type): TypeLayout {
         switch (type.kind) {
             case "void":
                 return { size: 0, align: 1 }
@@ -340,7 +316,7 @@ export class Elaborator {
     //== Top-level
 
     private elabTree(tree: Tree) {
-        for (const node of stream(tree.rootNode.children).filter(node => isValueOf(TopLevelNodeType, node.type))) {
+        for (const node of stream(tree.rootNode.children).filter(node => isTopLevelNode(node))) {
             this.elabTopLevelDecl(node)
         }
     }
@@ -573,7 +549,7 @@ export class Elaborator {
 
     private elabBlockStmt(node: SyntaxNode) {
         this.enterScope(node);
-        for (const stmtNode of node.namedChildren.filter(n => isValueOf(StmtNodeType, n.type))) {
+        for (const stmtNode of node.namedChildren.filter(n => isStmtNode(n))) {
             this.elabStmt(stmtNode);
         }
         this.exitScope();
@@ -902,7 +878,7 @@ export class Elaborator {
         }
 
         const params = funcSym.params;
-        const args = (argsNode?.children ?? []).filter(n => isValueOf(ExprNodeType, n.type));
+        const args = (argsNode?.children ?? []).filter(n => n.type === "arg_expr");
 
         if (args.length < params.length) {
             this.reportError(node, `Too few arguments provided(${args.length} < ${params.length}).`);
@@ -984,10 +960,6 @@ export class Elaborator {
 
 //================================================================================
 //== Utility functions
-
-function isValueOf(enumType: Record<string, string>, value: string): boolean {
-    return Object.values(enumType).includes(value);
-}
 
 function getName(node: SyntaxNode): string | undefined {
     const nameNode = node.childForFieldName("name");

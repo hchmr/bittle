@@ -1,15 +1,16 @@
 import { SyntaxNode } from 'tree-sitter';
 import * as vscode from 'vscode';
-import { isExprNode, isTypeNode, ParsingService } from '../parser';
-import { ElaborationService } from '../semantics/ElaborationService';
 import { prettySym, Sym } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
+import { ElaborationService } from '../services/elaborationService';
+import { ParsingService } from '../services/parsingService';
+import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { toVscRange } from '../utils';
 
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborator: ElaborationService
+        private elaborationService: ElaborationService
     ) { }
 
     provideHover(document: vscode.TextDocument, position: vscode.Position) {
@@ -34,19 +35,19 @@ export class HoverProvider implements vscode.HoverProvider {
 
     getDetailForNode(document: vscode.TextDocument, node: SyntaxNode): HoverDetail | undefined {
         if (node.type === 'identifier') {
-            const sym = this.elaborator.resolveSymbol(document.fileName, node);
+            const sym = this.elaborationService.resolveSymbol(document.fileName, node);
             if (sym) {
                 return { kind: 'sym', sym, node }
             }
         }
         if (isExprNode(node)) {
-            const type = this.elaborator.inferType(document.fileName, node);
+            const type = this.elaborationService.inferType(document.fileName, node);
             if (type) {
                 return { kind: 'type', type, node }
             }
         }
         if (isTypeNode(node)) {
-            const type = this.elaborator.evalType(document.fileName, node);
+            const type = this.elaborationService.evalType(document.fileName, node);
             if (type) {
                 return { kind: 'type', type, node }
             }
