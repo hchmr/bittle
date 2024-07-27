@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { CodeActionsProvider } from './features/codeActions';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/gotoDefinition';
@@ -42,21 +43,24 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Syntax errors
 
-    const diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
-    context.subscriptions.push(diagnosticsCollection);
+    const syntaxErrorProvider = new SyntaxErrorProvider(parsingService);
+    context.subscriptions.push(syntaxErrorProvider);
+
+    const elaborationErrorProvider = new ElaborationErrorProvider(elaborationService, cache);
+    context.subscriptions.push(elaborationErrorProvider);
 
     function refreshDiagnostics(document: vscode.TextDocument) {
         if (document.languageId !== 'cog')
             return;
-        const diagnostics = syntaxErrorProvider.provideDiagnostics(document);
-        diagnosticsCollection.set(document.uri, diagnostics);
+
+        syntaxErrorProvider.updateDiagnostics(document);
+        elaborationErrorProvider.updateDiagnostics();
     }
 
-    const syntaxErrorProvider = new SyntaxErrorProvider(parsingService);
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(document => refreshDiagnostics(document)),
         vscode.workspace.onDidChangeTextDocument(event => refreshDiagnostics(event.document)),
-        vscode.workspace.onDidCloseTextDocument(document => diagnosticsCollection.delete(document.uri)),
+        vscode.workspace.onDidCloseTextDocument(document => refreshDiagnostics(document)),
     );
     vscode.workspace.textDocuments.forEach(refreshDiagnostics);
 
@@ -78,6 +82,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
         vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborationService)),
     );
+
+
 
     // TODO:
     // - Go to definition

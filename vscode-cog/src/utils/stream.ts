@@ -5,6 +5,7 @@ export interface Stream<T> extends Iterable<T> {
     filter<S extends T>(p: (x: T) => x is S): Stream<S>;
     filter(p: (x: T) => unknown): Stream<T>;
     groupBy<K>(f: (x: T) => K): Stream<[K, T[]]>;
+    groupBy<K, V>(f: (x: T) => K, g: (x: T) => V): Stream<[K, V[]]>;
     filterMap<U>(f: (x: T) => U | undefined): Stream<U>;
     zip<U>(other: Iterable<U>): Stream<[T, U]>;
     zipLongest<U>(other: Iterable<U>): Stream<[T, U] | [undefined, U] | [T, undefined]>;
@@ -55,16 +56,19 @@ class StreamImpl<T> implements Stream<T> {
             }
         })(this.source));
     }
-    groupBy<K>(f: (x: T) => K): Stream<[K, T[]]> {
+    groupBy<K>(f: (x: T) => K): Stream<[K, T[]]>;
+    groupBy<K, V>(f: (x: T) => K, g: (x: T) => V): Stream<[K, V[]]>;
+    groupBy<K, V>(f: (x: T) => K, g?: (x: T) => V): Stream<[K, V[]]> {
+        g ??= (x => x as unknown as V);
         return new StreamImpl({
             [Symbol.iterator]: () => {
-                const groups = new Map<K, T[]>();
+                const groups = new Map<K, V[]>();
                 for (const x of this.source) {
                     const key = f(x);
                     if (!groups.has(key)) {
                         groups.set(key, []);
                     }
-                    groups.get(key)!.push(x);
+                    groups.get(key)!.push(g(x));
                 }
                 return groups.entries();
             }
