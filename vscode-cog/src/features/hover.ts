@@ -1,6 +1,7 @@
 import { SyntaxNode } from 'tree-sitter';
 import * as vscode from 'vscode';
-import { prettySym, Sym } from '../semantics/sym';
+import { TypeLayout } from '../semantics/Elaborator';
+import { prettySym, Sym, SymKind, valueSymType } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
@@ -37,31 +38,55 @@ export class HoverProvider implements vscode.HoverProvider {
         if (node.type === 'identifier') {
             const sym = this.elaborationService.resolveSymbol(document.fileName, node);
             if (sym) {
-                return { kind: 'sym', sym, node }
+                return this.addLayout(document, { kind: 'sym', sym, node })
             }
         }
         if (isExprNode(node)) {
             const type = this.elaborationService.inferType(document.fileName, node);
             if (type) {
-                return { kind: 'type', type, node }
+                return this.addLayout(document, { kind: 'type', type, node })
             }
         }
         if (isTypeNode(node)) {
             const type = this.elaborationService.evalType(document.fileName, node);
             if (type) {
-                return { kind: 'type', type, node }
+                return this.addLayout(document, { kind: 'type', type, node })
+            }
+        }
+    }
+
+    addLayout(document: vscode.TextDocument, hoverDetail: HoverDetail): HoverDetail {
+        let type = hoverDetail.kind === 'sym'
+            ? structSymType(hoverDetail.sym) ?? valueSymType(hoverDetail.sym)
+            : hoverDetail.type;
+
+        if (type) {
+            hoverDetail.layout = this.elaborationService.getLayout(document.fileName, type);
+        }
+
+        return hoverDetail;
+
+        function structSymType(sym: Sym): Type | undefined {
+            if (sym.kind === SymKind.Struct) {
+                return { kind: 'struct', name: sym.name };
             }
         }
     }
 };
 
 type HoverDetail =
-    | { kind: 'sym', sym: Sym, node: SyntaxNode }
-    | { kind: 'type', type: Type, node: SyntaxNode };
+    | { kind: 'sym', sym: Sym, node: SyntaxNode, layout?: TypeLayout }
+    | { kind: 'type', type: Type, node: SyntaxNode, layout?: TypeLayout }
 
 function toHover(hoverDetail: HoverDetail): vscode.Hover {
-    const text = hoverDetail.kind === 'sym'
+    let text = hoverDetail.kind === 'sym'
         ? prettySym(hoverDetail.sym)
         : prettyType(hoverDetail.type);
+
+    if (hoverDetail.layout) {
+        const { size, align } = hoverDetail.layout;
+        text += ` // size = ${size}, align = ${align}`;
+    }
+
     return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(text, 'cog'), toVscRange(hoverDetail.node));
 }
