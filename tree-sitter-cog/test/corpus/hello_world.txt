@@ -24,6 +24,9 @@ func main(): Int {
         (call_expr
           (name_expr
             (identifier))
-          (string_literal)))
+          (arg_list
+            (literal_expr
+              (string_literal)))))
       (return_stmt
-        (number_literal)))))
+        (literal_expr
+          (number_literal))))))

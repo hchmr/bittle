@@ -16,4 +16,5 @@ func x(): Int {
       (identifier))
     (block_stmt
       (return_stmt
-        (number_literal)))))
+        (literal_expr
+          (number_literal))))))

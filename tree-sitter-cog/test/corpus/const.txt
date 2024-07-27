@@ -10,5 +10,7 @@ const FORTY_TWO = 40 + 2;
   (const_decl
     (identifier)
     (binary_expr
-      (number_literal)
-      (number_literal))))
+      (literal_expr
+        (number_literal))
+      (literal_expr
+        (number_literal)))))

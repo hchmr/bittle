@@ -12,11 +12,12 @@ struct Pair {
 (source_file
   (struct_decl
     (identifier)
-    (struct_member
-      (identifier)
-      (name_type
-        (identifier)))
-    (struct_member
-      (identifier)
-      (name_type
-        (identifier)))))
+    (struct_body
+      (struct_member
+        (identifier)
+        (name_type
+          (identifier)))
+      (struct_member
+        (identifier)
+        (name_type
+          (identifier))))))

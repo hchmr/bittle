@@ -13,12 +13,14 @@ enum {
 
 (source_file
   (enum_decl
-    (enum_member
-      (identifier)
-      (number_literal))
-    (enum_member
-      (identifier))
-    (enum_member
-      (identifier))
-    (enum_member
-      (identifier))))
+    (enum_body
+      (enum_member
+        (identifier)
+        (literal_expr
+          (number_literal)))
+      (enum_member
+        (identifier))
+      (enum_member
+        (identifier))
+      (enum_member
+        (identifier)))))
