@@ -4,6 +4,7 @@ import { IncludeResolver } from "../services/IncludeResolver"
 import { ParsingService } from '../services/parsingService'
 import {
     ExprNodeType,
+    isExprNode,
     isStmtNode,
     isTopLevelNode,
     LiteralNodeType, StmtNodeType, TopLevelNodeType, TypeNodeType
@@ -378,7 +379,7 @@ export class Elaborator {
             fields: undefined,
         }
 
-        this.addSymbol<StructSym>(sym);
+        this.addSymbol<StructSym>({ ...sym });
 
         const bodyNode = node.childForFieldName("body");
         if (bodyNode) {
@@ -409,12 +410,12 @@ export class Elaborator {
     }
 
     private elabEnum(node: SyntaxNode) {
-        const body = node.childrenForFieldName("body");
+        const body = node.childForFieldName("body");
         if (!body)
             return;
 
         let nextValue: number = 0;
-        for (const memberNode of stream(body).filter(n => n.type === "enum_member")) {
+        for (const memberNode of stream(body.children).filter(n => n.type === "enum_member")) {
             const memberNameNode = memberNode.childForFieldName("name");
             const memberName = memberNameNode?.text ?? "";
             const valueNode = memberNode.childForFieldName("value");
@@ -614,15 +615,11 @@ export class Elaborator {
     private elabReturnStmt(node: SyntaxNode) {
         const returnType = this.currentFunc!.returnType;
         const valueNode = node.childForFieldName("value");
-        if (returnType.kind === "void") {
-            if (valueNode) {
-                this.reportError(node, `Return value in void function.`);
-            }
-        } else {
-            if (!valueNode) {
-                this.reportError(node, `Missing return value.`);
-            }
+
+        if (valueNode) {
             this.elabExpr(valueNode, returnType);
+        } else if (returnType.kind !== "void") {
+            this.reportError(node, `Missing return value.`);
         }
     }
 
@@ -877,8 +874,12 @@ export class Elaborator {
             return { kind: "error" }
         }
 
+        if (!argsNode) {
+            return funcSym.returnType;
+        }
+
         const params = funcSym.params;
-        const args = (argsNode?.children ?? []).filter(n => n.type === "arg_expr");
+        const args = argsNode.children.filter(x => isExprNode(x))
 
         if (args.length < params.length) {
             this.reportError(node, `Too few arguments provided(${args.length} < ${params.length}).`);

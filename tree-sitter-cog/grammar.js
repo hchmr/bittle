@@ -60,8 +60,12 @@ module.exports = grammar({
 
     enum_decl: $ => seq(
       'enum',
+      field('body', $.enum_body),
+    ),
+
+    enum_body: $ => seq(
       '{',
-      field('body', commaSep($.enum_member)),
+      commaSep($.enum_member),
       '}',
     ),
 
@@ -218,7 +222,7 @@ module.exports = grammar({
 
     return_stmt: $ => seq(
       'return',
-      optional($._expr),
+      field('value', optional($._expr)),
       ';',
     ),
 
@@ -246,22 +250,22 @@ module.exports = grammar({
       $.cast_expr,
     ),
 
-    grouped_expr: $ => seq(
+    grouped_expr: $ => prec(PREC.primary, seq(
       '(',
       field('expr', $._expr),
       ')'
-    ),
+    )),
 
     name_expr: $ => $.identifier,
 
     literal_expr: $ => $._literal,
 
-    sizeof_expr: $ => seq(
+    sizeof_expr: $ => prec(PREC.primary, seq(
       'sizeof',
       '(',
       field('type', $._type),
       ')',
-    ),
+    )),
 
     ternary_expr: $ => prec.right(PREC.cond, seq(
       field('cond', $._expr),
@@ -301,21 +305,25 @@ module.exports = grammar({
       field('operand', $._expr),
     )),
 
-    call_expr: $ => prec(PREC.primary, seq(
+    call_expr: $ => prec(PREC.postfix, seq(
       field('callee', $._expr),
-      '(',
-      field('args', commaSep($._expr)),
-      ')',
+      field('args', $.arg_list),
     )),
 
-    index_expr: $ => prec(PREC.primary, seq(
+    arg_list: $ => seq(
+      '(',
+      commaSep($._expr),
+      ')',
+    ),
+
+    index_expr: $ => prec(PREC.postfix, seq(
       field('indexee', $._expr),
       '[',
       field('index', $._expr),
       ']',
     )),
 
-    field_expr: $ => prec(PREC.primary, seq(
+    field_expr: $ => prec(PREC.postfix, seq(
       field('left', $._expr),
       '.',
       field('name', $.identifier),
