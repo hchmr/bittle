@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from 'assert';
 
 export class CharCursor {
     private row: number = 0;

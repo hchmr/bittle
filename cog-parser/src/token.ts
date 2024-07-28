@@ -1,4 +1,4 @@
-export type Position = { row: number; col: number; index: number; };
+export type Position = { row: number; col: number; index: number };
 
 export type Token = {
     kind: TokenKind;
@@ -6,15 +6,15 @@ export type Token = {
     position: Position;
     leadingTrivia: string[];
     trailingTrivia: string[];
-}
+};
 
 export type TokenKind =
-    | "<eof>"
-    | "<identifier>"
-    | "<int>"
-    | "<string>"
-    | "<char>"
-    | "<error>"
+    | '<eof>'
+    | '<identifier>'
+    | '<int>'
+    | '<string>'
+    | '<char>'
+    | '<error>'
     | (typeof symbols)[number]
     | (typeof keywords)[number];
 

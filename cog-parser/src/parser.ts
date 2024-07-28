@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { CompositeNodeKind, SyntaxNode, SyntaxNodeChild } from './nodes.js'
+import { CompositeNodeKind, SyntaxNode, SyntaxNodeChild } from './nodes.js';
 import { Position, Token, TokenKind } from './token.js';
 
 //=========================================================================
@@ -8,7 +8,6 @@ import { Position, Token, TokenKind } from './token.js';
 export interface ErrorSink {
     add(position: Position, message: string): void;
 }
-
 
 //=========================================================================
 //== Parser
@@ -21,13 +20,13 @@ type IncompleteCompositeNode = {
 };
 
 type IncompleteNode =
-    | IncompleteCompositeNode
+    | IncompleteCompositeNode;
 
 type Checkpoint = {
     index: number;
     parent: IncompleteCompositeNode;
     position: Position;
-}
+};
 
 abstract class NodeBuilder {
     protected currentNodes: IncompleteNode[];
@@ -41,6 +40,7 @@ abstract class NodeBuilder {
     get currentNode() {
         return this.currentNodes[this.currentNodes.length - 1];
     }
+
     set currentNode(node: IncompleteNode) {
         this.currentNodes[this.currentNodes.length - 1] = node;
     }
@@ -48,7 +48,7 @@ abstract class NodeBuilder {
     addChild(node: SyntaxNode) {
         this.currentNode.children.push({
             node,
-            field: this.currentNode.currentField
+            field: this.currentNode.currentField,
         });
     }
 
@@ -131,7 +131,7 @@ class ParserBase extends NodeBuilder {
 
     constructor(
         protected tokens: Iterator<Token>,
-        protected errorSink: ErrorSink
+        protected errorSink: ErrorSink,
     ) {
         const token = tokens.next().value;
         assert(token);
@@ -792,7 +792,7 @@ export class Parser extends ParserBase {
 // Null denotation
 type Nud = {
     apply(parser: Parser): void;
-}
+};
 
 // Left denotation
 type Led = {
@@ -803,7 +803,7 @@ type Led = {
     rbp: number;
     // Next binding power
     nbp: number;
-}
+};
 
 enum Assoc {
     Left,
@@ -829,7 +829,7 @@ const Prec = {
     Primary: 15,
 };
 
-const nudTable: Record<TokenKind, Nud> = function () {
+const nudTable: Record<TokenKind, Nud> = (function () {
     return createTable(
         mkRow('(', parser => parser.groupExpr()),
         mkRow('<identifier>', parser => parser.nameExpr()),
@@ -843,11 +843,11 @@ const nudTable: Record<TokenKind, Nud> = function () {
     type TableRow = {
         token: TokenKind;
         nud: Nud;
-    }
+    };
 
     function createTable(...entries: TableRow[]): Record<TokenKind, Nud> {
         return Object.fromEntries(
-            entries.map(entry => [entry.token, entry.nud])
+            entries.map(entry => [entry.token, entry.nud]),
         ) as Record<TokenKind, Nud>;
     }
 
@@ -855,15 +855,15 @@ const nudTable: Record<TokenKind, Nud> = function () {
         return {
             token,
             nud: { apply },
-        }
+        };
     }
 
     function mkUnaryOp(kind: TokenKind): TableRow {
         return mkRow(kind, parser => parser.unaryExpr(kind));
     }
-}();
+}());
 
-const ledTable: Record<TokenKind, Led> = function () {
+const ledTable: Record<TokenKind, Led> = (function () {
     return createTable(
         ...(['=', '+=', '-='] as const).map(op => mkBinaryOp(op, Prec.Assign, Assoc.Right)),
         mkRow('?', Prec.Cond, Assoc.Right, (parser, led, checkpoint) => parser.ternaryExpr(led.rbp, checkpoint)),
@@ -886,11 +886,11 @@ const ledTable: Record<TokenKind, Led> = function () {
     type TableRow = {
         token: TokenKind;
         led: Led;
-    }
+    };
 
     function createTable(...entries: TableRow[]): Record<TokenKind, Led> {
         return Object.fromEntries(
-            entries.map(entry => [entry.token, entry.led])
+            entries.map(entry => [entry.token, entry.led]),
         ) as Record<TokenKind, Led>;
     }
 
@@ -901,7 +901,7 @@ const ledTable: Record<TokenKind, Led> = function () {
             nbp: calculateNbp(lbp, assoc),
             apply: (parser, checkpoint) => invoke(parser, led, checkpoint),
         };
-        return { token, led }
+        return { token, led };
     }
 
     function mkBinaryOp(op: TokenKind, lbp: number, assoc: Assoc): TableRow {
@@ -915,9 +915,7 @@ const ledTable: Record<TokenKind, Led> = function () {
     function calculateNbp(lbp: number, assoc: Assoc): number {
         return assoc === Assoc.None ? lbp - 1 : lbp;
     }
-}()
-
-
+}());
 
 //=========================================================================
 //== Recovery

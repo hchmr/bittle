@@ -1,4 +1,4 @@
-import assert from "assert";
+import assert from 'assert';
 import { keywords, Position, symbols, Token, TokenKind } from './token.js';
 import { CharCursor } from './charCursor.js';
 
@@ -171,10 +171,10 @@ export class Lexer {
     private scanChar() {
         this.bump();
         if (!this.isEof) {
-            if (this.cc !== "'") {
+            if (this.cc !== '\'') {
                 this.scanCharPart();
             }
-            if (this.cc === "'") {
+            if (this.cc === '\'') {
                 this.bump();
             } else {
                 console.error(this.pos, 'Invalid character literal');
@@ -227,12 +227,12 @@ export class Lexer {
             createRule(/\s/, Lexer.prototype.skipWhitespace),
             createRule('/', Lexer.prototype.scanSlash),
             createRule('"', Lexer.prototype.scanString),
-            createRule("'", Lexer.prototype.scanChar),
+            createRule('\'', Lexer.prototype.scanChar),
             createRule(/[0-9]/, Lexer.prototype.scanNumber),
             createRule(/[^\W\d]/, Lexer.prototype.scanWord),
             createRule(new Set(symbols.flatMap(s => s)), Lexer.prototype.scanSymbol),
         ],
-        Lexer.prototype.scanUnknown
+        Lexer.prototype.scanUnknown,
     );
 
     static keywords = Object.freeze(new Set<string>(keywords));
@@ -246,12 +246,11 @@ export class Lexer {
 
 function buildLookupTable<Self>(
     rules: {
-        filter: RegExp | string | Set<string>,
-        scanner: (this: Self) => Token | undefined
+        filter: RegExp | string | Set<string>;
+        scanner: (this: Self) => Token | undefined;
     }[],
-    fallback: (this: Self) => Token
+    fallback: (this: Self) => Token,
 ): (char: string) => (this: Self) => Token | undefined {
-
     const table = new Array(128).fill(null);
     for (let i = 0; i < 128; i++) {
         const char = String.fromCharCode(i);
@@ -280,7 +279,7 @@ function buildLookupTable<Self>(
 
 function createRule<Self>(
     filter: RegExp | string | Set<string>,
-    scanner: (this: Self) => Token | undefined
+    scanner: (this: Self) => Token | undefined,
 ) {
     return { filter, scanner };
 }

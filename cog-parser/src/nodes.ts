@@ -1,8 +1,7 @@
-
 //=========================================================================
 //== Syntax nodes
 
-import { Position, Token, TokenKind } from "./token.js";
+import { Position, Token, TokenKind } from './token.js';
 
 export type SyntaxNode =
     | LeafNode
@@ -30,7 +29,7 @@ export type TokenNode = {
 export type MissingTokenNode = {
     missing: TokenKind;
     position: Position;
-}
+};
 
 export enum CompositeNodeKind {
     // Root
