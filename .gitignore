@@ -10,4 +10,5 @@ docker-compose.yml
 Dockerfile
 node_modules/
 /vscode-cog/out/
+/cog-parser/out/
 .DS_Store
