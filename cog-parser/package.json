@@ -1,0 +1,14 @@
+{
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc -w",
+        "test": "vitest"
+    },
+    "devDependencies": {
+        "@types/node": "^20.14.12",
+        "@types/vscode": "^1.91.0",
+        "typescript": "^5.5.4",
+        "vitest": "^2.0.4"
+    }
+}
