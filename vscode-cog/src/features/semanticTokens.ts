@@ -1,38 +1,50 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import { Query } from 'tree-sitter';
-import Cog from 'tree-sitter-cog';
+import { SyntaxNode } from 'cog-parser';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
-import { toVscRange } from '../utils';
+import { ExprNodeType, TopLevelNodeType, TypeNodeType } from '../syntax/nodeTypes';
+import { Nullish, toVscRange } from '../utils';
 
 export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
-    private readonly highlightsQuery: Query;
     public readonly tokenTypes = ['type', 'function'];
     public readonly legend = new vscode.SemanticTokensLegend(this.tokenTypes);
 
-    constructor(private parsingService: ParsingService) {
-        this.highlightsQuery = (() => {
-            const queryPath = path.join(__dirname, '../../node_modules/tree-sitter-cog/queries/highlights.scm');
-            const querySource = fs.readFileSync(queryPath, 'utf8');
-            return new Query(Cog, querySource);
-        })();
-    }
+    constructor(private parsingService: ParsingService) { }
 
     provideDocumentSemanticTokens(document: vscode.TextDocument) {
         const tree = this.parsingService.parse(document.uri.fsPath);
         const builder = new vscode.SemanticTokensBuilder(this.legend);
-        for (const capture of this.highlightsQuery.captures(tree.rootNode)) {
-            if (!this.tokenTypes.includes(capture.name))
-                continue;
-            if (capture.node.startPosition.row != capture.node.endPosition.row)
-                continue;
 
-            builder.push(
-                toVscRange(capture.node),
-                capture.name
-            );
+        for (const node of traverse(tree.rootNode)) {
+            if (node.type === TypeNodeType.NameType) {
+                const nameNode = node.firstChild;
+                makeToken(builder, nameNode, 'type');
+            } else if (node.type === TopLevelNodeType.Struct) {
+                const nameNode = node.childForFieldName('name');
+                makeToken(builder, nameNode, 'type');
+            } else if (node.type === TopLevelNodeType.Func) {
+                const nameNode = node.childForFieldName('name');
+                makeToken(builder, nameNode, 'function');
+            } else if (node.type === ExprNodeType.CallExpr) {
+                const nameNode = node.childForFieldName('callee')?.firstChild;
+                makeToken(builder, nameNode, 'function');
+            }
         }
+
         return builder.build();
+    }
+}
+
+function makeToken(builder: vscode.SemanticTokensBuilder, node: SyntaxNode | Nullish, type: string) {
+    if (!node) {
+        return;
+    }
+
+    builder.push(toVscRange(node.startPosition, node.endPosition), type);
+}
+
+function* traverse(node: SyntaxNode): IterableIterator<SyntaxNode> {
+    yield node;
+    for (const child of node.children) {
+        yield* traverse(child);
     }
 }

@@ -1,4 +1,4 @@
-import { Point } from "tree-sitter";
+import { Point } from "cog-parser";
 import { PointRange, rangeContainsPoint } from "../utils";
 import { Sym } from "./sym";
 

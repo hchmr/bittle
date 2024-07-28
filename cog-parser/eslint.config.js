@@ -9,7 +9,7 @@ import stylistic from '@stylistic/eslint-plugin';
 export default ts.config(
     {
         ignores: [
-            'out/*',
+            'dist/*',
         ],
     },
     {

@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
-import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { CodeActionsProvider } from './features/codeActions';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
+import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { ElaborationService } from './services/elaborationService';
 import { IncludeResolver } from './services/IncludeResolver';
-import { createParsingService } from './services/parsingService';
+import { ParsingService } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
 import { createVirtualFileSystem } from './vfs';
 
@@ -18,7 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
     const vfs = createVirtualFileSystem(cache);
     context.subscriptions.push(vfs);
 
-    const parsingService = createParsingService(cache, vfs);
+    const parsingService = new ParsingService(cache, vfs);
 
     const includeResolver = new IncludeResolver(vfs);
 

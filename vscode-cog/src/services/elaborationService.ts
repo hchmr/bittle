@@ -1,4 +1,4 @@
-import { SyntaxNode } from "tree-sitter";
+import { SyntaxNode } from "cog-parser";
 import { IncludeResolver } from "./IncludeResolver";
 import { ParsingService } from './parsingService';
 import { ElaborationError, Elaborator, TypeLayout } from "../semantics/Elaborator";

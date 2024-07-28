@@ -1,4 +1,4 @@
-import { Point, SyntaxNode, Tree } from "tree-sitter";
+import { Point, SyntaxNode, Tree } from "cog-parser";
 import { nodeContains, PointRange, rangeContains } from ".";
 
 /**

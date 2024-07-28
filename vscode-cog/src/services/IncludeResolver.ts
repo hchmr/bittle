@@ -1,5 +1,5 @@
 import path from "path";
-import { SyntaxNode } from "tree-sitter";
+import { SyntaxNode } from "cog-parser";
 import { VirtualFileSystem } from "../vfs";
 
 // IncludeResolver

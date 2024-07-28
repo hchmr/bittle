@@ -4,16 +4,17 @@ export type Token = {
     kind: TokenKind;
     lexeme: string;
     startPosition: Point;
+    startIndex: number;
     leadingTrivia: string[];
     trailingTrivia: string[];
 };
 
 export type TokenKind =
     | '<eof>'
-    | '<identifier>'
-    | '<int>'
-    | '<string>'
-    | '<char>'
+    | 'identifier'
+    | 'number_literal'
+    | 'string_literal'
+    | 'char_literal'
     | '<error>'
     | (typeof symbols)[number]
     | (typeof keywords)[number];
@@ -70,12 +71,15 @@ export const keywords = [
     'else',
     'enum',
     'extern',
+    'false',
     'func',
     'if',
     'include',
+    'null',
     'return',
     'sizeof',
     'struct',
+    'true',
     'var',
     'while',
 ] as const;

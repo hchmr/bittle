@@ -1,4 +1,4 @@
-import { SyntaxNode } from 'tree-sitter';
+import { SyntaxNode } from 'cog-parser';
 import * as vscode from 'vscode';
 import { TypeLayout } from '../semantics/Elaborator';
 import { prettySym, Sym, SymKind, valueSymType } from '../semantics/sym';

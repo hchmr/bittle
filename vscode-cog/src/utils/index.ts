@@ -1,4 +1,4 @@
-import { Point, SyntaxNode } from 'tree-sitter';
+import { Point, SyntaxNode } from 'cog-parser';
 import * as vscode from 'vscode';
 
 // Point utilities
@@ -55,11 +55,13 @@ export function fromVscRange(range: vscode.Range): PointRange {
     };
 }
 
-export function toVscRange(range: PointRange): vscode.Range {
-    return new vscode.Range(
-        toVscPosition(range.startPosition),
-        toVscPosition(range.endPosition)
-    );
+export function toVscRange(start: Point, end: Point): vscode.Range;
+export function toVscRange(range: PointRange): vscode.Range;
+export function toVscRange(...args: [Point, Point] | [PointRange]): vscode.Range {
+    const [start, end] = args.length === 1
+        ? [args[0].startPosition, args[0].endPosition]
+        : args;
+    return new vscode.Range(toVscPosition(start), toVscPosition(end));
 }
 
 export function nodeContains(x1: SyntaxNode, x2: SyntaxNode): boolean {

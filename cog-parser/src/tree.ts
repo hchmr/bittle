@@ -1,7 +1,6 @@
 export type Point = {
     row: number;
     column: number;
-    index: number;
 };
 
 export type Range = {
@@ -57,10 +56,10 @@ export interface SyntaxNode {
     // descendantForIndex(startIndex: number, endIndex: number): SyntaxNode;
     // namedDescendantForIndex(index: number): SyntaxNode;
     // namedDescendantForIndex(startIndex: number, endIndex: number): SyntaxNode;
-    // descendantForPosition(position: Point): SyntaxNode;
-    // descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
-    // namedDescendantForPosition(position: Point): SyntaxNode;
-    // namedDescendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    descendantForPosition(position: Point): SyntaxNode;
+    descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    namedDescendantForPosition(position: Point): SyntaxNode;
+    namedDescendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
     // descendantsOfType(types: string | Array<string>, startPosition?: Point, endPosition?: Point): Array<SyntaxNode>;
 
     closest(types: string | Array<string>): SyntaxNode | null;

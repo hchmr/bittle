@@ -1,4 +1,4 @@
-import { SyntaxNode } from "tree-sitter";
+import { SyntaxNode } from "cog-parser";
 import { prettyType, Type } from "./type";
 
 export enum SymKind {

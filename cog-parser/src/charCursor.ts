@@ -18,7 +18,11 @@ export class CharCursor {
     }
 
     get pos(): Point {
-        return { row: this._row, column: this._col, index: this._index };
+        return { row: this._row, column: this._col };
+    }
+
+    get index(): number {
+        return this._index;
     }
 
     isAt(test: string | RegExp) {

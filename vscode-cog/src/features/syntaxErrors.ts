@@ -1,8 +1,7 @@
-import { Query, SyntaxNode, TreeCursor } from 'tree-sitter';
-import Cog from 'tree-sitter-cog';
+import { Error, SyntaxNode, TreeCursor } from 'cog-parser';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
-import { toVscRange } from '../utils';
+import { toVscPosition, toVscRange } from '../utils';
 
 export class SyntaxErrorProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
@@ -17,46 +16,23 @@ export class SyntaxErrorProvider implements vscode.Disposable {
         if (document.isClosed) {
             this.diagnosticsCollection.delete(document.uri);
         } else {
-            const diagnostics = this.createDiagnostics(document.uri);
+            const diagnostics = this.createDiagnostics(document);
             this.diagnosticsCollection.set(document.uri, diagnostics);
         }
     }
 
-    createDiagnostics(uri: vscode.Uri) {
-        const tree = this.parsingService.parse(uri.fsPath);
-        const diagnostics: vscode.Diagnostic[] = [];
-
-        const cursor = tree.walk();
-        do {
-            const node = cursor.currentNode;
-
-            if (node.isError) {
-                diagnostics.push(createDiagnostic(node, `Syntax error`));
-            } else if (node.isMissing) {
-                diagnostics.push(createDiagnostic(node, `Syntax error: missing \`${node.type}\``));
-            }
-        } while (advanceCursor(cursor));
-
-        return diagnostics;
+    createDiagnostics(document: vscode.TextDocument) {
+        const errors = this.parsingService.parseErrors(document.uri.fsPath);
+        return errors.map(error => createDiagnostic(document, error));
     }
-}
-
-function advanceCursor(cursor: TreeCursor): boolean {
-    if (cursor.gotoFirstChild() || cursor.gotoNextSibling()) {
-        return true;
-    }
-    while (cursor.gotoParent()) {
-        if (cursor.gotoNextSibling()) {
-            return true;
-        }
-    }
-    return false;
 }
 
 function createDiagnostic(
-    node: SyntaxNode,
-    message: string,
+    document: vscode.TextDocument,
+    error: Error,
     severity = vscode.DiagnosticSeverity.Error
 ): vscode.Diagnostic {
-    return new vscode.Diagnostic(toVscRange(node), message, severity);
+    const position = toVscPosition(error.position);
+    const range = document.getWordRangeAtPosition(position) ?? new vscode.Range(position, position);
+    return new vscode.Diagnostic(range, error.message, severity);
 }

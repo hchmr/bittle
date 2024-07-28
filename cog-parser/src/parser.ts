@@ -1,8 +1,8 @@
 import assert from 'assert';
-import { CompositeNodeKind } from './compositeNodeKind.js';
+import { CompositeNodeKind, namedTokenKinds } from './compositeNodeKind.js';
 import { Token, TokenKind } from './token.js';
 import { Point, Tree } from './tree.js';
-import { CompositeNodeImpl, MissingTokenNodeImpl, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl.js';
+import { CompositeNodeImpl, MissingTokenNodeImpl, pointEqual, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl.js';
 import { ErrorSink } from './ErrorSink.js';
 
 //=========================================================================
@@ -18,17 +18,18 @@ type IncompleteCompositeNode = {
     children: SyntaxNodeChild[];
     currentField?: string;
     startPosition: Point;
+    startIndex: number;
 };
 
 type IncompleteNode =
     | IncompleteCompositeNode;
 
 function tokenToSyntaxNode(tree: Tree, token: Token): SyntaxNodeImpl {
-    return new TokenNodeImpl(tree, token);
+    return new TokenNodeImpl(tree, token, token.kind in namedTokenKinds);
 }
 
-function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point): SyntaxNodeImpl {
-    return new MissingTokenNodeImpl(kind, startPosition, tree);
+function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point, startIndex: number): SyntaxNodeImpl {
+    return new MissingTokenNodeImpl(kind, startPosition, startIndex, tree);
 }
 
 function incompleteNodeToSyntaxNode(tree: Tree, node: IncompleteNode): SyntaxNodeImpl {
@@ -36,6 +37,7 @@ function incompleteNodeToSyntaxNode(tree: Tree, node: IncompleteNode): SyntaxNod
         node.kind,
         true,
         node.startPosition,
+        node.startIndex,
         tree,
         node.children,
     );
@@ -44,7 +46,8 @@ function incompleteNodeToSyntaxNode(tree: Tree, node: IncompleteNode): SyntaxNod
 type Checkpoint = {
     index: number;
     parent: IncompleteCompositeNode;
-    position: Point;
+    startPosition: Point;
+    startIndex: number;
 };
 
 abstract class NodeBuilder {
@@ -58,6 +61,8 @@ abstract class NodeBuilder {
     }
 
     abstract get pos(): Point;
+
+    abstract get index(): number;
 
     get currentNode() {
         return this.currentNodes[this.currentNodes.length - 1];
@@ -86,6 +91,7 @@ abstract class NodeBuilder {
             kind: nodeType,
             children: [],
             startPosition: this.pos,
+            startIndex: this.index,
         });
     }
 
@@ -102,7 +108,8 @@ abstract class NodeBuilder {
             isPlaceholder: false,
             kind: nodeType,
             children: groupedNodes,
-            startPosition: checkpoint.position,
+            startPosition: checkpoint.startPosition,
+            startIndex: checkpoint.startIndex,
         });
     }
 
@@ -135,7 +142,8 @@ abstract class NodeBuilder {
         return {
             index: this.currentNode.children.length,
             parent: this.currentNode,
-            position: this.pos,
+            startPosition: this.pos,
+            startIndex: this.index,
         };
     }
 
@@ -149,7 +157,7 @@ abstract class NodeBuilder {
 
 class ParserBase extends NodeBuilder {
     tok: Token;
-    lastErrorIndex = -1;
+    lastErrorPosition: Point = { row: -1, column: -1 };
 
     constructor(
         text: string,
@@ -165,6 +173,7 @@ class ParserBase extends NodeBuilder {
                 kind: CompositeNodeKind.Root,
                 children: [],
                 startPosition: token.startPosition,
+                startIndex: token.startIndex,
             },
         );
 
@@ -177,6 +186,10 @@ class ParserBase extends NodeBuilder {
 
     override get pos() {
         return this.tok.startPosition;
+    }
+
+    override get index() {
+        return this.tok.startIndex;
     }
 
     match(kind: TokenKind): boolean;
@@ -201,11 +214,11 @@ class ParserBase extends NodeBuilder {
     }
 
     addError(position: Point, message: string) {
-        if (position.index === this.lastErrorIndex) {
+        if (pointEqual(position, this.lastErrorPosition)) {
             return;
         }
         this.errorSink.add({ position, message });
-        this.lastErrorIndex = position.index;
+        this.lastErrorPosition = position;
     }
 
     addErrorAndTryBump(message: string, { set: recoverySet }: { set: TokenKindSet } = { set: defaultRecovery }) {
@@ -227,7 +240,7 @@ class ParserBase extends NodeBuilder {
     expect(tokenKind: TokenKind) {
         if (!this.match(tokenKind)) {
             this.addError(this.pos, `Expected '${tokenKind}', got '${this.tok.kind}' while parsing ${this.currentNode.kind}`);
-            this.addChild(missingTokenNode(tokenKind, this.tree, this.pos));
+            this.addChild(missingTokenNode(tokenKind, this.tree, this.pos, this.index));
             return false;
         }
         this.bump();
@@ -237,7 +250,7 @@ class ParserBase extends NodeBuilder {
     delimited(open: TokenKind, close: TokenKind, sep: TokenKind, p: () => void) {
         this.bump(open);
         while (!this.match(close)) {
-            const startIndex = this.pos.index;
+            const startIndex = this.index;
 
             if (this.match(sep)) {
                 this.addErrorAndBump(`Unexpected '${sep}'.`);
@@ -249,7 +262,7 @@ class ParserBase extends NodeBuilder {
             }
 
             // No progress
-            if (this.pos.index === startIndex) {
+            if (this.index === startIndex) {
                 break;
             }
         }
@@ -313,7 +326,7 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.IncludeDecl);
         this.bump('include');
         this.beginField('path');
-        this.expect('<string>');
+        this.expect('string_literal');
         this.finishField('path');
         this.expect(';');
         this.finishNode(CompositeNodeKind.IncludeDecl);
@@ -334,13 +347,13 @@ export class Parser extends ParserBase {
     }
 
     enumMember() {
-        if (!this.match('<identifier>') && !this.match('=')) {
+        if (!this.match('identifier') && !this.match('=')) {
             this.addErrorAndTryBump(`Expected enum member.`);
             return;
         }
         this.beginNode(CompositeNodeKind.EnumMember);
         this.beginField('name');
-        this.bump('<identifier>');
+        this.bump('identifier');
         this.finishField('name');
         if (this.match('=')) {
             this.expect('=');
@@ -355,11 +368,11 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.StructDecl);
         this.bump('struct');
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         this.beginField('body');
         if (!this.match('{')) {
-            this.addErrorAndTryBump(`Expected enum body.`);
+            this.addErrorAndTryBump(`Expected struct body.`);
         }
         if (this.match('{')) {
             this.delimited('{', '}', ',', () => this.structMember());
@@ -369,13 +382,13 @@ export class Parser extends ParserBase {
     }
 
     structMember() {
-        if (!this.match('<identifier>') && !this.match(':')) {
+        if (!this.match('identifier') && !this.match(':')) {
             this.addErrorAndTryBump(`Expected struct member.`);
             return;
         }
         this.beginNode(CompositeNodeKind.StructMember);
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         this.expect(':');
         this.beginField('type');
@@ -388,16 +401,16 @@ export class Parser extends ParserBase {
         this.beginNodeAt(CompositeNodeKind.FuncDecl, checkpoint);
         this.bump('func');
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         this.beginField('params');
         this.paramList();
         this.finishField('params');
         if (this.match(':')) {
             this.expect(':');
-            this.beginField('returnType');
+            this.beginField('return_type');
             this.type();
-            this.finishField('returnType');
+            this.finishField('return_type');
         }
         if (!this.match('{') && !this.match(';')) {
             this.addErrorAndTryBump(`Expected function body or ';'`);
@@ -417,18 +430,26 @@ export class Parser extends ParserBase {
             this.addErrorAndTryBump(`Expected parameter list.`);
         }
         if (this.match('(')) {
-            this.delimited('(', ')', ',', () => this.paramDecl());
+            this.delimited('(', ')', ',', () => this.funcParam());
+        }
+    }
+
+    private funcParam() {
+        if (this.match('...')) {
+            this.bump('...');
+        } else {
+            this.paramDecl();
         }
     }
 
     paramDecl() {
-        if (!this.match('<identifier>') && !this.match(':')) {
+        if (!this.match('identifier') && !this.match(':')) {
             this.addErrorAndTryBump(`Expected parameter.`);
             return;
         }
         this.beginNode(CompositeNodeKind.FuncParam);
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         this.expect(':');
         this.beginField('type');
@@ -441,7 +462,7 @@ export class Parser extends ParserBase {
         this.beginNodeAt(CompositeNodeKind.GlobalDecl, checkpoint);
         this.expect('var');
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         this.expect(':');
         this.beginField('type');
@@ -455,7 +476,7 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.ConstDecl);
         this.bump('const');
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         this.expect('=');
         this.beginField('value');
@@ -494,7 +515,7 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.VarStmt);
         this.bump('var');
         this.beginField('name');
-        this.expect('<identifier>');
+        this.expect('identifier');
         this.finishField('name');
         if (this.match(':')) {
             this.expect(':');
@@ -516,11 +537,11 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.BlockStmt);
         this.expect('{');
         while (!this.match('}')) {
-            const startIndex = this.pos.index;
+            const startIndex = this.index;
 
             this.stmt();
 
-            if (this.pos.index === startIndex) {
+            if (this.index === startIndex) {
                 break;
             }
         }
@@ -625,7 +646,7 @@ export class Parser extends ParserBase {
 
     nameExpr() {
         this.beginNode(CompositeNodeKind.NameExpr);
-        this.bump('<identifier>');
+        this.bump('identifier');
         this.finishNode(CompositeNodeKind.NameExpr);
     }
 
@@ -702,10 +723,10 @@ export class Parser extends ParserBase {
     memberExpr(checkpoint: Checkpoint) {
         this.beginNodeAt(CompositeNodeKind.FieldExpr, checkpoint);
         this.groupExistingChildren('left');
-        this.beginField('field');
         this.expect('.');
-        this.expect('<identifier>');
-        this.finishField('field');
+        this.beginField('name');
+        this.expect('identifier');
+        this.finishField('name');
         this.finishNode(CompositeNodeKind.FieldExpr);
     }
 
@@ -725,7 +746,7 @@ export class Parser extends ParserBase {
     type() {
         if (this.match('(')) {
             this.groupType();
-        } else if (this.match('<identifier>')) {
+        } else if (this.match('identifier')) {
             this.nameType();
         } else if (this.match('*')) {
             this.pointerType();
@@ -748,25 +769,25 @@ export class Parser extends ParserBase {
 
     nameType() {
         this.beginNode(CompositeNodeKind.NameType);
-        this.bump('<identifier>');
+        this.bump('identifier');
         this.finishNode(CompositeNodeKind.NameType);
     }
 
     pointerType() {
         this.beginNode(CompositeNodeKind.PointerType);
         this.bump('*');
-        this.beginField('base');
+        this.beginField('pointee');
         this.type();
-        this.finishField('base');
+        this.finishField('pointee');
         this.finishNode(CompositeNodeKind.PointerType);
     }
 
     arrayType() {
         this.beginNode(CompositeNodeKind.ArrayType);
         this.bump('[');
-        this.beginField('base');
+        this.beginField('type');
         this.type();
-        this.finishField('base');
+        this.finishField('type');
         this.expect(';');
         this.beginField('size');
         this.expr();
@@ -779,12 +800,16 @@ export class Parser extends ParserBase {
     // Literals
 
     literal() {
-        if (this.match('<int>')) {
+        if (this.match('number_literal')) {
             this.intLiteral();
-        } else if (this.match('<string>')) {
+        } else if (this.match('string_literal')) {
             this.stringLiteral();
-        } else if (this.match('<char>')) {
+        } else if (this.match('char_literal')) {
             this.charLiteral();
+        } else if (this.match('null')) {
+            this.nullLiteral();
+        } else if (this.match('true') || this.match('false')) {
+            this.boolLiteral();
         } else {
             throw new Error('Expected literal');
         }
@@ -792,21 +817,34 @@ export class Parser extends ParserBase {
 
     intLiteral() {
         this.beginNode(CompositeNodeKind.IntLiteral);
-        this.bump('<int>');
+        this.bump('number_literal');
         this.finishNode(CompositeNodeKind.IntLiteral);
     }
 
     stringLiteral() {
         this.beginNode(CompositeNodeKind.StringLiteral);
-        this.bump('<string>');
+        this.bump('string_literal');
         this.finishNode(CompositeNodeKind.StringLiteral);
     }
 
     charLiteral() {
         this.beginNode(CompositeNodeKind.CharLiteral);
-        this.bump('<char>');
+        this.bump('char_literal');
         this.finishNode(CompositeNodeKind.CharLiteral);
     }
+
+    nullLiteral() {
+        this.beginNode(CompositeNodeKind.NullLiteral);
+        this.bump('null');
+        this.finishNode(CompositeNodeKind.NullLiteral);
+    }
+
+    boolLiteral() {
+        this.beginNode(CompositeNodeKind.BoolLiteral);
+        this.bump(this.match('true') ? 'true' : 'false');
+        this.finishNode(CompositeNodeKind.BoolLiteral);
+    }
+
 }
 
 //=========================================================================/
@@ -855,11 +893,11 @@ const Prec = {
 const nudTable: Record<TokenKind, Nud> = (function () {
     return createTable(
         mkRow('(', parser => parser.groupExpr()),
-        mkRow('<identifier>', parser => parser.nameExpr()),
-        mkRow('<int>', parser => parser.intLiteral()),
-        mkRow('<string>', parser => parser.stringLiteral()),
-        mkRow('<char>', parser => parser.charLiteral()),
-        ...(['-', '~', '!', '&', '*'] as const).map(op => mkUnaryOp(op)),
+        mkRow('identifier', parser => parser.nameExpr()),
+        ...(['number_literal', 'string_literal', 'char_literal', 'null', 'true', 'false'] as const)
+            .map(kind => mkRow(kind, parser => parser.literalExpr())),
+        ...(['-', '~', '!', '&', '*'] as const)
+            .map(op => mkUnaryOp(op)),
         mkRow('sizeof', parser => parser.sizeofExpr()),
     );
 

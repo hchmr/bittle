@@ -1,4 +1,4 @@
-import Parser from 'tree-sitter';
+import Parser from 'cog-parser';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { toVscRange } from '../utils';

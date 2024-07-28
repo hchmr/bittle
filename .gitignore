@@ -9,6 +9,6 @@ __pycache__/
 docker-compose.yml
 Dockerfile
 node_modules/
-/vscode-cog/out/
-/cog-parser/out/
+/vscode-cog/dist/
+/cog-parser/dist/
 .DS_Store

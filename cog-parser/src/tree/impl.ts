@@ -1,4 +1,4 @@
-import { Token, TokenKind } from '@/token.js';
+import { Token, TokenKind } from '../token.js';
 import assert from 'assert';
 import util from 'util';
 import { Point, SyntaxNode, Tree, TreeCursor } from '../tree.js';
@@ -11,10 +11,15 @@ export function pointGte(a: Point, b: Point): boolean {
     return a.row > b.row || (a.row === b.row && a.column >= b.column);
 }
 
+export function pointLte(a: Point, b: Point): boolean {
+    return pointGte(b, a);
+}
+
 export abstract class SyntaxNodeImpl implements SyntaxNode {
     private _type: string;
     private _isNamed: boolean;
     private _startPosition: Point;
+    private _startIndex: number;
     private _tree: Tree;
     private _parent: SyntaxNodeImpl | null = null;
     private _children: Array<{ field?: string; node: SyntaxNodeImpl }> = [];
@@ -23,12 +28,14 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         type: string,
         isNamed: boolean,
         startPosition: Point,
+        startIndex: number,
         tree: Tree,
         children?: Array<{ field?: string; node: SyntaxNodeImpl }>,
     ) {
         this._type = type;
         this._isNamed = isNamed;
         this._startPosition = startPosition;
+        this._startIndex = startIndex;
         this._tree = tree;
         if (children) {
             this._children = children;
@@ -79,11 +86,15 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
     }
 
     get startIndex(): number {
-        return this.startPosition.index;
+        return this._startIndex;
     }
 
     get endIndex(): number {
-        return this.endPosition.index;
+        if (this.childCount === 0) {
+            return this.startIndex;
+        } else {
+            return this.lastChild!.endIndex;
+        }
     }
 
     get tree(): Tree {
@@ -99,7 +110,7 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
     }
 
     get namedChildren(): Array<SyntaxNode> {
-        return this._children.filter(child => child.field !== undefined).map(child => child.node);
+        return this._children.filter(child => child.node.isNamed).map(child => child.node);
     }
 
     get childCount(): number {
@@ -107,7 +118,7 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
     }
 
     get namedChildCount(): number {
-        return this._children.filter(child => child.field !== undefined).length;
+        return this._children.filter(child => child.node.isNamed).length;
     }
 
     get firstChild(): SyntaxNode | null {
@@ -198,6 +209,36 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         return this.namedChildren.find(child => child.startIndex >= index) ?? null;
     }
 
+    descendantForPosition(position: Point): SyntaxNode;
+    descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    descendantForPosition(startPosition: Point, endPosition?: Point): SyntaxNode {
+        endPosition ??= startPosition;
+        return (function search(node: SyntaxNodeImpl): SyntaxNode | null {
+            if (!pointLte(node.startPosition, startPosition) || !pointLte(endPosition, node.endPosition)) {
+                return null;
+            }
+            for (const child of node._children) {
+                const node = search(child.node);
+                if (node) {
+                    return node;
+                }
+            }
+            return node;
+        })(this) || this;
+    }
+
+    namedDescendantForPosition(position: Point): SyntaxNode;
+    namedDescendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    namedDescendantForPosition(startPosition: unknown, endPosition?: unknown): SyntaxNode {
+        const descendant = this.descendantForPosition(startPosition as Point, endPosition as Point);
+        return (function namedParent(node: SyntaxNode): SyntaxNode {
+            if (node.isNamed) {
+                return node;
+            }
+            return namedParent(node.parent!);
+        })(descendant);
+    }
+
     closest(types: string | Array<string>): SyntaxNode | null {
         if (typeof types === 'string') {
             types = [types];
@@ -218,10 +259,11 @@ export class CompositeNodeImpl extends SyntaxNodeImpl {
         type: string,
         isNamed: boolean,
         startPosition: Point,
+        startIndex: number,
         tree: Tree,
         children?: Array<{ field?: string; node: SyntaxNodeImpl }>,
     ) {
-        super(type, isNamed, startPosition, tree, children);
+        super(type, isNamed, startPosition, startIndex, tree, children);
     }
 }
 
@@ -231,8 +273,9 @@ export class TokenNodeImpl extends SyntaxNodeImpl {
     constructor(
         tree: Tree,
         token: Token,
+        isNamed: boolean,
     ) {
-        super(token.kind, false, token.startPosition, tree);
+        super(token.kind, isNamed, token.startPosition, token.startIndex, tree);
         this._token = token;
     }
 
@@ -242,8 +285,11 @@ export class TokenNodeImpl extends SyntaxNodeImpl {
         return {
             row: startPosition.row,
             column: startPosition.column + length,
-            index: startPosition.index + length,
         };
+    }
+
+    override get endIndex(): number {
+        return this.startIndex + this._token.lexeme.length;
     }
 
     override pretty(level: number): string {
@@ -260,9 +306,10 @@ export class MissingTokenNodeImpl extends SyntaxNodeImpl {
     constructor(
         kind: TokenKind,
         startPosition: Point,
+        startIndex: number,
         tree: Tree,
     ) {
-        super(kind, false, startPosition, tree);
+        super(kind, false, startPosition, startIndex, tree);
     }
 
     override get isMissing(): boolean {

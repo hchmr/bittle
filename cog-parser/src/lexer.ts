@@ -13,6 +13,7 @@ export function* tokenize(text: string, errorSink: ErrorSink): Generator<Token, 
 
 export class Lexer {
     private startPos!: Point;
+    private startIndex!: number;
     private cursor: CharCursor;
     private trivia: string[] = [];
 
@@ -28,12 +29,16 @@ export class Lexer {
         return this.cursor.pos;
     }
 
+    private get index() {
+        return this.cursor.index;
+    }
+
     private get isEof() {
         return this.cursor.isEof;
     }
 
     private get lexeme(): string {
-        return this.text.slice(this.startPos.index, this.pos.index);
+        return this.text.slice(this.startIndex, this.index);
     }
 
     private isAt(str: string | RegExp) {
@@ -52,6 +57,7 @@ export class Lexer {
 
     private makeToken(kind: TokenKind, lexeme?: string): Token {
         const startPosition = this.startPos;
+        const startIndex = this.startIndex;
         lexeme ??= this.lexeme;
 
         // Leading trivia
@@ -68,6 +74,7 @@ export class Lexer {
             kind,
             lexeme,
             startPosition,
+            startIndex,
             leadingTrivia,
             trailingTrivia,
         };
@@ -82,6 +89,7 @@ export class Lexer {
 
         while (!token) {
             this.startPos = this.pos;
+            this.startIndex = this.index;
             const scanner = Lexer.table(this.cc);
             token = scanner.call(this);
         }
@@ -99,6 +107,7 @@ export class Lexer {
             && (this.isAt('//') || this.isAt('/*') || /\s/.test(this.cc))
         ) {
             this.startPos = this.pos;
+            this.startIndex = this.index;
             this.skipSingleTrivia();
         }
     }
@@ -172,7 +181,7 @@ export class Lexer {
             this.addError(this.pos, 'Unterminated string literal');
         }
         this.bump();
-        return this.makeToken('<string>');
+        return this.makeToken('string_literal');
     }
 
     private scanChar() {
@@ -189,7 +198,7 @@ export class Lexer {
         } else {
             this.addError(this.pos, 'Unterminated character literal');
         }
-        return this.makeToken('<char>');
+        return this.makeToken('char_literal');
     }
 
     private scanCharPart() {
@@ -203,14 +212,14 @@ export class Lexer {
         while (!this.isEof && /\d/.test(this.cc)) {
             this.bump();
         }
-        return this.makeToken('<int>');
+        return this.makeToken('number_literal');
     }
 
     private scanWord() {
         while (!this.isEof && /\w/.test(this.cc)) {
             this.bump();
         }
-        const kind = Lexer.isKeyword(this.lexeme) ? this.lexeme : '<identifier>';
+        const kind = Lexer.isKeyword(this.lexeme) ? this.lexeme : 'identifier';
         return this.makeToken(kind);
     }
 
