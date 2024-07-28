@@ -1,9 +1,9 @@
-export type Position = { row: number; col: number; index: number };
+import { Point } from './tree.js';
 
 export type Token = {
     kind: TokenKind;
     lexeme: string;
-    position: Position;
+    startPosition: Point;
     leadingTrivia: string[];
     trailingTrivia: string[];
 };

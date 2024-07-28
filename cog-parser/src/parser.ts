@@ -1,41 +1,63 @@
 import assert from 'assert';
-import { CompositeNodeKind, SyntaxNode, SyntaxNodeChild } from './nodes.js';
-import { Position, Token, TokenKind } from './token.js';
+import { CompositeNodeKind } from './compositeNodeKind.js';
+import { Token, TokenKind } from './token.js';
+import { Point, Tree } from './tree.js';
+import { CompositeNodeImpl, MissingTokenNodeImpl, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl.js';
+import { ErrorSink } from './ErrorSink.js';
 
 //=========================================================================
-//== Error sink
+//== Node building
 
-export interface ErrorSink {
-    add(position: Position, message: string): void;
-}
-
-//=========================================================================
-//== Parser
+type SyntaxNodeChild = {
+    field?: string;
+    node: SyntaxNodeImpl;
+};
 
 type IncompleteCompositeNode = {
     kind: CompositeNodeKind;
     children: SyntaxNodeChild[];
     currentField?: string;
-    startPosition: Position;
+    startPosition: Point;
 };
 
 type IncompleteNode =
     | IncompleteCompositeNode;
 
+function tokenToSyntaxNode(tree: Tree, token: Token): SyntaxNodeImpl {
+    return new TokenNodeImpl(tree, token);
+}
+
+function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point): SyntaxNodeImpl {
+    return new MissingTokenNodeImpl(kind, startPosition, tree);
+}
+
+function incompleteNodeToSyntaxNode(tree: Tree, node: IncompleteNode): SyntaxNodeImpl {
+    return new CompositeNodeImpl(
+        node.kind,
+        true,
+        node.startPosition,
+        tree,
+        node.children,
+    );
+}
+
 type Checkpoint = {
     index: number;
     parent: IncompleteCompositeNode;
-    position: Position;
+    position: Point;
 };
 
 abstract class NodeBuilder {
     protected currentNodes: IncompleteNode[];
 
-    constructor(startNode: IncompleteNode) {
+    constructor(
+        protected tree: TreeImpl,
+        startNode: IncompleteNode,
+    ) {
         this.currentNodes = [startNode];
     }
 
-    abstract get pos(): Position;
+    abstract get pos(): Point;
 
     get currentNode() {
         return this.currentNodes[this.currentNodes.length - 1];
@@ -45,14 +67,14 @@ abstract class NodeBuilder {
         this.currentNodes[this.currentNodes.length - 1] = node;
     }
 
-    addChild(node: SyntaxNode) {
+    addChild(node: SyntaxNodeImpl) {
         this.currentNode.children.push({
             node,
             field: this.currentNode.currentField,
         });
     }
 
-    addChildren(nodes: SyntaxNode[]) {
+    addChildren(nodes: SyntaxNodeImpl[]) {
         for (const node of nodes) {
             this.addChild(node);
         }
@@ -89,7 +111,7 @@ abstract class NodeBuilder {
             throw new Error(`Expected node of type ${nodeType}, got ${this.currentNode.kind}`);
         }
         const node = this.currentNodes.pop()!;
-        this.addChild({ nodeKind: nodeType, children: node.children, startPosition: node.startPosition });
+        this.addChild(incompleteNodeToSyntaxNode(this.tree, node));
     }
 
     beginField(fieldName: string) {
@@ -130,17 +152,21 @@ class ParserBase extends NodeBuilder {
     lastErrorIndex = -1;
 
     constructor(
-        protected tokens: Iterator<Token>,
+        text: string,
+        protected tokens: Iterator<Token, Token>,
         protected errorSink: ErrorSink,
     ) {
         const token = tokens.next().value;
         assert(token);
 
-        super({
-            kind: CompositeNodeKind.Root,
-            children: [],
-            startPosition: token.position,
-        });
+        super(
+            new TreeImpl(text, null!),
+            {
+                kind: CompositeNodeKind.Root,
+                children: [],
+                startPosition: token.startPosition,
+            },
+        );
 
         this.tok = token;
     }
@@ -150,7 +176,7 @@ class ParserBase extends NodeBuilder {
     }
 
     override get pos() {
-        return this.tok.position;
+        return this.tok.startPosition;
     }
 
     match(kind: TokenKind): boolean;
@@ -170,15 +196,15 @@ class ParserBase extends NodeBuilder {
         if (assertedToken) {
             assert(this.tok.kind === assertedToken);
         }
-        this.addChild({ token: this.tok });
+        this.addChild(tokenToSyntaxNode(this.tree, this.tok));
         this.tok = this.tokens.next().value!;
     }
 
-    addError(position: Position, message: string) {
+    addError(position: Point, message: string) {
         if (position.index === this.lastErrorIndex) {
             return;
         }
-        this.errorSink.add(position, message);
+        this.errorSink.add({ position, message });
         this.lastErrorIndex = position.index;
     }
 
@@ -201,7 +227,7 @@ class ParserBase extends NodeBuilder {
     expect(tokenKind: TokenKind) {
         if (!this.match(tokenKind)) {
             this.addError(this.pos, `Expected '${tokenKind}', got '${this.tok.kind}' while parsing ${this.currentNode.kind}`);
-            this.addChild({ missing: tokenKind, position: this.pos });
+            this.addChild(missingTokenNode(tokenKind, this.tree, this.pos));
             return false;
         }
         this.bump();
@@ -235,20 +261,17 @@ export class Parser extends ParserBase {
     //=========================================================================
     // Entry point
 
-    top(): SyntaxNode {
+    top(): Tree {
         while (!this.isAtEnd) {
             this.topLevelDecl();
         }
         assert(this.tok.kind === '<eof>');
-        this.addChild({ token: this.tok });
+        this.addChild(tokenToSyntaxNode(this.tree, this.tok));
 
         assert(this.currentNodes.length === 1);
         assert(this.currentNode.kind === CompositeNodeKind.Root);
-        return {
-            nodeKind: CompositeNodeKind.Root,
-            children: this.currentNode.children,
-            startPosition: this.currentNode.startPosition,
-        };
+        this.tree.rootNode = incompleteNodeToSyntaxNode(this.tree, this.currentNode);
+        return this.tree;
     }
 
     //=========================================================================

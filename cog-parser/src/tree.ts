@@ -1,6 +1,7 @@
 export type Point = {
     row: number;
     column: number;
+    index: number;
 };
 
 export type Range = {
@@ -11,37 +12,39 @@ export type Range = {
 };
 
 export interface SyntaxNode {
-    tree: Tree;
-    id: number;
-    type: string;
-    isNamed: boolean;
-    isMissing: boolean;
-    isExtra: boolean;
-    hasError: boolean;
-    isError: boolean;
-    text: string;
+    readonly type: string;
+    readonly isNamed: boolean;
 
-    startPosition: Point;
-    endPosition: Point;
-    startIndex: number;
-    endIndex: number;
+    readonly isMissing: boolean;
+    readonly isExtra: boolean;
+    readonly hasError: boolean;
+    readonly isError: boolean;
 
-    parent: SyntaxNode | null;
-    children: Array<SyntaxNode>;
-    namedChildren: Array<SyntaxNode>;
-    childCount: number;
-    namedChildCount: number;
-    firstChild: SyntaxNode | null;
-    firstNamedChild: SyntaxNode | null;
-    lastChild: SyntaxNode | null;
-    lastNamedChild: SyntaxNode | null;
-    nextSibling: SyntaxNode | null;
-    nextNamedSibling: SyntaxNode | null;
-    previousSibling: SyntaxNode | null;
-    previousNamedSibling: SyntaxNode | null;
-    descendantCount: number;
+    readonly text: string;
+
+    readonly startPosition: Point;
+    readonly endPosition: Point;
+    readonly startIndex: number;
+    readonly endIndex: number;
+
+    readonly tree: Tree;
+    readonly parent: SyntaxNode | null;
+    readonly children: Array<SyntaxNode>;
+    readonly namedChildren: Array<SyntaxNode>;
+    readonly childCount: number;
+    readonly namedChildCount: number;
+    readonly firstChild: SyntaxNode | null;
+    readonly firstNamedChild: SyntaxNode | null;
+    readonly lastChild: SyntaxNode | null;
+    readonly lastNamedChild: SyntaxNode | null;
+    readonly nextSibling: SyntaxNode | null;
+    readonly nextNamedSibling: SyntaxNode | null;
+    readonly previousSibling: SyntaxNode | null;
+    readonly previousNamedSibling: SyntaxNode | null;
+    // readonly descendantCount: number;
 
     toString(): string;
+    pretty(): string;
     child(index: number): SyntaxNode | null;
     namedChild(index: number): SyntaxNode | null;
     childForFieldName(fieldName: string): SyntaxNode | null;
@@ -50,15 +53,15 @@ export interface SyntaxNode {
     firstChildForIndex(index: number): SyntaxNode | null;
     firstNamedChildForIndex(index: number): SyntaxNode | null;
 
-    descendantForIndex(index: number): SyntaxNode;
-    descendantForIndex(startIndex: number, endIndex: number): SyntaxNode;
-    namedDescendantForIndex(index: number): SyntaxNode;
-    namedDescendantForIndex(startIndex: number, endIndex: number): SyntaxNode;
-    descendantForPosition(position: Point): SyntaxNode;
-    descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
-    namedDescendantForPosition(position: Point): SyntaxNode;
-    namedDescendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
-    descendantsOfType(types: string | Array<string>, startPosition?: Point, endPosition?: Point): Array<SyntaxNode>;
+    // descendantForIndex(index: number): SyntaxNode;
+    // descendantForIndex(startIndex: number, endIndex: number): SyntaxNode;
+    // namedDescendantForIndex(index: number): SyntaxNode;
+    // namedDescendantForIndex(startIndex: number, endIndex: number): SyntaxNode;
+    // descendantForPosition(position: Point): SyntaxNode;
+    // descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    // namedDescendantForPosition(position: Point): SyntaxNode;
+    // namedDescendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    // descendantsOfType(types: string | Array<string>, startPosition?: Point, endPosition?: Point): Array<SyntaxNode>;
 
     closest(types: string | Array<string>): SyntaxNode | null;
     walk(): TreeCursor;
@@ -78,7 +81,7 @@ export interface TreeCursor {
     readonly currentNode: SyntaxNode;
     readonly currentFieldName: string;
     readonly currentDepth: number;
-    readonly currentDescendantIndex: number;
+    // readonly currentDescendantIndex: number;
 
     reset(node: SyntaxNode): void;
     resetTo(cursor: TreeCursor): void;
@@ -89,10 +92,11 @@ export interface TreeCursor {
     gotoFirstChildForPosition(goalPosition: Point): boolean;
     gotoNextSibling(): boolean;
     gotoPreviousSibling(): boolean;
-    gotoDescendant(goalDescendantIndex: number): void;
+    // gotoDescendant(goalDescendantIndex: number): void;
 }
 
 export interface Tree {
+    readonly text: string;
     readonly rootNode: SyntaxNode;
     walk(): TreeCursor;
 }

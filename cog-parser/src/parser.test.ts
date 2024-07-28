@@ -1,22 +1,21 @@
 import { expect, test } from 'vitest';
-import { ErrorSink, Parser } from './parser.js';
+import { Error, ErrorSink } from './ErrorSink.js';
 import { tokenize } from './lexer.js';
-import { reconstructText, prettySyntaxTree, SyntaxNode } from './nodes.js';
-import { Position } from './token.js';
+import { Parser } from './parser.js';
+import { Tree } from './tree.js';
 
-type SyntaxError = { pos: Position; message: string };
+function parse(text: string): [Tree, Error[]] {
+    const errors: Error[] = [];
 
-function parse(text: string): [SyntaxNode, SyntaxError[]] {
-    const errors: SyntaxError[] = [];
-
-    const parser = new Parser(
-        tokenize(text),
-        <ErrorSink>{
-            add(pos, message: string) {
-                errors.push({ pos, message });
-            },
+    const errorSink = <ErrorSink>{
+        add(error: Error) {
+            errors.push(error);
         },
-    );
+    };
+
+    const tokenizer = tokenize(text, errorSink);
+
+    const parser = new Parser(text, tokenizer, errorSink);
 
     const tree = parser.top();
 
@@ -52,22 +51,12 @@ test('parser:bad', () => {
     expect(errors).toMatchSnapshot();
 });
 
-test('reconstructText:good', () => {
-    const [tree, _errors] = parse(good);
-    expect(reconstructText(tree)).toEqual(good);
-});
-
-test('reconstructText:bad', () => {
-    const [tree, _errors] = parse(bad);
-    expect(reconstructText(tree)).toEqual(bad);
-});
-
 test('prettySyntaxTree:good', () => {
     const [tree, _errors] = parse(good);
-    expect(prettySyntaxTree(tree)).toMatchSnapshot();
+    expect(tree.rootNode.pretty()).toMatchSnapshot();
 });
 
 test('prettySyntaxTree:bad', () => {
     const [tree, _errors] = parse(bad);
-    expect(prettySyntaxTree(tree)).toMatchSnapshot();
+    expect(tree.rootNode.pretty()).toMatchSnapshot();
 });

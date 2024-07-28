@@ -1,20 +1,22 @@
 import assert from 'assert';
-import { keywords, Position, symbols, Token, TokenKind } from './token.js';
 import { CharCursor } from './charCursor.js';
+import { keywords, symbols, Token, TokenKind } from './token.js';
+import { Point } from './tree.js';
+import { ErrorSink } from './ErrorSink.js';
 
-export function* tokenize(text: string) {
-    const lexer = new Lexer(text);
+export function* tokenize(text: string, errorSink: ErrorSink): Generator<Token, Token> {
+    const lexer = new Lexer(text, errorSink);
     while (true) {
         yield lexer.scanToken();
     }
 }
 
 export class Lexer {
-    private startPos!: Position;
+    private startPos!: Point;
     private cursor: CharCursor;
     private trivia: string[] = [];
 
-    constructor(private text: string) {
+    constructor(private text: string, private errors: ErrorSink) {
         this.cursor = new CharCursor(text);
     }
 
@@ -44,7 +46,12 @@ export class Lexer {
         }
     }
 
+    private addError(position: Point, message: string) {
+        this.errors.add({ position, message });
+    }
+
     private makeToken(kind: TokenKind, lexeme?: string): Token {
+        const startPosition = this.startPos;
         lexeme ??= this.lexeme;
 
         // Leading trivia
@@ -60,7 +67,7 @@ export class Lexer {
         return {
             kind,
             lexeme,
-            position: this.startPos,
+            startPosition,
             leadingTrivia,
             trailingTrivia,
         };
@@ -143,7 +150,7 @@ export class Lexer {
             this.bump();
             this.bump();
         } else {
-            console.error(this.pos, 'Unterminated block comment');
+            this.addError(this.pos, 'Unterminated block comment');
         }
         this.trivia.push(this.lexeme);
     }
@@ -162,7 +169,7 @@ export class Lexer {
             this.scanCharPart();
         }
         if (this.isEof) {
-            console.error(this.pos, 'Unterminated string literal');
+            this.addError(this.pos, 'Unterminated string literal');
         }
         this.bump();
         return this.makeToken('<string>');
@@ -177,10 +184,10 @@ export class Lexer {
             if (this.cc === '\'') {
                 this.bump();
             } else {
-                console.error(this.pos, 'Invalid character literal');
+                this.addError(this.pos, 'Invalid character literal');
             }
         } else {
-            console.error(this.pos, 'Unterminated character literal');
+            this.addError(this.pos, 'Unterminated character literal');
         }
         return this.makeToken('<char>');
     }
@@ -217,7 +224,7 @@ export class Lexer {
     }
 
     private scanUnknown() {
-        console.error(this.pos, 'Unknown character');
+        this.addError(this.pos, 'Unknown character');
         this.bump();
         return this.makeToken('<error>');
     }
