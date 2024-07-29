@@ -4,6 +4,8 @@ import { ParsingService } from './parsingService';
 import { ElaborationError, Elaborator, TypeLayout } from "../semantics/Elaborator";
 import { StructFieldSym, Sym } from "../semantics/sym";
 import { Type } from "../semantics/type";
+import { Stream, stream } from "../utils/stream";
+import { Scope } from "../semantics/Scope";
 
 interface IElaborationService {
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined;
@@ -19,6 +21,17 @@ export class ElaborationService implements IElaborationService {
 
     getErrors(path: string): ElaborationError[] {
         return this.createElaborator(path).errors;
+    }
+
+    getSymbolsAtNode(path: string, node: SyntaxNode): Stream<Sym> {
+        let innerScope = this.createElaboratorForScope(path, node).scope;
+        return stream(function* go(scope): Iterable<Sym> {
+            if (!scope) {
+                return;
+            }
+            yield* scope.symbols.values();
+            yield* go(scope.parent!);
+        }(innerScope))
     }
 
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
@@ -61,7 +74,7 @@ export class ElaborationService implements IElaborationService {
         return this.createElaborator(path).typeLayout(type);
     }
 
-    private lookup(path: string, node: SyntaxNode | null, name: string): Sym | undefined {
+    public lookup(path: string, node: SyntaxNode | null, name: string): Sym | undefined {
         return this.createElaboratorForScope(path, node).scope.lookup(name);
     }
 

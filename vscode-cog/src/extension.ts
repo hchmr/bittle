@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeActionsProvider } from './features/codeActions';
+import { CompletionProvider } from './features/completion';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/gotoDefinition';
@@ -11,6 +12,7 @@ import { IncludeResolver } from './services/IncludeResolver';
 import { ParsingService } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
 import { createVirtualFileSystem } from './vfs';
+import { SignatureHelpProvider } from './features/signatureHelp';
 
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();
@@ -83,7 +85,15 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborationService)),
     );
 
+    // Completion
 
+    context.subscriptions.push(
+        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, elaborationService), '.')
+    );
+
+    context.subscriptions.push(
+        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ',')
+    );
 
     // TODO:
     // - Go to definition
