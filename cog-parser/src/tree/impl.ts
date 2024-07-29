@@ -273,9 +273,11 @@ export class TokenNodeImpl extends SyntaxNodeImpl {
     constructor(
         tree: Tree,
         token: Token,
-        isNamed: boolean,
+        overrideType?: string,
     ) {
-        super(token.kind, isNamed, token.startPosition, token.startIndex, tree);
+        const type = overrideType ?? token.kind;
+        const isNamed = !!overrideType;
+        super(type, isNamed, token.startPosition, token.startIndex, tree);
         this._token = token;
     }
 

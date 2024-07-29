@@ -436,8 +436,8 @@ export class Elaborator {
         const nameNode = node?.childForFieldName("name");
         const name = nameNode?.text ?? "";
 
-        const paramsNode = node.childForFieldName("params");
-        const params = stream(paramsNode?.children ?? [])
+        const paramNodes = node.childrenForFieldName("params");
+        const params = stream(paramNodes)
             .filter(n => n.type === "param_decl")
             .map<FuncParamSym>(n => {
                 const paramName = getName(n) ?? "";
@@ -451,7 +451,7 @@ export class Elaborator {
             })
             .toArray();
 
-        const isVariadic = !!paramsNode?.children.some(child => child.type === "variadic_param");
+        const isVariadic = !!paramNodes.some(child => child.type === "variadic_param");
 
         const returnTypeNode = node.childForFieldName("return_type");
         const returnType: Type = returnTypeNode ? this.typeEval(returnTypeNode) : { kind: "void" };
@@ -625,7 +625,7 @@ export class Elaborator {
 
     private elabExprStmt(node: SyntaxNode) {
         const exprNode = node.childForFieldName("expr");
-        this.elabStmt(exprNode);
+        this.elabExprInfer(exprNode);
     }
 
     //==============================================================================
@@ -856,8 +856,7 @@ export class Elaborator {
 
     private elabCallExpr(node: SyntaxNode): Type {
         const calleeNode = node.childForFieldName("callee");
-        const argsNode = node.childForFieldName("args");
-
+        const argsNodes = node.childrenForFieldName("args");
         if (!calleeNode)
             return { kind: "error" }
 
@@ -874,12 +873,8 @@ export class Elaborator {
             return { kind: "error" }
         }
 
-        if (!argsNode) {
-            return funcSym.returnType;
-        }
-
         const params = funcSym.params;
-        const args = argsNode.children.filter(x => isExprNode(x))
+        const args = argsNodes.filter(x => isExprNode(x));
 
         if (args.length < params.length) {
             this.reportError(node, `Too few arguments provided(${args.length} < ${params.length}).`);

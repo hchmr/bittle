@@ -280,7 +280,7 @@ function buildLookupTable<Self>(
                 test = (char: string) => filter.has(char);
             } else {
                 const never: never = filter;
-                throw never;
+                throw new Error(`Invalid filter: ${never}`);
             }
 
             if (test(char)) {

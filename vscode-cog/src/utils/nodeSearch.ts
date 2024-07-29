@@ -1,18 +1,17 @@
 import { Point, SyntaxNode, Tree } from "cog-parser";
-import { nodeContains, PointRange, rangeContains } from ".";
+import { nodeContains, PointRange, rangeContains, rangeContainsPoint } from ".";
 
 /**
  * If between two nodes, return the left and right nodes; otherwise, return the containing node.
  */
-export function getNodesAtPosition(tree: Tree, rightPoint: Point): SyntaxNode[] {
-    let points = [rightPoint];
-    if (rightPoint.column > 0) {
-        const leftPoint = { ...rightPoint, column: rightPoint.column - 1 };
-        points.unshift(leftPoint);
-    }
+export function getNodesAtPosition(tree: Tree, point: Point): SyntaxNode[] {
+    const matchingNode = tree.rootNode.descendantForPosition(point);
 
-    let matchingNodes = points
-        .map(point => tree.rootNode.descendantForPosition(point));
+    const matchingNodes = [matchingNode];
+    const adjacentNode = getAdjacentNode(matchingNode, point);
+    if (adjacentNode && rangeContainsPoint(adjacentNode, point)) {
+        matchingNodes.push(adjacentNode);
+    }
 
     if (matchingNodes.length < 2) {
         return matchingNodes;
@@ -38,4 +37,26 @@ export function getNodeAtRange(tree: Tree, range: PointRange) {
         approximateMatch: node,
         exactMatch: rangeContains(range, node) ? node : null,
     };
+}
+
+// try sibling
+// then try parent's sibling
+// then try parent's parent's sibling
+// and so on
+// TODO: replace with tree API that returns the nodes adjacent to a point
+function getAdjacentNode(node: SyntaxNode, point: Point): SyntaxNode | null {
+    while (true) {
+        if (node.nextSibling) {
+            break;
+        }
+        if (!node.parent) {
+            return null;
+        }
+        node = node.parent;
+    }
+
+    if (!rangeContainsPoint(node.nextSibling, point)) {
+        return null;
+    }
+    return node.nextSibling;
 }

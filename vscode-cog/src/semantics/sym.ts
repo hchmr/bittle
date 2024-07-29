@@ -72,7 +72,9 @@ export type Origin = {
 }
 
 export function valueSymType(sym: Sym): Type | undefined {
-    if (sym.kind === SymKind.Func) {
+    if (sym.kind === SymKind.StructField) {
+        return sym.type;
+    } else if (sym.kind === SymKind.Func) {
         return sym.returnType;
     } else if (sym.kind === SymKind.Global) {
         return sym.type;
@@ -83,7 +85,7 @@ export function valueSymType(sym: Sym): Type | undefined {
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {
-        throw undefined;
+        throw new Error(`Unexpected symbol kind: ${sym.kind}`);
     }
 }
 

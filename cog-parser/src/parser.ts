@@ -25,7 +25,7 @@ type IncompleteNode =
     | IncompleteCompositeNode;
 
 function tokenToSyntaxNode(tree: Tree, token: Token): SyntaxNodeImpl {
-    return new TokenNodeImpl(tree, token, token.kind in namedTokenKinds);
+    return new TokenNodeImpl(tree, token, namedTokenKinds[token.kind]);
 }
 
 function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point, startIndex: number): SyntaxNodeImpl {
@@ -335,15 +335,21 @@ export class Parser extends ParserBase {
     enumDecl() {
         this.beginNode(CompositeNodeKind.EnumDecl);
         this.bump('enum');
-        this.beginField('body');
         if (!this.match('{')) {
             this.addErrorAndTryBump(`Expected enum body.`);
         }
         if (this.match('{')) {
-            this.delimited('{', '}', ',', () => this.enumMember());
+            this.beginField('body');
+            this.enumBody();
+            this.finishField('body');
         }
-        this.finishField('body');
         this.finishNode(CompositeNodeKind.EnumDecl);
+    }
+
+    enumBody() {
+        this.beginNode(CompositeNodeKind.EnumBody);
+        this.delimited('{', '}', ',', () => this.enumMember());
+        this.finishNode(CompositeNodeKind.EnumBody);
     }
 
     enumMember() {
@@ -370,15 +376,23 @@ export class Parser extends ParserBase {
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
-        this.beginField('body');
-        if (!this.match('{')) {
+        if (!this.match('{') && !this.match(';')) {
             this.addErrorAndTryBump(`Expected struct body.`);
         }
-        if (this.match('{')) {
-            this.delimited('{', '}', ',', () => this.structMember());
+        if (this.match(';')) {
+            this.bump(';');
+        } else if (this.match('{')) {
+            this.beginField('body');
+            this.structBody();
+            this.finishField('body');
         }
-        this.finishField('body');
         this.finishNode(CompositeNodeKind.StructDecl);
+    }
+
+    structBody() {
+        this.beginNode(CompositeNodeKind.StructBody);
+        this.delimited('{', '}', ',', () => this.structMember());
+        this.finishNode(CompositeNodeKind.StructBody);
     }
 
     structMember() {
@@ -605,9 +619,9 @@ export class Parser extends ParserBase {
 
     exprStmt() {
         this.beginNode(CompositeNodeKind.ExprStmt);
-        this.beginField('expression');
+        this.beginField('expr');
         this.expr();
-        this.finishField('expression');
+        this.finishField('expr');
         this.expect(';');
         this.finishNode(CompositeNodeKind.ExprStmt);
     }
@@ -658,7 +672,9 @@ export class Parser extends ParserBase {
 
     unaryExpr(op: TokenKind) {
         this.beginNode(CompositeNodeKind.UnaryExpr);
+        this.beginField('operator');
         this.bump(op);
+        this.finishField('operator');
         this.beginField('operand');
         this.expr();
         this.finishField('operand');

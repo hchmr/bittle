@@ -6,8 +6,10 @@ export enum CompositeNodeKind {
     // Top-level declarations
     IncludeDecl = 'include_decl',
     EnumDecl = 'enum_decl',
+    EnumBody = 'enum_body',
     EnumMember = 'enum_member',
     StructDecl = 'struct_decl',
+    StructBody = 'struct_body',
     StructMember = 'struct_member',
     FuncDecl = 'func_decl',
     FuncParam = 'param_decl',
