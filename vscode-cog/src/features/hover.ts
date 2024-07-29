@@ -1,7 +1,7 @@
 import { SyntaxNode } from 'cog-parser';
 import * as vscode from 'vscode';
 import { TypeLayout } from '../semantics/Elaborator';
-import { prettySym, Sym, SymKind, valueSymType } from '../semantics/sym';
+import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
@@ -57,7 +57,7 @@ export class HoverProvider implements vscode.HoverProvider {
 
     addLayout(document: vscode.TextDocument, hoverDetail: HoverDetail): HoverDetail {
         let type = hoverDetail.kind === 'sym'
-            ? structSymType(hoverDetail.sym) ?? valueSymType(hoverDetail.sym)
+            ? structSymType(hoverDetail.sym) ?? symRelatedType(hoverDetail.sym)
             : hoverDetail.type;
 
         if (type) {

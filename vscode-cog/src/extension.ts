@@ -3,7 +3,7 @@ import { CodeActionsProvider } from './features/codeActions';
 import { CompletionProvider } from './features/completion';
 import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { ElaborationErrorProvider } from './features/elaborationErrors';
-import { IncludeDefinitionProvider, NameDefinitionProvider } from './features/gotoDefinition';
+import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
@@ -83,6 +83,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
         vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborationService)),
+        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, elaborationService))
     );
 
     // Completion
@@ -99,6 +100,5 @@ export function activate(context: vscode.ExtensionContext) {
     // - Go to definition
     // - Find references
     // - Rename
-    // - Auto-completion
     // - More code actions
 }

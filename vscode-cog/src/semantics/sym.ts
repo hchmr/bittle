@@ -71,8 +71,10 @@ export type Origin = {
     nameNode?: SyntaxNode;
 }
 
-export function valueSymType(sym: Sym): Type | undefined {
-    if (sym.kind === SymKind.StructField) {
+export function symRelatedType(sym: Sym): Type {
+    if (sym.kind === SymKind.Struct) {
+        return { kind: "struct", name: sym.name };
+    } if (sym.kind === SymKind.StructField) {
         return sym.type;
     } else if (sym.kind === SymKind.Func) {
         return sym.returnType;
@@ -85,7 +87,8 @@ export function valueSymType(sym: Sym): Type | undefined {
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {
-        throw new Error(`Unexpected symbol kind: ${sym.kind}`);
+        const never: never = sym;
+        throw new Error(`Unexpected symbol kind: ${never}`);
     }
 }
 
@@ -105,7 +108,7 @@ export function prettySym(sym: Sym): string {
     } else if (sym.kind === SymKind.Local) {
         return `var ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Const) {
-        return `const ${sym.name}: ${prettyType(valueSymType(sym)!)} = ${sym.value}`;
+        return `const ${sym.name}: ${prettyType(symRelatedType(sym)!)} = ${sym.value}`;
     } else if (sym.kind === SymKind.FuncParam) {
         return `(parameter) ${sym.name}: ${prettyType(sym.type)}`;
     } else {

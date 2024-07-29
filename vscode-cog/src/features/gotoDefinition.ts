@@ -5,6 +5,11 @@ import { ElaborationService } from "../services/elaborationService";
 import { fromVscPosition, toVscRange } from "../utils";
 import { getNodesAtPosition } from "../utils/nodeSearch";
 import { VirtualFileSystem } from "../vfs";
+import { isExprNode, isTypeNode } from "../syntax/nodeTypes";
+import { SyntaxNode } from "cog-parser";
+import { stream } from "../utils/stream";
+import { Sym, SymKind, symRelatedType } from "../semantics/sym";
+import { Type } from "../semantics/type";
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     constructor(private vfs: VirtualFileSystem, private parsingService: ParsingService) { }
@@ -71,5 +76,74 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider {
                     };
                 });
             });
+    }
+}
+
+export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
+    constructor(
+        private parsingService: ParsingService,
+        private elaborationService: ElaborationService
+    ) { }
+
+    provideTypeDefinition(
+        document: vscode.TextDocument,
+        vscPosition: vscode.Position,
+        token: vscode.CancellationToken
+    ) {
+        const tree = this.parsingService.parse(document.fileName);
+        const position = fromVscPosition(vscPosition);
+        return stream(getNodesAtPosition(tree, position))
+            .filterMap(startNode => {
+                // Essentially the same algorithm as in the hover provider
+                for (let node: SyntaxNode | null = startNode; node; node = node.parent) {
+                    const symbol = this.getSymbolForNode(document.fileName, node);
+                    if (symbol) {
+                        return { node, symbol }
+                    }
+                }
+            })
+            .flatMap(({ node, symbol }) =>
+                symbol.origins.map(origin => {
+                    return <vscode.LocationLink>{
+                        originSelectionRange: toVscRange(node),
+                        targetUri: vscode.Uri.file(origin.file),
+                        targetRange: toVscRange(origin.node),
+                        targetSelectionRange: origin.nameNode ? toVscRange(origin.nameNode) : undefined,
+                    };
+                })
+            )
+            .toArray();
+    }
+
+    getSymbolForNode(filePath: string, node: SyntaxNode): Sym | undefined {
+        const type = this.getTypeForNode(filePath, node);
+        if (!type) {
+            return;
+        }
+        return this.fromType(filePath, node, type);
+    }
+
+    getTypeForNode(filePath: string, node: SyntaxNode): Type | undefined {
+        if (node.type === "identifier") {
+            const sym = this.elaborationService.resolveSymbol(filePath, node);
+            if (!sym || sym.kind === SymKind.Func) {
+                return;
+            }
+            return symRelatedType(sym);
+        } else if (isExprNode(node)) {
+            return this.elaborationService.inferType(filePath, node);
+        } else if (isTypeNode(node)) {
+            return this.elaborationService.evalType(filePath, node);
+        }
+    }
+
+    fromType(filePath: string, node: SyntaxNode, type: Type): Sym | undefined {
+        if (type.kind === "pointer") {
+            type = type.elementType;
+        }
+        if (type.kind !== "struct") {
+            return;
+        }
+        return this.elaborationService.lookup(filePath, node, type.name);
     }
 }
