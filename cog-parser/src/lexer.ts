@@ -173,6 +173,7 @@ export class Lexer {
     }
 
     private scanString() {
+        assert(this.isAt('\"'));
         this.bump();
         while (!this.isEof && this.cc !== '"') {
             this.scanCharPart();
@@ -185,27 +186,40 @@ export class Lexer {
     }
 
     private scanChar() {
+        assert(this.isAt('\''));
         this.bump();
+
         if (!this.isEof) {
-            if (this.cc !== '\'') {
+            if (!this.isAt('\'')) {
                 this.scanCharPart();
-            }
-            if (this.cc === '\'') {
-                this.bump();
+                if (this.isAt('\'')) {
+                    this.bump();
+                } else {
+                    this.addError(this.pos, 'Unterminated character literal');
+                }
             } else {
-                this.addError(this.pos, 'Invalid character literal');
+                this.addError(this.pos, 'Empty character literal');
             }
         } else {
             this.addError(this.pos, 'Unterminated character literal');
         }
+
         return this.makeToken('char_literal');
     }
 
     private scanCharPart() {
-        if (this.cc === '\\') {
+        assert(!this.isEof);
+
+        if (this.isAt('\\')) {
+            this.bump();
+            if (this.isEof) {
+                this.addError(this.pos, 'Unterminated escape sequence');
+            } else {
+                this.bump();
+            }
+        } else {
             this.bump();
         }
-        this.bump();
     }
 
     private scanNumber() {

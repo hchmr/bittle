@@ -38,6 +38,8 @@ export class CharCursor {
     }
 
     bump() {
+        assert(!this.isEof);
+
         let pc = this.cc;
         this._index++;
         if (pc === '\r' && this.cc === '\n') {
