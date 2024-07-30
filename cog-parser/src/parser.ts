@@ -567,14 +567,18 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.IfStmt);
         this.bump('if');
         this.expect('(');
-        this.beginField('condition');
+        this.beginField('cond');
         this.expr();
-        this.finishField('condition');
+        this.finishField('cond');
         this.expect(')');
+        this.beginField('then');
         this.stmt();
+        this.finishField('then');
         if (this.match('else')) {
-            this.expect('else');
+            this.bump('else');
+            this.beginField('else');
             this.stmt();
+            this.finishField('else');
         }
         this.finishNode(CompositeNodeKind.IfStmt);
     }
@@ -583,11 +587,13 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeKind.WhileStmt);
         this.bump('while');
         this.expect('(');
-        this.beginField('condition');
+        this.beginField('cond');
         this.expr();
-        this.finishField('condition');
+        this.finishField('cond');
         this.expect(')');
+        this.beginField('body');
         this.stmt();
+        this.finishField('body');
         this.finishNode(CompositeNodeKind.WhileStmt);
     }
 
