@@ -13,7 +13,7 @@ export class IncludeResolver {
                 ? arg
                 : JSON.parse(arg.text);
         const includePath = path.resolve(path.dirname(filePath), pathValue);
-        if (this.vfs.readFile(includePath)) {
+        if (this.vfs.exists(includePath)) {
             return includePath;
         }
     }

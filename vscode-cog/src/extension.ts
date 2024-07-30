@@ -11,13 +11,13 @@ import { ElaborationService } from './services/elaborationService';
 import { IncludeResolver } from './services/IncludeResolver';
 import { ParsingService } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
-import { createVirtualFileSystem } from './vfs';
+import { VirtualFileSystem } from './vfs';
 import { SignatureHelpProvider } from './features/signatureHelp';
 
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();
 
-    const vfs = createVirtualFileSystem(cache);
+    const vfs = new VirtualFileSystem(cache);
     context.subscriptions.push(vfs);
 
     const parsingService = new ParsingService(cache, vfs);
