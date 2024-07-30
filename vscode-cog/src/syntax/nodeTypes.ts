@@ -24,8 +24,9 @@ export enum StmtNodeType {
     IfStmt = "if_stmt",
     WhileStmt = "while_stmt",
     ReturnStmt = "return_stmt",
-    JumpStmt = "jump_stmt",
-    ExprStmt = "expr_stmt"
+    BreakStmt = "break_stmt",
+    ContinueStmt = "continue_stmt",
+    ExprStmt = "expr_stmt",
 }
 
 export enum ExprNodeType {

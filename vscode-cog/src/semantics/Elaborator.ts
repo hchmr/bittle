@@ -542,7 +542,8 @@ export class Elaborator {
             case StmtNodeType.ReturnStmt:
                 this.elabReturnStmt(node)
                 break
-            case StmtNodeType.JumpStmt:
+            case StmtNodeType.BreakStmt:
+            case StmtNodeType.ContinueStmt:
                 break
             case StmtNodeType.ExprStmt:
                 this.elabExprStmt(node)
