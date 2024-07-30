@@ -387,16 +387,17 @@ export class Elaborator {
             this.enterScope(bodyNode)
 
             for (const fieldNode of stream(bodyNode.children).filter(n => n.type === "struct_member")) {
-                const fieldName = getName(fieldNode);
+                const fieldType = this.typeEval(fieldNode.childForFieldName("type"));
+
+                const fieldNameNode = fieldNode.childForFieldName("name");
+                const fieldName = fieldNameNode?.text;
                 if (!fieldName)
                     continue;
-
-                const fieldType = this.typeEval(fieldNode.childForFieldName("type"));
 
                 const fieldSymbol: StructFieldSym = {
                     kind: SymKind.StructField,
                     name: fieldName,
-                    origins: [this.createOrigin(node, nameNode)],
+                    origins: [this.createOrigin(fieldNode, fieldNameNode)],
                     type: fieldType,
                 }
                 sym.fields.push(fieldSymbol);
@@ -439,13 +440,16 @@ export class Elaborator {
         const paramNodes = node.childrenForFieldName("params");
         const params = stream(paramNodes)
             .filter(n => n.type === "param_decl")
-            .map<FuncParamSym>(n => {
-                const paramName = getName(n) ?? "";
-                const paramType = this.typeEval(n.childForFieldName("type"));
+            .map<FuncParamSym>(paramNode => {
+                const paramType = this.typeEval(paramNode.childForFieldName("type"));
+
+                const paramNameNode = paramNode.childForFieldName("name");
+                const paramName = paramNameNode?.text ?? "";
+
                 return {
                     kind: SymKind.FuncParam,
                     name: paramName,
-                    origins: [this.createOrigin(node, nameNode)],
+                    origins: [this.createOrigin(paramNode, paramNameNode)],
                     type: paramType,
                 }
             })
