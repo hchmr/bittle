@@ -1,3 +1,5 @@
+import { CancellationToken, CancellationTokenSource } from 'vscode';
+
 export class ReactiveCache {
     private dependencies = new Map<string, Set<string>>();
     private dependents = new Map<string, Set<string>>();
@@ -6,20 +8,32 @@ export class ReactiveCache {
     private currentComputation: string | null = null;
 
     compute<T>(key: string, compute: () => T): T {
+        if (this.values.has(key)) {
+            const value = this.values.get(key);
+            this.track(key);
+            return value;
+        }
+
+        let value: T;
+        try {
+            value = this.inScope(key, compute);
+        } catch (e) {
+            throw e;
+        }
+
+        this.values.set(key, value);
+        this.track(key);
+        return value;
+    }
+
+    private track(key: string) {
         if (this.currentComputation) {
             addNode(this.dependencies, this.currentComputation, key);
             addNode(this.dependents, key, this.currentComputation);
         }
-        if (this.values.has(key)) {
-            return this.values.get(key);
-        }
-
-        const value = this.withTracking(key, compute);
-        this.values.set(key, value);
-        return value;
     }
 
-    withTracking<T>(key: string, compute: () => T) {
+    inScope<T>(key: string, compute: () => T) {
         const outerComputation = this.currentComputation;
         this.currentComputation = key;
         try {
