@@ -40,10 +40,17 @@ export type TypeLayout = {
     align: number,
 }
 
+export type SymReference = {
+    file: string,
+    nameNode: SyntaxNode,
+}
+
 export class Elaborator {
     scope!: Scope;
+    references!: Map<string, SymReference[]>
     errors: ElaborationError[] = []
     currentFunc: FuncSym | undefined
+    nextLocalIndex: number = 0
 
     constructor(
         private parsingService: ParsingService,
@@ -53,6 +60,7 @@ export class Elaborator {
 
     elab(tree: Tree) {
         this.scope = new Scope(this.path, tree.rootNode);
+        this.references = new Map();
         this.elabTree(tree);
     }
 
@@ -142,6 +150,22 @@ export class Elaborator {
         this.reportError(sym.origins[0].node, `Conflicting declaration of '${sym.name}'.`);
     }
 
+    private resolveName(nameNode: SyntaxNode): Sym | undefined {
+        const name = nameNode.text;
+        const sym = this.scope.lookup(name);
+        if (sym) {
+            this.trackReference(sym, nameNode);
+        }
+        return sym;
+    }
+
+    private trackReference(sym: Sym, nameNode: SyntaxNode) {
+        const origin = this.createOrigin(nameNode, nameNode);
+        const references = this.references.get(sym.qualifiedName) ?? [];
+        references.push({ file: origin.file, nameNode: nameNode });
+        this.references.set(sym.qualifiedName, references);
+    }
+
     //==============================================================================
     //== Types
 
@@ -154,7 +178,8 @@ export class Elaborator {
             case TypeNodeType.GroupedType:
                 return this.typeEval(typeNode.childForFieldName("type"))
             case TypeNodeType.NameType:
-                switch (typeNode.text) {
+                const nameNode = typeNode.firstChild!;
+                switch (nameNode.text) {
                     case "Void":
                         return { kind: "void" }
                     case "Bool":
@@ -170,7 +195,7 @@ export class Elaborator {
                     case "Int64":
                         return { kind: "int", size: 64 }
                     default: {
-                        const sym = this.scope.lookup(typeNode.text)
+                        const sym = this.resolveName(nameNode);
                         if (sym?.kind !== SymKind.Struct) {
                             this.reportError(typeNode, `Unknown type '${typeNode.text}'.`)
                             return { kind: "error" }
@@ -254,10 +279,10 @@ export class Elaborator {
             case ExprNodeType.GroupedExpr:
                 return this.constEval(node.childForFieldName("expr"));
             case ExprNodeType.NameExpr:
-                const name = node.text;
-                const sym = this.scope.lookup(name);
+                const nameNode = node.firstChild!;
+                const sym = this.resolveName(nameNode);
                 if (!sym || sym.kind !== SymKind.Const) {
-                    this.reportError(node, `Unknown constant '${name}'.`);
+                    this.reportError(node, `Unknown constant '${nameNode.text}'.`);
                     return;
                 }
                 return sym.value;
@@ -375,6 +400,7 @@ export class Elaborator {
         const sym: StructSym = {
             kind: SymKind.Struct,
             name,
+            qualifiedName: name,
             origins: [this.createOrigin(node, nameNode)],
             fields: undefined,
         }
@@ -397,6 +423,7 @@ export class Elaborator {
                 const fieldSymbol: StructFieldSym = {
                     kind: SymKind.StructField,
                     name: fieldName,
+                    qualifiedName: `${sym.name}.${fieldName}`,
                     origins: [this.createOrigin(fieldNode, fieldNameNode)],
                     type: fieldType,
                 }
@@ -425,6 +452,7 @@ export class Elaborator {
             this.addSymbol<ConstSym>({
                 kind: SymKind.Const,
                 name: memberName,
+                qualifiedName: memberName,
                 origins: [this.createOrigin(memberNode, memberNameNode)],
                 value,
             })
@@ -440,7 +468,7 @@ export class Elaborator {
         const paramNodes = node.childrenForFieldName("params");
         const params = stream(paramNodes)
             .filter(n => n.type === "param_decl")
-            .map<FuncParamSym>(paramNode => {
+            .map<FuncParamSym>((paramNode, index) => {
                 const paramType = this.typeEval(paramNode.childForFieldName("type"));
 
                 const paramNameNode = paramNode.childForFieldName("name");
@@ -449,6 +477,7 @@ export class Elaborator {
                 return {
                     kind: SymKind.FuncParam,
                     name: paramName,
+                    qualifiedName: `${name}.${index}`,
                     origins: [this.createOrigin(paramNode, paramNameNode)],
                     type: paramType,
                 }
@@ -465,6 +494,7 @@ export class Elaborator {
         this.addSymbol<FuncSym>({
             kind: SymKind.Func,
             name,
+            qualifiedName: name,
             origins: [this.createOrigin(node, nameNode)],
             params,
             returnType,
@@ -479,12 +509,14 @@ export class Elaborator {
         }
 
         this.currentFunc = this.scope.lookup(name) as FuncSym;
+        this.nextLocalIndex = 0;
 
         if (bodyNode) {
             this.elabBlockStmt(bodyNode);
         }
 
         this.currentFunc = undefined;
+        this.nextLocalIndex = undefined!;
 
         this.exitScope();
     }
@@ -499,6 +531,7 @@ export class Elaborator {
         this.addSymbol<GlobalSym>({
             kind: SymKind.Global,
             name,
+            qualifiedName: name,
             origins: [this.createOrigin(node, nameNode)],
             isDefined: !isExtern,
             type,
@@ -514,6 +547,7 @@ export class Elaborator {
         this.addSymbol<ConstSym>({
             kind: SymKind.Const,
             name,
+            qualifiedName: name,
             origins: [this.createOrigin(node, nameNode)],
             value,
         })
@@ -591,9 +625,12 @@ export class Elaborator {
             type ??= { kind: "error" }
         }
 
+        const qname = `${this.currentFunc!.name}.x${this.nextLocalIndex++}`;
+
         this.addSymbol<LocalSym>({
             kind: SymKind.Local,
             name,
+            qualifiedName: qname,
             origins: [this.createOrigin(node, nameNode)],
             type,
         });
@@ -702,7 +739,7 @@ export class Elaborator {
 
     private elabNameExpr(nameNode: SyntaxNode): Type {
         const name = nameNode.text;
-        const sym = this.scope.lookup(name);
+        const sym = this.resolveName(nameNode);
         if (!sym) {
             this.reportError(nameNode, `Unknown symbol '${name}'.`);
             return { kind: "error" }
@@ -870,9 +907,10 @@ export class Elaborator {
             return { kind: "error" }
         }
 
-        const funcName = calleeNode.text;
+        const funcNameNode = calleeNode.firstChild!;
+        const funcName = funcNameNode.text;
 
-        const funcSym = this.scope.lookup(funcName);
+        const funcSym = this.resolveName(funcNameNode);
         if (!funcSym || funcSym.kind !== SymKind.Func) {
             this.reportError(calleeNode, `Unknown function '${funcName}'.`);
             return { kind: "error" }
@@ -929,13 +967,18 @@ export class Elaborator {
         const sym = this.scope.lookup(leftType.name);
         assert(sym?.kind === SymKind.Struct);
 
-        const fieldName = getName(node);
+        const nameNode = node.childForFieldName("name");
+        if (!nameNode) {
+            return;
+        }
+        const fieldName = nameNode.text;
 
         const field = sym.fields?.find(f => f.name === fieldName);
         if (!field) {
             this.reportError(node, `Unknown field '${fieldName}'.`);
             return undefined;
         }
+        this.trackReference(field, nameNode); // track use of field
         return field;
     }
 
@@ -1043,6 +1086,7 @@ function tryMergeStructSym(existing: StructSym, sym: StructSym, onError: ErrorSi
     return {
         kind: SymKind.Struct,
         name: existing.name,
+        qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
         fields: tryMergeStructFields(existing, sym, onError),
     };
@@ -1064,6 +1108,7 @@ function tryMergeStructFieldSym(field1: StructFieldSym, field2: StructFieldSym, 
     return {
         kind: SymKind.StructField,
         name: field1.name,
+        qualifiedName: field1.qualifiedName,
         origins: mergeOrigins(field1.origins, field2.origins),
         type: tryUnifyTypes(field1.type, field2.type, onError),
     };
@@ -1073,6 +1118,7 @@ function tryMergeFuncSym(existing: FuncSym, sym: FuncSym, onError: ErrorSignal):
     return {
         kind: SymKind.Func,
         name: existing.name,
+        qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
         params: tryMergeFuncParams(existing.params, sym.params, onError),
         returnType: tryUnifyTypes(existing.returnType, sym.returnType, onError),
@@ -1108,6 +1154,7 @@ function tryMergeFuncParamSym(param1: FuncParamSym, param2: FuncParamSym, onErro
     return {
         kind: SymKind.FuncParam,
         name: param1.name === param2.name ? param1.name : "{unknown}",
+        qualifiedName: param1.qualifiedName,
         origins: mergeOrigins(param1.origins, param2.origins),
         type: tryUnifyTypes(param1.type, param2.type, onError),
     };
@@ -1120,6 +1167,7 @@ function tryMergeGlobalSym(existing: GlobalSym, sym: GlobalSym, onError: ErrorSi
     return {
         kind: SymKind.Global,
         name: existing.name,
+        qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
         type: tryUnifyTypes(existing.type, sym.type, onError),
         isDefined: existing.isDefined || sym.isDefined,
@@ -1130,6 +1178,7 @@ function tryMergeConstSym(existing: ConstSym, sym: ConstSym, onError: ErrorSigna
     return {
         kind: SymKind.Const,
         name: existing.name,
+        qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
         value: mergeValue(existing.value, sym.value),
     };
@@ -1149,6 +1198,7 @@ function tryMergeLocalSym(existing: LocalSym, sym: LocalSym, onError: ErrorSigna
     return {
         kind: SymKind.Local,
         name: existing.name,
+        qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
         type: tryUnifyTypes(existing.type, sym.type, onError),
     };

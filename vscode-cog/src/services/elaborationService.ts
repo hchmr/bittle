@@ -1,11 +1,10 @@
 import { SyntaxNode } from "cog-parser";
-import { IncludeResolver } from "./IncludeResolver";
-import { ParsingService } from './parsingService';
-import { ElaborationError, Elaborator, TypeLayout } from "../semantics/Elaborator";
+import { ElaborationError, Elaborator, SymReference, TypeLayout } from "../semantics/Elaborator";
 import { StructFieldSym, Sym } from "../semantics/sym";
 import { Type } from "../semantics/type";
 import { Stream, stream } from "../utils/stream";
-import { Scope } from "../semantics/Scope";
+import { IncludeResolver } from "./IncludeResolver";
+import { ParsingService } from './parsingService';
 
 interface IElaborationService {
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined;
@@ -74,13 +73,18 @@ export class ElaborationService implements IElaborationService {
         return this.createElaborator(path).typeLayout(type);
     }
 
-    public lookup(path: string, node: SyntaxNode | null, name: string): Sym | undefined {
+    public lookup(path: string, node: SyntaxNode, name: string): Sym | undefined {
         return this.createElaboratorForScope(path, node).scope.lookup(name);
+    }
+
+    public references(path: string, qname: string): SymReference[] {
+        const elaborator = this.createElaborator(path);
+        return elaborator.references.get(qname) ?? [];
     }
 
     private createElaboratorForScope(path: string, node: SyntaxNode | null): Elaborator {
         const elaborator = this.createElaborator(path);
-        if (!node || !elaborator.gotoPosition(node.startPosition)) {
+        if (node && !elaborator.gotoPosition(node.startPosition)) {
             throw new Error("Failed to create elaborator for scope");
         }
         return elaborator;

@@ -23,6 +23,7 @@ export type Sym =
 type SymBase = {
     kind: SymKind,
     name: string,
+    qualifiedName: string,
     origins: Origin[],
 }
 

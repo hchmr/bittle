@@ -1,11 +1,13 @@
 export interface Stream<T> extends Iterable<T> {
     concat<U>(other: Iterable<U>): Stream<T | U>;
-    map<U>(f: (x: T) => U): Stream<U>;
+    map<U>(f: (x: T, i: number) => U): Stream<U>;
     flatMap<U>(f: (x: T) => Iterable<U>): Stream<U>;
     filter<S extends T>(p: (x: T) => x is S): Stream<S>;
     filter(p: (x: T) => unknown): Stream<T>;
     groupBy<K>(f: (x: T) => K): Stream<[K, T[]]>;
     groupBy<K, V>(f: (x: T) => K, g: (x: T) => V): Stream<[K, V[]]>;
+    distinct(): Stream<T>;
+    distinctBy<U>(f: (x: T) => U): Stream<T>;
     filterMap<U>(f: (x: T) => U | undefined): Stream<U>;
     zip<U>(other: Iterable<U>): Stream<[T, U]>;
     zipLongest<U>(other: Iterable<U>): Stream<[T, U] | [undefined, U] | [T, undefined]>;
@@ -17,6 +19,7 @@ export interface Stream<T> extends Iterable<T> {
     isEmpty(): boolean;
     first(): T | undefined;
     toArray(): T[];
+    toSet(): Set<T>;
     forEach(f: (x: T) => void): void;
 }
 
@@ -32,10 +35,11 @@ class StreamImpl<T> implements Stream<T> {
             yield* source2;
         })(this.source, other));
     }
-    map<U>(f: (x: T) => U): Stream<U> {
+    map<U>(f: (x: T, i: number) => U): Stream<U> {
         return new StreamImpl((function* (source) {
+            let i = 0;
             for (const x of source) {
-                yield f(x);
+                yield f(x, i++);
             }
         })(this.source));
     }
@@ -73,6 +77,21 @@ class StreamImpl<T> implements Stream<T> {
                 return groups.entries();
             }
         });
+    }
+    distinct(): Stream<T> {
+        return this.distinctBy(x => x);
+    }
+    distinctBy<U>(f: (x: T) => U): Stream<T> {
+        return new StreamImpl((function* (source) {
+            const set = new Set<U>();
+            for (const x of source) {
+                const key = f(x);
+                if (!set.has(key)) {
+                    set.add(key);
+                    yield x;
+                }
+            }
+        })(this.source));
     }
     filterMap<U>(f: (x: T) => U | undefined): Stream<U> {
         return this.map(f).filter(x => x !== undefined);
@@ -147,6 +166,9 @@ class StreamImpl<T> implements Stream<T> {
     }
     toArray(): T[] {
         return Array.from(this.source);
+    }
+    toSet(): Set<T> {
+        return new Set(this.source);
     }
     forEach(f: (x: T) => void): void {
         for (const x of this.source) {

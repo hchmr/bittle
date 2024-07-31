@@ -1,8 +1,13 @@
 import { Point, SyntaxNode, Tree } from "cog-parser";
 import { nodeContains, PointRange, rangeContains, rangeContainsPoint } from ".";
 
+export function getIdentifierAtPosition(tree: Tree, point: Point): SyntaxNode | null {
+    return getNodesAtPosition(tree, point)
+        .filter(node => node.type === "identifier")[0];
+}
+
 /**
- * If between two nodes, return the left and right nodes; otherwise, return the containing node.
+ * If between two adjacent nodes, return the left and right nodes; otherwise, return the containing node.
  */
 export function getNodesAtPosition(tree: Tree, point: Point): SyntaxNode[] {
     const matchingNode = tree.rootNode.descendantForPosition(point);

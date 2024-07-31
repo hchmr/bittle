@@ -13,6 +13,8 @@ import { ParsingService } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
 import { VirtualFileSystem } from './vfs';
 import { SignatureHelpProvider } from './features/signatureHelp';
+import { IncludeGraphService } from './services/includeGraphService';
+import { ReferenceProvider } from './features/references';
 
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();
@@ -96,9 +98,20 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ',')
     );
 
+    // References
+
+    const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
+
+    const referenceProvider = new ReferenceProvider(parsingService, elaborationService, includeGraphService);
+    context.subscriptions.push(
+        vscode.languages.registerReferenceProvider('cog', referenceProvider),
+        vscode.languages.registerRenameProvider('cog', referenceProvider),
+    );
+
     // TODO:
-    // - Go to definition
-    // - Find references
-    // - Rename
+    // - Go to definition VS declaration
+    // - Go directly to definition
+    // - Go to workspace symbol
     // - More code actions
+    // - Formatting
 }
