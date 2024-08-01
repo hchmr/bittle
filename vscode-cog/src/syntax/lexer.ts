@@ -173,7 +173,7 @@ export class Lexer {
     }
 
     private scanString() {
-        assert(this.isAt('\"'));
+        assert(this.isAt('"'));
         this.bump();
         while (!this.isEof && this.cc !== '"') {
             this.scanCharPart();

@@ -9,9 +9,9 @@ import { SemanticTokensProvider } from './features/semanticTokens';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { ElaborationService } from './services/elaborationService';
 import { IncludeResolver } from './services/IncludeResolver';
-import { ParsingService } from './services/parsingService';
+import { ParsingServiceImpl } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
-import { VirtualFileSystem } from './vfs';
+import { VirtualFileSystemImpl } from './vfs';
 import { SignatureHelpProvider } from './features/signatureHelp';
 import { IncludeGraphService } from './services/includeGraphService';
 import { ReferenceProvider } from './features/references';
@@ -19,10 +19,10 @@ import { ReferenceProvider } from './features/references';
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();
 
-    const vfs = new VirtualFileSystem(cache);
+    const vfs = new VirtualFileSystemImpl(cache);
     context.subscriptions.push(vfs);
 
-    const parsingService = new ParsingService(cache, vfs);
+    const parsingService = new ParsingServiceImpl(cache, vfs);
 
     const includeResolver = new IncludeResolver(vfs);
 

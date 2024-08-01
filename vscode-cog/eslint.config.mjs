@@ -21,7 +21,7 @@ export default ts.config(
     },
     js.configs.recommended,
     ...ts.configs.recommended,
-    //@ts-ignore
+    //@ts-expect-error "Argument of type 'Config<RulesRecord>' is not assignable to parameter of type 'ConfigWithExtends'."
     stylistic.configs.customize({
         indent: 4,
         flat: true,

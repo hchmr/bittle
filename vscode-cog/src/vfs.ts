@@ -13,7 +13,7 @@ export interface VirtualFileSystem {
     listFiles(): Array<string>;
 }
 
-export class VirtualFileSystem implements VirtualFileSystem, vscode.Disposable {
+export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposable {
     private disposables: vscode.Disposable[] = [];
     private cache: ReactiveCache;
 
@@ -63,7 +63,7 @@ export class VirtualFileSystem implements VirtualFileSystem, vscode.Disposable {
         this.cache.delete(`vfs:exists:${path}`);
     }
 
-    public readFile(path: string): string | undefined {
+    public readFile(path: string): string {
         return this.cache.compute(`vfs:read:${path}`, () => this.readFileUncached(path));
     }
 

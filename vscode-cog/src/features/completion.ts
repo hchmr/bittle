@@ -80,7 +80,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteIdentifier(
         filePath: string,
-        node: any,
+        node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
         const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
         return symbols
@@ -91,7 +91,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteDefault(
         filePath: string,
-        node: any,
+        node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
         const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
         return symbols?.map(toCompletionItem).toArray();
@@ -120,8 +120,9 @@ function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
             return vscode.CompletionItemKind.Variable;
         case SymKind.Const:
             return vscode.CompletionItemKind.Constant;
-        default:
+        default: {
             const unreachable: never = kind;
             return unreachable;
+        }
     }
 }

@@ -77,7 +77,7 @@ export type Origin = {
 export function symRelatedType(sym: Sym): Type {
     if (sym.kind === SymKind.Struct) {
         return { kind: 'struct', name: sym.name, qualifiedName: sym.qualifiedName };
-    } if (sym.kind === SymKind.StructField) {
+    } else if (sym.kind === SymKind.StructField) {
         return sym.type;
     } else if (sym.kind === SymKind.Func) {
         return sym.returnType;
@@ -125,7 +125,7 @@ export function prettySym(sym: Sym): string {
 
 type ErrorSignal = () => void;
 
-export function tryMergeSym(existing: Sym, sym: Sym): [sym: Sym, err: any] {
+export function tryMergeSym(existing: Sym, sym: Sym): [sym: Sym, err: boolean] {
     assert(existing.name === sym.name);
     assert(existing.kind === sym.kind);
 
@@ -150,9 +150,10 @@ export function tryMergeSym(existing: Sym, sym: Sym): [sym: Sym, err: any] {
                 return tryMergeFuncParamSym(existing, <FuncParamSym>sym, onError);
             case SymKind.Local:
                 return tryMergeLocalSym(existing, <LocalSym>sym, onError);
-            default:
+            default: {
                 const unreachable: never = existing;
                 throw new Error(`Unexpected symbol kind: ${unreachable}`);
+            }
         }
     })();
 

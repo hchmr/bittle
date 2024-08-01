@@ -13,18 +13,23 @@ export type TypeLayoutContext = {
 
 export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout {
     switch (type.kind) {
-        case 'void':
+        case 'void': {
             return { size: 0, align: 1 };
-        case 'bool':
+        }
+        case 'bool': {
             return { size: 1, align: 1 };
-        case 'int':
+        }
+        case 'int': {
             const size = type.size! / 8;
             return { size: size, align: size };
-        case 'pointer':
+        }
+        case 'pointer': {
             return { size: 8, align: 8 };
-        case 'array':
+        }
+        case 'array': {
             const elemLayout = typeLayout(type.elementType, ctx);
             return { size: elemLayout.size * type.size!, align: elemLayout.align };
+        }
         case 'struct': {
             const sym = ctx.getStruct(type.qualifiedName);
             if (sym?.kind !== SymKind.Struct)
@@ -39,11 +44,13 @@ export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout {
                     { size: 0, align: 1 },
                 );
         }
-        case 'error':
+        case 'error': {
             return { size: 0, align: 1 };
-        default:
+        }
+        default: {
             const unreachable: never = type;
             throw new Error(`Unexpected type: ${unreachable}`);
+        }
     }
 
     function alignUp(size: number, align: number) {

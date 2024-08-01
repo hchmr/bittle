@@ -3,7 +3,7 @@ import { CancellationToken, CancellationTokenSource } from 'vscode';
 export class ReactiveCache {
     private dependencies = new Map<string, Set<string>>();
     private dependents = new Map<string, Set<string>>();
-    private values = new Map<string, any>();
+    private values = new Map<string, unknown>();
 
     private currentComputation: string | null = null;
 
@@ -11,15 +11,10 @@ export class ReactiveCache {
         if (this.values.has(key)) {
             const value = this.values.get(key);
             this.track(key);
-            return value;
+            return value as T;
         }
 
-        let value: T;
-        try {
-            value = this.inScope(key, compute);
-        } catch (e) {
-            throw e;
-        }
+        const value: T = this.inScope(key, compute);
 
         this.values.set(key, value);
         this.track(key);

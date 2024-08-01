@@ -8,7 +8,7 @@ export interface ParsingService {
     parseErrors(path: string): Error[];
 }
 
-export class ParsingService implements ParsingService {
+export class ParsingServiceImpl implements ParsingService {
     constructor(private cache: ReactiveCache, private vfs: VirtualFileSystem) {}
 
     parse(path: string): Tree {

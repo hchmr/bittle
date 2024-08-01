@@ -105,7 +105,9 @@ export class Elaborator {
 
     private unifyTypes(node: SyntaxNode, t1: Type, t2: Type): Type {
         let ok = true;
-        const unified = tryUnifyTypes(t1, t2, () => { ok = false; });
+        const unified = tryUnifyTypes(t1, t2, () => {
+            ok = false;
+        });
         if (node && !ok) {
             this.reportError(node, `Cannot unify types '${prettyType(t1)}' and '${prettyType(t2)}'.`);
         }
@@ -218,9 +220,10 @@ export class Elaborator {
         return this.trackTyping(typeNode, () => {
             const nodeType = typeNode.type as TypeNodeType;
             switch (nodeType) {
-                case TypeNodeType.GroupedType:
+                case TypeNodeType.GroupedType: {
                     return this.typeEval(typeNode.childForFieldName('type'));
-                case TypeNodeType.NameType:
+                }
+                case TypeNodeType.NameType: {
                     const nameNode = typeNode.firstChild!;
                     switch (nameNode.text) {
                         case 'Void':
@@ -249,20 +252,24 @@ export class Elaborator {
                             return { kind: 'struct', name: sym.name, qualifiedName: sym.qualifiedName };
                         }
                     }
-                case TypeNodeType.PointerType:
+                }
+                case TypeNodeType.PointerType: {
                     return {
                         kind: 'pointer',
                         elementType: this.typeEval(typeNode.childForFieldName('pointee')),
                     };
-                case TypeNodeType.ArrayType:
+                }
+                case TypeNodeType.ArrayType: {
                     return {
                         kind: 'array',
                         elementType: this.typeEval(typeNode.childForFieldName('type')),
                         size: this.constEval(typeNode.childForFieldName('size')),
                     };
-                default:
+                }
+                default: {
                     const unreachable: never = nodeType;
                     throw new Error(`Unexpected node type: ${unreachable}`);
+                }
             }
         });
     }
@@ -294,9 +301,10 @@ export class Elaborator {
         };
 
         switch (node.type) {
-            case ExprNodeType.GroupedExpr:
+            case ExprNodeType.GroupedExpr: {
                 return this.constEval(node.childForFieldName('expr'));
-            case ExprNodeType.NameExpr:
+            }
+            case ExprNodeType.NameExpr: {
                 const nameNode = node.firstChild!;
                 const sym = this.resolveName(nameNode);
                 if (!sym) {
@@ -307,7 +315,8 @@ export class Elaborator {
                     return;
                 }
                 return sym.value;
-            case ExprNodeType.LiteralExpr:
+            }
+            case ExprNodeType.LiteralExpr: {
                 switch (node.firstChild!.type) {
                     case LiteralNodeType.Number:
                         return parseInt(node.firstChild!.text);
@@ -317,7 +326,8 @@ export class Elaborator {
                         reportInvalidConstExpr();
                         return;
                 }
-            case ExprNodeType.BinaryExpr:
+            }
+            case ExprNodeType.BinaryExpr: {
                 const left = this.constEval(node.childForFieldName('left'));
                 const right = this.constEval(node.childForFieldName('right'));
                 const op = node.childForFieldName('op')?.text;
@@ -338,7 +348,8 @@ export class Elaborator {
                         reportInvalidConstExpr();
                         return;
                 }
-            case ExprNodeType.UnaryExpr:
+            }
+            case ExprNodeType.UnaryExpr: {
                 const operand = this.constEval(node.childForFieldName('operand'));
                 const uop = node.childForFieldName('op')?.text;
                 if (operand === undefined || !uop)
@@ -350,12 +361,15 @@ export class Elaborator {
                         reportInvalidConstExpr();
                         return;
                 }
-            case ExprNodeType.SizeofExpr:
+            }
+            case ExprNodeType.SizeofExpr: {
                 const type = this.typeEval(node.childForFieldName('type'));
                 return this.typeSize(type);
-            default:
+            }
+            default: {
                 reportInvalidConstExpr();
                 return;
+            }
         }
     }
 
@@ -389,9 +403,10 @@ export class Elaborator {
             case TopLevelNodeType.Enum:
                 this.elabEnum(node);
                 break;
-            default:
+            default: {
                 const unreachable: never = nodeType;
                 throw new Error(`Unexpected node type: ${unreachable}`);
+            }
         }
     }
 
@@ -756,9 +771,10 @@ export class Elaborator {
                     return this.elabFieldExpr(node);
                 case ExprNodeType.CastExpr:
                     return this.elabCastExpr(node);
-                default:
+                default: {
                     const unreachable: never = nodeType;
                     throw new Error(`Unexpected node type: ${unreachable} `);
+                }
             }
         });
     }
@@ -781,9 +797,10 @@ export class Elaborator {
             case SymKind.Func:
             case SymKind.StructField:
                 return mkErrorType();
-            default:
+            default: {
                 const unreachable: never = sym;
                 throw new Error(`Unreachable: ${unreachable} `);
+            }
         }
     }
 
@@ -806,9 +823,10 @@ export class Elaborator {
                 return { kind: 'pointer', elementType: { kind: 'int', size: 8 } };
             case LiteralNodeType.Null:
                 return { kind: 'pointer', elementType: { kind: 'void' } };
-            default:
+            default: {
                 const unreachable: never = nodeType;
                 throw new Error(`Unexpected literal type: ${unreachable} `);
+            }
         }
     }
 
