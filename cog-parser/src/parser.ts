@@ -690,9 +690,9 @@ export class Parser extends ParserBase {
     sizeofExpr() {
         this.beginNode(CompositeNodeKind.SizeofExpr);
         this.bump('sizeof');
-        this.beginField('expr');
-        this.expr();
-        this.finishField('expr');
+        this.beginField('type');
+        this.type();
+        this.finishField('type');
         this.finishNode(CompositeNodeKind.SizeofExpr);
     }
 
