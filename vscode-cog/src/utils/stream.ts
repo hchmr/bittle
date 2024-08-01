@@ -11,7 +11,7 @@ export interface Stream<T> extends Iterable<T> {
     filterMap<U>(f: (x: T) => U | undefined): Stream<U>;
     zip<U>(other: Iterable<U>): Stream<[T, U]>;
     zipLongest<U>(other: Iterable<U>): Stream<[T, U] | [undefined, U] | [T, undefined]>;
-    reduce<U>(f: (acc: U, x: T) => U, initial: U): U;
+    reduce<U>(f: (acc: U, x: T, i: number) => U, initial: U): U;
     reduce(f: (acc: T, x: T) => T): T;
     find(p: (x: T) => unknown): T | undefined;
     some(p: (x: T) => unknown): boolean;
@@ -20,6 +20,7 @@ export interface Stream<T> extends Iterable<T> {
     first(): T | undefined;
     toArray(): T[];
     toSet(): Set<T>;
+    join(separator: string): string;
     forEach(f: (x: T) => void): void;
 }
 
@@ -136,16 +137,17 @@ class StreamImpl<T> implements Stream<T> {
     }
 
     reduce(f: (acc: T, x: T) => T): T;
-    reduce<U>(f: (acc: U, x: T) => U, initial: U): U;
-    reduce<U>(f: (acc: U, x: T) => U, initial?: U): U {
+    reduce<U>(f: (acc: U, x: T, i: number) => U, initial: U): U;
+    reduce<U>(f: (acc: U, x: T, i: number) => U, initial?: U): U {
         let source = this.source;
         if (arguments.length === 1) {
             [initial, source] = uncons(this.source) as unknown as [U, Iterable<T>];
         }
 
         let acc: U = initial!;
+        let i = 0;
         for (const x of source) {
-            acc = f(acc, x);
+            acc = f(acc, x, i++);
         }
         return acc;
     }
@@ -186,6 +188,10 @@ class StreamImpl<T> implements Stream<T> {
 
     toSet(): Set<T> {
         return new Set(this.source);
+    }
+
+    join(separator: string): string {
+        return this.reduce((acc, x, i) => acc + (i !== 0 ? separator : '') + x, '');
     }
 
     forEach(f: (x: T) => void): void {

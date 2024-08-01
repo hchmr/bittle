@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import { CodeActionsProvider } from './features/codeActions';
 import { CompletionProvider } from './features/completion';
-import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { ReferenceProvider } from './features/references';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SignatureHelpProvider } from './features/signatureHelp';
+import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { ElaborationService } from './services/elaborationService';
 import { IncludeGraphService } from './services/includeGraphService';
@@ -68,10 +68,13 @@ export function activate(context: vscode.ExtensionContext) {
     );
     vscode.workspace.textDocuments.forEach(refreshDiagnostics);
 
-    // Document symbols
+    // Document symbols and workspace symbols
+
+    const symbolProvider = new SymbolProvider(parsingService, vfs, cache);
 
     context.subscriptions.push(
-        vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider(parsingService)),
+        vscode.languages.registerDocumentSymbolProvider('cog', symbolProvider),
+        vscode.languages.registerWorkspaceSymbolProvider(symbolProvider),
     );
 
     // Code actions
@@ -111,7 +114,6 @@ export function activate(context: vscode.ExtensionContext) {
     // TODO:
     // - Go to definition VS declaration
     // - Go directly to definition
-    // - Go to workspace symbol
     // - More code actions
     // - Formatting
 }
