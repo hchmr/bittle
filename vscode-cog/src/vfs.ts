@@ -96,8 +96,8 @@ export class VirtualFileSystem implements VirtualFileSystem, vscode.Disposable {
     private existsUncached(path: string): boolean {
         return this.cache.compute(`vfs:exists:${path}`, () =>
             vscode.workspace.textDocuments.some(doc => doc.uri.fsPath === path)
-            || fs.statSync(path).isFile()
-        )
+            || fs.statSync(path).isFile(),
+        );
     };
 
     private listFilesUncached(): Array<string> {
@@ -105,7 +105,7 @@ export class VirtualFileSystem implements VirtualFileSystem, vscode.Disposable {
 
         files.push(...vscode.workspace.textDocuments
             .map(doc => doc.uri.fsPath)
-            .filter(filePath => isCogFile(filePath))
+            .filter(filePath => isCogFile(filePath)),
         );
 
         for (const folder of vscode.workspace.workspaceFolders ?? []) {

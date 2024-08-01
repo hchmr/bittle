@@ -1,6 +1,6 @@
-import path from "path";
+import path from 'path';
 import { SyntaxNode } from '../syntax';
-import { VirtualFileSystem } from "../vfs";
+import { VirtualFileSystem } from '../vfs';
 
 // IncludeResolver
 
@@ -8,8 +8,8 @@ export class IncludeResolver {
     constructor(private vfs: VirtualFileSystem) { }
 
     resolveInclude(filePath: string, arg: string | SyntaxNode) {
-        const pathValue =
-            typeof arg === "string"
+        const pathValue
+            = typeof arg === 'string'
                 ? arg
                 : JSON.parse(arg.text);
         const includePath = path.resolve(path.dirname(filePath), pathValue);

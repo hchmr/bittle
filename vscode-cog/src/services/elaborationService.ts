@@ -1,12 +1,12 @@
 import { SyntaxNode } from '../syntax';
-import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from "../semantics/elaborator";
-import { StructFieldSym, Sym, SymKind } from "../semantics/sym";
-import { Type } from "../semantics/type";
-import { typeLayout, TypeLayout } from "../semantics/typeLayout";
-import { Stream, stream } from "../utils/stream";
-import { IncludeResolver } from "./IncludeResolver";
+import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
+import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
+import { Type } from '../semantics/type';
+import { typeLayout, TypeLayout } from '../semantics/typeLayout';
+import { Stream, stream } from '../utils/stream';
+import { IncludeResolver } from './IncludeResolver';
 import { ParsingService } from './parsingService';
-import { ReactiveCache } from "../utils/reactiveCache";
+import { ReactiveCache } from '../utils/reactiveCache';
 
 export class ElaborationService {
     constructor(
@@ -29,9 +29,9 @@ export class ElaborationService {
             if (!scope) {
                 return;
             }
-            yield* stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
-            yield* go(scope.parent!);
-        }(innerScope))
+            yield * stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
+            yield * go(scope.parent!);
+        }(innerScope));
     }
 
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
@@ -83,12 +83,12 @@ export class ElaborationService {
 
     inferType(path: string, exprNode: SyntaxNode): Type {
         const module = this.elaborateFile(path);
-        return module.nodeTypeMap.get(exprNode) ?? { kind: "error" };
+        return module.nodeTypeMap.get(exprNode) ?? { kind: 'error' };
     }
 
     evalType(path: string, node: SyntaxNode): Type {
         const module = this.elaborateFile(path);
-        return module.nodeTypeMap.get(node) ?? { kind: "error" };
+        return module.nodeTypeMap.get(node) ?? { kind: 'error' };
     }
 
     getLayout(path: string, type: Type): TypeLayout {
@@ -99,7 +99,7 @@ export class ElaborationService {
                 if (!sym || sym.kind !== SymKind.Struct)
                     return;
                 return sym;
-            }
+            },
         });
     }
 
@@ -110,7 +110,7 @@ export class ElaborationService {
 
     private elaborateFile(path: string): ElaboratorResult {
         return this.cache.compute('elaborationService:elaborateFile:' + path, () =>
-            new Elaborator(this.parsingService, this.includeResolver, path).run()
+            new Elaborator(this.parsingService, this.includeResolver, path).run(),
         );
     }
 }
@@ -119,23 +119,23 @@ export class ElaborationService {
 //= Helpers
 
 function isFieldName(nameNode: SyntaxNode): boolean {
-    return nameNode.parent!.type === "field_expr"
+    return nameNode.parent!.type === 'field_expr';
 }
 
 function isTypeName(nameNode: SyntaxNode): boolean {
-    return nameNode.parent!.type === "name_type" || nameNode.parent!.type === "struct_decl";
+    return nameNode.parent!.type === 'name_type' || nameNode.parent!.type === 'struct_decl';
 }
 
 function isValueName(nameNode: SyntaxNode): boolean {
     return [
-        "enum_member",
-        "struct_decl",
-        "struct_member",
-        "func_decl",
-        "param_decl",
-        "global_decl",
-        "const_decl",
-        "local_decl",
-        "name_expr",
+        'enum_member',
+        'struct_decl',
+        'struct_member',
+        'func_decl',
+        'param_decl',
+        'global_decl',
+        'const_decl',
+        'local_decl',
+        'name_expr',
     ].includes(nameNode.parent!.type);
 }

@@ -27,14 +27,14 @@ export class ElaborationErrorProvider implements vscode.Disposable {
                 pairs.flatMap(([_, diagnostic]) => diagnostic),
             ])
             .forEach(([uri, diagnostics]) => {
-                this.diagnosticsCollection.set(uri, diagnostics)
+                this.diagnosticsCollection.set(uri, diagnostics);
             });
     }
 
     createDiagnostics(document: vscode.TextDocument) {
         return this.cache.compute(
             'elaboration-errors:' + document.uri.toString(),
-            () => this.createDiagnosticsUncached(document)
+            () => this.createDiagnosticsUncached(document),
         );
     }
 
@@ -49,9 +49,9 @@ export class ElaborationErrorProvider implements vscode.Disposable {
                         return new vscode.Diagnostic(
                             toVscRange(error.location.range),
                             error.message,
-                            vscode.DiagnosticSeverity.Error
+                            vscode.DiagnosticSeverity.Error,
                         );
-                    })
+                    }),
                 ];
             })
             .toArray();

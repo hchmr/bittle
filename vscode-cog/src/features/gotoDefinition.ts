@@ -1,15 +1,15 @@
-import path from "path";
-import * as vscode from "vscode";
+import path from 'path';
+import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
-import { ElaborationService } from "../services/elaborationService";
-import { fromVscPosition, toVscRange } from "../utils";
-import { getNodesAtPosition } from "../utils/nodeSearch";
-import { VirtualFileSystem } from "../vfs";
-import { isExprNode, isTypeNode } from "../syntax/nodeTypes";
+import { ElaborationService } from '../services/elaborationService';
+import { fromVscPosition, toVscRange } from '../utils';
+import { getNodesAtPosition } from '../utils/nodeSearch';
+import { VirtualFileSystem } from '../vfs';
+import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { SyntaxNode } from '../syntax';
-import { stream } from "../utils/stream";
-import { Sym, SymKind, symRelatedType } from "../semantics/sym";
-import { Type } from "../semantics/type";
+import { stream } from '../utils/stream';
+import { Sym, SymKind, symRelatedType } from '../semantics/sym';
+import { Type } from '../semantics/type';
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     constructor(private vfs: VirtualFileSystem, private parsingService: ParsingService) { }
@@ -17,13 +17,13 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
         return getNodesAtPosition(tree, position)
-            .filter(node => node.type === "string_literal"
-                && node.parent?.type === "include_decl")
+            .filter(node => node.type === 'string_literal'
+            && node.parent?.type === 'include_decl')
             .flatMap(node => {
                 const stringValue = JSON.parse(node.text);
                 const includePath = this.resolveInclude(document.uri.fsPath, stringValue);
@@ -35,7 +35,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
                     targetUri: vscode.Uri.file(includePath),
                     targetRange: new vscode.Range(0, 0, 0, 0),
                 }];
-            })
+            });
     }
 
     resolveInclude(filePath: string, stringValue: string) {
@@ -49,18 +49,18 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
 export class NameDefinitionProvider implements vscode.DefinitionProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborator: ElaborationService
+        private elaborator: ElaborationService,
     ) { }
 
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
         return getNodesAtPosition(tree, position)
-            .filter(node => node.type === "identifier")
+            .filter(node => node.type === 'identifier')
             .flatMap(nameNode => {
                 const symbol = this.elaborator.resolveSymbol(document.fileName, nameNode);
                 if (!symbol) {
@@ -82,13 +82,13 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider {
 export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService
+        private elaborationService: ElaborationService,
     ) { }
 
     provideTypeDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
@@ -98,7 +98,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
                 for (let node: SyntaxNode | null = startNode; node; node = node.parent) {
                     const symbol = this.getSymbolForNode(document.fileName, node);
                     if (symbol) {
-                        return { node, symbol }
+                        return { node, symbol };
                     }
                 }
             })
@@ -110,7 +110,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
                         targetRange: toVscRange(origin.node),
                         targetSelectionRange: origin.nameNode ? toVscRange(origin.nameNode) : undefined,
                     };
-                })
+                }),
             )
             .toArray();
     }
@@ -124,7 +124,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     }
 
     getTypeForNode(filePath: string, node: SyntaxNode): Type | undefined {
-        if (node.type === "identifier") {
+        if (node.type === 'identifier') {
             const sym = this.elaborationService.resolveSymbol(filePath, node);
             if (!sym || sym.kind === SymKind.Func) {
                 return;
@@ -138,10 +138,10 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     }
 
     fromType(filePath: string, node: SyntaxNode, type: Type): Sym | undefined {
-        if (type.kind === "pointer") {
+        if (type.kind === 'pointer') {
             type = type.elementType;
         }
-        if (type.kind !== "struct") {
+        if (type.kind !== 'struct') {
             return;
         }
         return this.elaborationService.getSymbol(filePath, type.qualifiedName);

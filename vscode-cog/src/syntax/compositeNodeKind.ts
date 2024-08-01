@@ -1,4 +1,4 @@
-import { TokenKind } from "./token";
+import { TokenKind } from './token';
 
 export enum CompositeNodeKind {
     // Root

@@ -1,9 +1,9 @@
 import { Point, SyntaxNode, Tree } from '../syntax';
-import { nodeContains, PointRange, rangeContains, rangeContainsPoint } from ".";
+import { nodeContains, PointRange, rangeContains, rangeContainsPoint } from '.';
 
 export function getIdentifierAtPosition(tree: Tree, point: Point): SyntaxNode | null {
     return getNodesAtPosition(tree, point)
-        .filter(node => node.type === "identifier")[0];
+        .filter(node => node.type === 'identifier')[0];
 }
 
 /**

@@ -12,7 +12,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
     constructor(
         private parsingService: ParsingService,
         private elaborationService: ElaborationService,
-        private includeGraphService: IncludeGraphService
+        private includeGraphService: IncludeGraphService,
     ) { }
 
     provideRenameEdits(
@@ -55,13 +55,13 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         if (context.includeDeclaration) {
             references.push(
                 ...stream(symbol.origins)
-                    .filterMap(origin => origin.nameNode && { file: origin.file, nameNode: origin.nameNode })
+                    .filterMap(origin => origin.nameNode && { file: origin.file, nameNode: origin.nameNode }),
             );
         }
 
         // add references in the same file
         references.push(
-            ...this.elaborationService.references(path, symbol.qualifiedName)
+            ...this.elaborationService.references(path, symbol.qualifiedName),
         );
 
         // add references in referring files
@@ -70,11 +70,11 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         }
 
         return stream(references)
-            .distinctBy(reference => reference.file + "|" +  reference.nameNode.startIndex)
+            .distinctBy(reference => reference.file + '|' + reference.nameNode.startIndex)
             .map(reference => {
                 return <vscode.Location>{
                     uri: vscode.Uri.file(reference.file),
-                    range: toVscRange(reference.nameNode)
+                    range: toVscRange(reference.nameNode),
                 };
             })
             .toArray();
@@ -85,6 +85,6 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             .map(origin => origin.file)
             .distinct()
             .flatMap(filePath => this.includeGraphService.getFinalReferences(filePath))
-            .distinct()
+            .distinct();
     }
 }

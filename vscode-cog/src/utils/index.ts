@@ -26,8 +26,8 @@ export function toVscPosition(point: Point): vscode.Position {
 // Range utilities
 
 export interface PointRange {
-    startPosition: Point,
-    endPosition: Point,
+    startPosition: Point;
+    endPosition: Point;
 };
 
 export function rangeEquals(x1: PointRange, x2: PointRange): boolean {

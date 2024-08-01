@@ -1,8 +1,7 @@
 import { Error, Tree } from '../syntax';
-import { parser } from "../parser";
-import { ReactiveCache } from "../utils/reactiveCache";
-import { VirtualFileSystem } from "../vfs";
-
+import { parser } from '../parser';
+import { ReactiveCache } from '../utils/reactiveCache';
+import { VirtualFileSystem } from '../vfs';
 
 export interface ParsingService {
     parse(path: string): Tree;
@@ -24,7 +23,7 @@ export class ParsingService implements ParsingService {
         return this.cache.compute(`parse:${path}`, () => {
             const errors: Array<Error> = [];
             const errorSink = {
-                add: (error: Error) => errors.push(error)
+                add: (error: Error) => errors.push(error),
             };
 
             const content = this.vfs.readFile(path);

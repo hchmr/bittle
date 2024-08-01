@@ -30,6 +30,7 @@ export default ts.config(
         braceStyle: '1tbs',
         commaDangle: 'always-multiline',
         blockSpacing: true,
+        quoteProps: 'consistent',
     }),
     {
         rules: {

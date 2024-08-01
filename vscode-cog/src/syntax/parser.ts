@@ -866,7 +866,6 @@ export class Parser extends ParserBase {
         this.bump(this.match('true') ? 'true' : 'false');
         this.finishNode(CompositeNodeKind.BoolLiteral);
     }
-
 }
 
 //=========================================================================/

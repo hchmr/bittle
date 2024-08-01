@@ -11,7 +11,7 @@ import { TypeLayout } from '../semantics/typeLayout';
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService
+        private elaborationService: ElaborationService,
     ) { }
 
     provideHover(document: vscode.TextDocument, position: vscode.Position) {
@@ -38,25 +38,25 @@ export class HoverProvider implements vscode.HoverProvider {
         if (node.type === 'identifier') {
             const sym = this.elaborationService.resolveSymbol(document.fileName, node);
             if (sym) {
-                return this.addLayout(document, { kind: 'sym', sym, node })
+                return this.addLayout(document, { kind: 'sym', sym, node });
             }
         }
         if (isExprNode(node)) {
             const type = this.elaborationService.inferType(document.fileName, node);
             if (type) {
-                return this.addLayout(document, { kind: 'type', type, node })
+                return this.addLayout(document, { kind: 'type', type, node });
             }
         }
         if (isTypeNode(node)) {
             const type = this.elaborationService.evalType(document.fileName, node);
             if (type) {
-                return this.addLayout(document, { kind: 'type', type, node })
+                return this.addLayout(document, { kind: 'type', type, node });
             }
         }
     }
 
     addLayout(document: vscode.TextDocument, hoverDetail: HoverDetail): HoverDetail {
-        let type = hoverDetail.kind === 'sym'
+        const type = hoverDetail.kind === 'sym'
             ? structSymType(hoverDetail.sym) ?? symRelatedType(hoverDetail.sym)
             : hoverDetail.type;
 
@@ -75,8 +75,8 @@ export class HoverProvider implements vscode.HoverProvider {
 };
 
 type HoverDetail =
-    | { kind: 'sym', sym: Sym, node: SyntaxNode, layout?: TypeLayout }
-    | { kind: 'type', type: Type, node: SyntaxNode, layout?: TypeLayout }
+    | { kind: 'sym'; sym: Sym; node: SyntaxNode; layout?: TypeLayout }
+    | { kind: 'type'; type: Type; node: SyntaxNode; layout?: TypeLayout };
 
 function toHover(hoverDetail: HoverDetail): vscode.Hover {
     let text = hoverDetail.kind === 'sym'

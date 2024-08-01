@@ -1,6 +1,5 @@
 import { Point } from '../syntax';
-import { PointRange, rangeContainsPoint } from "../utils";
-
+import { PointRange, rangeContainsPoint } from '../utils';
 
 export class Scope {
     symbols: Map<string, string> = new Map();

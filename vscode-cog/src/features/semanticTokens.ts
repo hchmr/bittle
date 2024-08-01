@@ -45,6 +45,6 @@ function makeToken(builder: vscode.SemanticTokensBuilder, node: SyntaxNode | Nul
 function* traverse(node: SyntaxNode): IterableIterator<SyntaxNode> {
     yield node;
     for (const child of node.children) {
-        yield* traverse(child);
+        yield * traverse(child);
     }
 }

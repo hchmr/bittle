@@ -1,10 +1,10 @@
 import { Point, SyntaxNode } from '../syntax';
-import * as vscode from "vscode";
-import { FuncSym, prettySym, SymKind } from "../semantics/sym";
-import { ElaborationService } from "../services/elaborationService";
-import { ParsingService } from "../services/parsingService";
-import { fromVscPosition, pointLe } from "../utils";
-import { getNodesAtPosition } from "../utils/nodeSearch";
+import * as vscode from 'vscode';
+import { FuncSym, prettySym, SymKind } from '../semantics/sym';
+import { ElaborationService } from '../services/elaborationService';
+import { ParsingService } from '../services/parsingService';
+import { fromVscPosition, pointLe } from '../utils';
+import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(
@@ -27,19 +27,19 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return;
         }
 
-        const callNode = node.closest("call_expr");
+        const callNode = node.closest('call_expr');
         if (!callNode) {
             return;
         }
-        const calleeNode = callNode.childForFieldName("callee");
+        const calleeNode = callNode.childForFieldName('callee');
         if (!calleeNode) {
             return;
         }
-        const nameNode = calleeNode.type === "name_expr" && calleeNode.firstChild;
+        const nameNode = calleeNode.type === 'name_expr' && calleeNode.firstChild;
         if (!nameNode) {
             return;
         }
-        const argsNodes = callNode.childrenForFieldName("args");
+        const argsNodes = callNode.childrenForFieldName('args');
         const argIndex = countPrecedingCommas(argsNodes, position);
 
         const funcSym = this.elaborationService.resolveSymbol(filePath, nameNode);
@@ -60,10 +60,10 @@ function createSignatureHelp(
         return new vscode.ParameterInformation(param.name, prettySym(param));
     });
     if (funcSym.isVariadic) {
-        signature.parameters.push(new vscode.ParameterInformation("...", ""));
+        signature.parameters.push(new vscode.ParameterInformation('...', ''));
     }
 
-    var signatureHelp = new vscode.SignatureHelp();
+    const signatureHelp = new vscode.SignatureHelp();
     signatureHelp.signatures = [signature];
     signatureHelp.activeSignature = 0; // Easy, we don't have overloads
     signatureHelp.activeParameter = paramIndex;
@@ -77,7 +77,7 @@ function createSignatureHelp(
 function countPrecedingCommas(argsNodes: SyntaxNode[], treePosition: Point) {
     return argsNodes
         .filter((argNode) =>
-            argNode.type == "," && pointLe(argNode.endPosition, treePosition)
+            argNode.type == ',' && pointLe(argNode.endPosition, treePosition),
         )
         .length;
 }

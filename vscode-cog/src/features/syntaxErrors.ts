@@ -30,7 +30,7 @@ export class SyntaxErrorProvider implements vscode.Disposable {
 function createDiagnostic(
     document: vscode.TextDocument,
     error: Error,
-    severity = vscode.DiagnosticSeverity.Error
+    severity = vscode.DiagnosticSeverity.Error,
 ): vscode.Diagnostic {
     const position = toVscPosition(error.position);
     const range = document.getWordRangeAtPosition(position) ?? new vscode.Range(position, position);

@@ -41,8 +41,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerDocumentSemanticTokensProvider(
             'cog',
             semanticTokensProvider,
-            semanticTokensProvider.legend
-        )
+            semanticTokensProvider.legend,
+        ),
     );
 
     // Syntax errors
@@ -71,13 +71,13 @@ export function activate(context: vscode.ExtensionContext) {
     // Document symbols
 
     context.subscriptions.push(
-        vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider(parsingService))
+        vscode.languages.registerDocumentSymbolProvider('cog', new DocumentSymbolsProvider(parsingService)),
     );
 
     // Code actions
 
     context.subscriptions.push(
-        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider(parsingService))
+        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider(parsingService)),
     );
 
     // Resolve include
@@ -85,17 +85,17 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
         vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborationService)),
-        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, elaborationService))
+        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, elaborationService)),
     );
 
     // Completion
 
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, elaborationService), '.')
+        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, elaborationService), '.'),
     );
 
     context.subscriptions.push(
-        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ',')
+        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ','),
     );
 
     // References

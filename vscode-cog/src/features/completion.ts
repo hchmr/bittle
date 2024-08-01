@@ -1,10 +1,10 @@
-import * as vscode from "vscode";
-import { prettySym, Sym, SymKind } from "../semantics/sym";
-import { ElaborationService } from "../services/elaborationService";
-import { ParsingService } from "../services/parsingService";
-import { ExprNodeType } from "../syntax/nodeTypes";
-import { getNodesAtPosition } from "../utils/nodeSearch";
-import { fromVscPosition } from "../utils";
+import * as vscode from 'vscode';
+import { prettySym, Sym, SymKind } from '../semantics/sym';
+import { ElaborationService } from '../services/elaborationService';
+import { ParsingService } from '../services/parsingService';
+import { ExprNodeType } from '../syntax/nodeTypes';
+import { getNodesAtPosition } from '../utils/nodeSearch';
+import { fromVscPosition } from '../utils';
 import { SyntaxNode } from '../syntax';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
@@ -41,27 +41,27 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
 
-        const leftNode = node.parent.childForFieldName("left");
+        const leftNode = node.parent.childForFieldName('left');
         if (!leftNode || node === leftNode) {
             return;
         }
 
         // Search text
         let searchText: string;
-        if (node.type === "identifier") {
+        if (node.type === 'identifier') {
             searchText = node.text;
-        } else if (node.type === ".") {
-            searchText = "";
+        } else if (node.type === '.') {
+            searchText = '';
         } else {
             return;
         }
 
         // Infer type
         let structType = this.elaborationService.inferType(filePath, leftNode);
-        if (structType.kind === "pointer") {
+        if (structType.kind === 'pointer') {
             structType = structType.elementType;
         }
-        if (structType.kind !== "struct") {
+        if (structType.kind !== 'struct') {
             return;
         }
 
@@ -80,7 +80,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteIdentifier(
         filePath: string,
-        node: any
+        node: any,
     ): vscode.CompletionItem[] | undefined {
         const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
         return symbols
@@ -91,7 +91,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteDefault(
         filePath: string,
-        node: any
+        node: any,
     ): vscode.CompletionItem[] | undefined {
         const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
         return symbols?.map(toCompletionItem).toArray();

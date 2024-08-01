@@ -46,7 +46,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
             '',
             this.convertSymbolKind(node.type),
             toVscRange(node),
-            toVscRange(nameNode ?? node)
+            toVscRange(nameNode ?? node),
         );
         return symbol;
     }

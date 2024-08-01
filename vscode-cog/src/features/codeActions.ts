@@ -11,12 +11,12 @@ export class CodeActionsProvider implements vscode.CodeActionProvider {
         document: vscode.TextDocument,
         range: vscode.Range,
         context: vscode.CodeActionContext,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
 
         return [
-            tryFlipComma(tree, document.uri, range)
+            tryFlipComma(tree, document.uri, range),
         ].flatMap(action => action);
     }
 }
@@ -34,13 +34,13 @@ function tryFlipComma(tree: Tree, documentUri: vscode.Uri, vscRange: vscode.Rang
         return node.text === ','
             && node.previousSibling
             && node.nextSibling
-            && !isClosingDelimiter(node.nextSibling)
+            && !isClosingDelimiter(node.nextSibling);
     }
 
     function createCodeAction(node: SyntaxNode) {
         const fix = new vscode.CodeAction(
             `Flip ','`,
-            vscode.CodeActionKind.QuickFix
+            vscode.CodeActionKind.QuickFix,
         );
         fix.edit = createSwapEdit(node);
         return fix;
@@ -51,12 +51,12 @@ function tryFlipComma(tree: Tree, documentUri: vscode.Uri, vscRange: vscode.Rang
         edit.replace(
             documentUri,
             toVscRange(node.previousSibling!),
-            node.nextSibling!.text
+            node.nextSibling!.text,
         );
         edit.replace(
             documentUri,
             toVscRange(node.nextSibling!),
-            node.previousSibling!.text
+            node.previousSibling!.text,
         );
         return edit;
     }

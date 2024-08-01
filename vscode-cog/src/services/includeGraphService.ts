@@ -1,13 +1,13 @@
 import { Tree } from '../syntax';
-import { VirtualFileSystem } from "../vfs";
-import { ParsingService } from "./parsingService";
-import { IncludeResolver } from "./IncludeResolver";
-import { TopLevelNodeType } from "../syntax/nodeTypes";
+import { VirtualFileSystem } from '../vfs';
+import { ParsingService } from './parsingService';
+import { IncludeResolver } from './IncludeResolver';
+import { TopLevelNodeType } from '../syntax/nodeTypes';
 
 type IncludeGraph = {
-    incoming: Map<string, Set<string>>,
-    outgoing: Map<string, Set<string>>,
-}
+    incoming: Map<string, Set<string>>;
+    outgoing: Map<string, Set<string>>;
+};
 
 export class IncludeGraphService {
     constructor(
@@ -58,7 +58,7 @@ export class IncludeGraphService {
 
         for (const node of tree.rootNode.children) {
             if (node.type === TopLevelNodeType.Include) {
-                const pathNode = node.childForFieldName("path");
+                const pathNode = node.childForFieldName('path');
                 if (pathNode) {
                     const includePath = this.includeResolver.resolveInclude(path, pathNode);
                     if (includePath) {
