@@ -1,4 +1,3 @@
-import { CancellationToken, CancellationTokenSource } from 'vscode';
 
 export class ReactiveCache {
     private dependencies = new Map<string, Set<string>>();

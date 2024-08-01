@@ -1,9 +1,9 @@
 import assert from 'assert';
 import { CompositeNodeKind, namedTokenKinds } from './compositeNodeKind.js';
+import { ErrorSink } from './ErrorSink.js';
 import { Token, TokenKind } from './token.js';
 import { Point, Tree } from './tree.js';
 import { CompositeNodeImpl, MissingTokenNodeImpl, pointEqual, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl';
-import { ErrorSink } from './ErrorSink.js';
 
 //=========================================================================
 //== Node building

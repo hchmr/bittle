@@ -1,7 +1,7 @@
 import assert from 'assert';
-import { SyntaxNode, Tree } from '../syntax';
 import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
+import { SyntaxNode, Tree } from '../syntax';
 import {
     ExprNodeType,
     isExprNode,
@@ -11,6 +11,7 @@ import {
 } from '../syntax/nodeTypes';
 import { Nullish, PointRange } from '../utils';
 import { stream } from '../utils/stream';
+import { Scope } from './scope';
 import {
     ConstSym,
     FuncParamSym,
@@ -25,7 +26,6 @@ import {
 } from './sym';
 import { isScalarType, prettyType, tryUnifyTypes, Type, typeLe } from './type';
 import { TypeLayout, typeLayout } from './typeLayout';
-import { Scope } from './scope';
 
 export type ErrorLocation = {
     file: string;

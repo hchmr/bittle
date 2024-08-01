@@ -2,10 +2,10 @@ import * as vscode from 'vscode';
 import { prettySym, Sym, SymKind } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
-import { ExprNodeType } from '../syntax/nodeTypes';
-import { getNodesAtPosition } from '../utils/nodeSearch';
-import { fromVscPosition } from '../utils';
 import { SyntaxNode } from '../syntax';
+import { ExprNodeType } from '../syntax/nodeTypes';
+import { fromVscPosition } from '../utils';
+import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(

@@ -1,8 +1,8 @@
 import assert from 'assert';
 import { CharCursor } from './charCursor.js';
+import { ErrorSink } from './ErrorSink.js';
 import { keywords, symbols, Token, TokenKind } from './token.js';
 import { Point } from './tree.js';
-import { ErrorSink } from './ErrorSink.js';
 
 export function* tokenize(text: string, errorSink: ErrorSink): Generator<Token, Token> {
     const lexer = new Lexer(text, errorSink);

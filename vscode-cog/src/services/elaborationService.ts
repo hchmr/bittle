@@ -1,12 +1,12 @@
-import { SyntaxNode } from '../syntax';
 import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { Type } from '../semantics/type';
 import { typeLayout, TypeLayout } from '../semantics/typeLayout';
+import { SyntaxNode } from '../syntax';
+import { ReactiveCache } from '../utils/reactiveCache';
 import { Stream, stream } from '../utils/stream';
 import { IncludeResolver } from './IncludeResolver';
 import { ParsingService } from './parsingService';
-import { ReactiveCache } from '../utils/reactiveCache';
 
 export class ElaborationService {
     constructor(

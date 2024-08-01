@@ -1,8 +1,8 @@
-import { Point, SyntaxNode } from '../syntax';
 import * as vscode from 'vscode';
 import { FuncSym, prettySym, SymKind } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
+import { Point, SyntaxNode } from '../syntax';
 import { fromVscPosition, pointLe } from '../utils';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 

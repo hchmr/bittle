@@ -1,5 +1,5 @@
-import { Point, SyntaxNode } from '../syntax';
 import * as vscode from 'vscode';
+import { Point, SyntaxNode } from '../syntax';
 
 // Point utilities
 

@@ -1,15 +1,15 @@
 import path from 'path';
 import * as vscode from 'vscode';
-import { ParsingService } from '../services/parsingService';
-import { ElaborationService } from '../services/elaborationService';
-import { fromVscPosition, toVscRange } from '../utils';
-import { getNodesAtPosition } from '../utils/nodeSearch';
-import { VirtualFileSystem } from '../vfs';
-import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
-import { SyntaxNode } from '../syntax';
-import { stream } from '../utils/stream';
 import { Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { Type } from '../semantics/type';
+import { ElaborationService } from '../services/elaborationService';
+import { ParsingService } from '../services/parsingService';
+import { SyntaxNode } from '../syntax';
+import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
+import { fromVscPosition, toVscRange } from '../utils';
+import { getNodesAtPosition } from '../utils/nodeSearch';
+import { stream } from '../utils/stream';
+import { VirtualFileSystem } from '../vfs';
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     constructor(private vfs: VirtualFileSystem, private parsingService: ParsingService) { }

@@ -5,16 +5,16 @@ import { DocumentSymbolsProvider } from './features/documentSymbols';
 import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
+import { ReferenceProvider } from './features/references';
 import { SemanticTokensProvider } from './features/semanticTokens';
+import { SignatureHelpProvider } from './features/signatureHelp';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { ElaborationService } from './services/elaborationService';
+import { IncludeGraphService } from './services/includeGraphService';
 import { IncludeResolver } from './services/IncludeResolver';
 import { ParsingServiceImpl } from './services/parsingService';
 import { ReactiveCache } from './utils/reactiveCache';
 import { VirtualFileSystemImpl } from './vfs';
-import { SignatureHelpProvider } from './features/signatureHelp';
-import { IncludeGraphService } from './services/includeGraphService';
-import { ReferenceProvider } from './features/references';
 
 export function activate(context: vscode.ExtensionContext) {
     const cache = new ReactiveCache();

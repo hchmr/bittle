@@ -1,6 +1,6 @@
-import { Token, TokenKind } from '../token.js';
 import assert from 'assert';
 import util from 'util';
+import { Token, TokenKind } from '../token.js';
 import { Point, SyntaxNode, Tree, TreeCursor } from '../tree.js';
 
 export function pointEqual(a: Point, b: Point): boolean {

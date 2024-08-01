@@ -1,7 +1,7 @@
-import { Error, SyntaxNode, TreeCursor } from '../syntax';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
-import { toVscPosition, toVscRange } from '../utils';
+import { Error } from '../syntax';
+import { toVscPosition } from '../utils';
 
 export class SyntaxErrorProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');

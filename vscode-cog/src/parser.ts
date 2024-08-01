@@ -1,4 +1,4 @@
-import { Parser, ErrorSink, tokenize } from './syntax';
+import { ErrorSink, Parser, tokenize } from './syntax';
 
 export const parser = {
     parse: (text: string, errorSink?: ErrorSink) => {

@@ -1,6 +1,6 @@
-import { SyntaxNode } from '../syntax';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
+import { SyntaxNode } from '../syntax';
 import { ExprNodeType, TopLevelNodeType, TypeNodeType } from '../syntax/nodeTypes';
 import { Nullish, toVscRange } from '../utils';
 

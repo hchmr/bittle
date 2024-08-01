@@ -1,5 +1,5 @@
-import { Error, Tree } from '../syntax';
 import { parser } from '../parser';
+import { Error, Tree } from '../syntax';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { VirtualFileSystem } from '../vfs';
 

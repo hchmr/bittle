@@ -1,5 +1,5 @@
-import { Point, SyntaxNode, Tree } from '../syntax';
 import { nodeContains, PointRange, rangeContains, rangeContainsPoint } from '.';
+import { Point, SyntaxNode, Tree } from '../syntax';
 
 export function getIdentifierAtPosition(tree: Tree, point: Point): SyntaxNode | null {
     return getNodesAtPosition(tree, point)

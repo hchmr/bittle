@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
-import { toVscRange } from '../utils';
 import { SyntaxNode } from '../syntax';
+import { toVscRange } from '../utils';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
     private readonly symbolKindMapping = {

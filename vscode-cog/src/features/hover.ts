@@ -1,12 +1,12 @@
-import { SyntaxNode } from '../syntax';
 import * as vscode from 'vscode';
 import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
+import { TypeLayout } from '../semantics/typeLayout';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
+import { SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { toVscRange } from '../utils';
-import { TypeLayout } from '../semantics/typeLayout';
 
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
