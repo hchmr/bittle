@@ -1,4 +1,4 @@
-import { Parser, ErrorSink, tokenize } from 'cog-parser';
+import { Parser, ErrorSink, tokenize } from './syntax';
 
 export const parser = {
     parse: (text: string, errorSink?: ErrorSink) => {

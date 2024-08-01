@@ -1,4 +1,4 @@
-import { Tree } from "cog-parser";
+import { Tree } from '../syntax';
 import { VirtualFileSystem } from "../vfs";
 import { ParsingService } from "./parsingService";
 import { IncludeResolver } from "./IncludeResolver";

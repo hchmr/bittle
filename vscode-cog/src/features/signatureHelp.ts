@@ -1,4 +1,4 @@
-import { Point, SyntaxNode } from "cog-parser";
+import { Point, SyntaxNode } from '../syntax';
 import * as vscode from "vscode";
 import { FuncSym, prettySym, SymKind } from "../semantics/sym";
 import { ElaborationService } from "../services/elaborationService";

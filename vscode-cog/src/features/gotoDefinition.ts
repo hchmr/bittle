@@ -6,7 +6,7 @@ import { fromVscPosition, toVscRange } from "../utils";
 import { getNodesAtPosition } from "../utils/nodeSearch";
 import { VirtualFileSystem } from "../vfs";
 import { isExprNode, isTypeNode } from "../syntax/nodeTypes";
-import { SyntaxNode } from "cog-parser";
+import { SyntaxNode } from '../syntax';
 import { stream } from "../utils/stream";
 import { Sym, SymKind, symRelatedType } from "../semantics/sym";
 import { Type } from "../semantics/type";

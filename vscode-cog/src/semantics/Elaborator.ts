@@ -1,5 +1,5 @@
 import assert from "assert"
-import { SyntaxNode, Tree } from "cog-parser"
+import { SyntaxNode, Tree } from '../syntax'
 import { IncludeResolver } from "../services/IncludeResolver"
 import { ParsingService } from '../services/parsingService'
 import {

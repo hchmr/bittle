@@ -1,4 +1,4 @@
-import { SyntaxNode } from 'cog-parser';
+import { SyntaxNode } from '../syntax';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { ExprNodeType, TopLevelNodeType, TypeNodeType } from '../syntax/nodeTypes';

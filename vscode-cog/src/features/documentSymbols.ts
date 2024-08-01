@@ -1,7 +1,7 @@
-import Parser from 'cog-parser';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { toVscRange } from '../utils';
+import { SyntaxNode } from '../syntax';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
     private readonly symbolKindMapping = {
@@ -22,7 +22,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
 
         const rootSymbols: vscode.DocumentSymbol[] = [];
 
-        const visit = (node: Parser.SyntaxNode, currentSymbol: vscode.DocumentSymbol | null) => {
+        const visit = (node: SyntaxNode, currentSymbol: vscode.DocumentSymbol | null) => {
             if (node.type in this.symbolKindMapping) {
                 const symbol = this.generateDocumentSymbol(node);
                 (currentSymbol?.children ?? rootSymbols).push(symbol);
@@ -39,7 +39,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider {
         return rootSymbols;
     }
 
-    private generateDocumentSymbol(node: Parser.SyntaxNode) {
+    private generateDocumentSymbol(node: SyntaxNode) {
         const nameNode = node.children.find(child => child.type === 'identifier');
         const symbol = new vscode.DocumentSymbol(
             nameNode?.text ?? '',

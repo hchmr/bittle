@@ -1,4 +1,4 @@
-import { SyntaxNode } from 'cog-parser';
+import { SyntaxNode } from '../syntax';
 import * as vscode from 'vscode';
 import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';

@@ -1,4 +1,4 @@
-import { Error, SyntaxNode, TreeCursor } from 'cog-parser';
+import { Error, SyntaxNode, TreeCursor } from '../syntax';
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { toVscPosition, toVscRange } from '../utils';

@@ -5,7 +5,7 @@ import { ParsingService } from "../services/parsingService";
 import { ExprNodeType } from "../syntax/nodeTypes";
 import { getNodesAtPosition } from "../utils/nodeSearch";
 import { fromVscPosition } from "../utils";
-import { SyntaxNode } from "cog-parser";
+import { SyntaxNode } from '../syntax';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(

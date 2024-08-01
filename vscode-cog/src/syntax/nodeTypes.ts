@@ -1,6 +1,6 @@
 // Node types
 
-import { SyntaxNode } from "cog-parser";
+import { SyntaxNode } from '../syntax';
 
 export enum TopLevelNodeType {
     Include = "include_decl",

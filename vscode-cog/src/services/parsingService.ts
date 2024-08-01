@@ -1,4 +1,4 @@
-import { Error, Tree } from "cog-parser";
+import { Error, Tree } from '../syntax';
 import { parser } from "../parser";
 import { ReactiveCache } from "../utils/reactiveCache";
 import { VirtualFileSystem } from "../vfs";

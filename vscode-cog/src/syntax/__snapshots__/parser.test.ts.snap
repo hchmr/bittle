@@ -80,20 +80,21 @@ exports[`prettySyntaxTree:good 1`] = `
   struct_decl@2:1
     "struct"@2:1
     "Point"@2:8
-    "{"@2:14
-    struct_member@3:5
-      "x"@3:5
-      ":"@3:6
-      name_type@3:8
-        "Int"@3:8
-    ","@3:11
-    struct_member@4:5
-      "y"@4:5
-      ":"@4:6
-      name_type@4:8
-        "Int"@4:8
-    ","@4:11
-    "}"@5:1
+    struct_body@2:14
+      "{"@2:14
+      struct_member@3:5
+        "x"@3:5
+        ":"@3:6
+        name_type@3:8
+          "Int"@3:8
+      ","@3:11
+      struct_member@4:5
+        "y"@4:5
+        ":"@4:6
+        name_type@4:8
+          "Int"@4:8
+      ","@4:11
+      "}"@5:1
   func_decl@6:1
     "func"@6:1
     "sqr_dst"@6:6

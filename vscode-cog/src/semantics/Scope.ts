@@ -1,4 +1,4 @@
-import { Point } from "cog-parser";
+import { Point } from '../syntax';
 import { PointRange, rangeContainsPoint } from "../utils";
 
 

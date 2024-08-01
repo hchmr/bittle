@@ -1,4 +1,4 @@
-import { SyntaxNode } from "cog-parser";
+import { SyntaxNode } from '../syntax';
 import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from "../semantics/elaborator";
 import { StructFieldSym, Sym, SymKind } from "../semantics/sym";
 import { Type } from "../semantics/type";

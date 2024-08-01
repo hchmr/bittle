@@ -1,5 +1,5 @@
 import assert from "assert";
-import { SyntaxNode } from "cog-parser";
+import { SyntaxNode } from '../syntax';
 import { stream } from "../utils/stream";
 import { prettyType, tryUnifyTypes, Type } from "./type";
 

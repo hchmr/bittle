@@ -2,7 +2,7 @@ import assert from 'assert';
 import { CompositeNodeKind, namedTokenKinds } from './compositeNodeKind.js';
 import { Token, TokenKind } from './token.js';
 import { Point, Tree } from './tree.js';
-import { CompositeNodeImpl, MissingTokenNodeImpl, pointEqual, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl.js';
+import { CompositeNodeImpl, MissingTokenNodeImpl, pointEqual, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl';
 import { ErrorSink } from './ErrorSink.js';
 
 //=========================================================================
