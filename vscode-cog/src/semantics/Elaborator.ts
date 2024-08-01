@@ -154,6 +154,8 @@ export class Elaborator {
         if (!sym.name)
             return sym;
 
+        const origin = nameNode ?? sym.origins[0].node;
+
         const existing = this.lookupSymbol(sym.name);
         if (!existing) {
             this.scope.add(sym.name, sym.qualifiedName);
@@ -161,13 +163,13 @@ export class Elaborator {
         } else if (sym.kind === existing.kind) {
             const [merged, mergeErr] = tryMergeSym(existing, sym);
             if (mergeErr) {
-                this.reportError(sym.origins[0].node, `Conflicting declaration of '${sym.name}'.`);
+                this.reportError(origin, `Conflicting declaration of '${sym.name}'.`);
             }
             assert(existing.qualifiedName === merged.qualifiedName);
             this.symbols.set(merged.qualifiedName, merged);
             sym = merged as T;
         } else {
-            this.reportError(sym.origins[0].node, `Another symbol with the same name already exists.`);
+            this.reportError(origin, `Another symbol with the same name already exists.`);
         }
 
         if (nameNode) {
