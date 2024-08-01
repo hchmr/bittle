@@ -1,25 +1,24 @@
 import { Point } from "cog-parser";
 import { PointRange, rangeContainsPoint } from "../utils";
-import { Sym } from "./sym";
 
 
 export class Scope {
-    symbols: Map<string, Sym> = new Map();
+    symbols: Map<string, string> = new Map();
     children: Scope[] = [];
 
     constructor(public file: string, public range: PointRange, public parent?: Scope) {
         parent?.children.push(this);
     }
 
-    add(sym: Sym) {
-        this.symbols.set(sym.name, sym);
+    add(name: string, qname: string) {
+        this.symbols.set(name, qname);
     }
 
-    lookup(name: string): Sym | undefined {
+    lookup(name: string): string | undefined {
         return this.symbols.get(name) ?? this.parent?.lookup(name);
     }
 
-    get(name: string): Sym | undefined {
+    get(name: string): string | undefined {
         return this.symbols.get(name);
     }
 

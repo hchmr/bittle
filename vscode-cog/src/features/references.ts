@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SymReference } from '../semantics/Elaborator';
+import { SymReference } from '../semantics/elaborator';
 import { Sym } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';

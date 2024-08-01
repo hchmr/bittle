@@ -1,5 +1,5 @@
 import assert from "assert"
-import { Point, SyntaxNode, Tree } from "cog-parser"
+import { SyntaxNode, Tree } from "cog-parser"
 import { IncludeResolver } from "../services/IncludeResolver"
 import { ParsingService } from '../services/parsingService'
 import {
@@ -11,7 +11,6 @@ import {
 } from "../syntax/nodeTypes"
 import { Nullish, PointRange } from "../utils"
 import { stream } from "../utils/stream"
-import { Scope } from "./Scope"
 import {
     ConstSym,
     FuncParamSym,
@@ -21,9 +20,12 @@ import {
     StructFieldSym,
     StructSym,
     Sym,
-    SymKind
+    SymKind,
+    tryMergeSym
 } from './sym'
 import { isScalarType, prettyType, tryUnifyTypes, Type, typeLe } from "./type"
+import { TypeLayout, typeLayout } from "./typeLayout"
+import { Scope } from "./scope"
 
 export type ErrorLocation = {
     file: string,
@@ -35,47 +37,59 @@ export type ElaborationError = {
     location: ErrorLocation,
 }
 
-export type TypeLayout = {
-    size: number,
-    align: number,
-}
-
 export type SymReference = {
     file: string,
     nameNode: SyntaxNode,
 }
 
+export type ElaboratorResult = {
+    scope: Scope;
+    symbols: Map<string, Sym>,
+    nodeSymMap: WeakMap<SyntaxNode, string>,
+    nodeTypeMap: WeakMap<SyntaxNode, Type>,
+    references: Map<string, SymReference[]>,
+    errors: ElaborationError[],
+}
+
 export class Elaborator {
-    scope!: Scope;
-    references!: Map<string, SymReference[]>
-    errors: ElaborationError[] = []
-    currentFunc: FuncSym | undefined
-    nextLocalIndex: number = 0
+    private parseTree: Tree;
+
+    private scope: Scope;
+
+    // Symbol.qualifiedName -> Symbol
+    private symbols: Map<string, Sym> = new Map();
+    // Symbol.qualifiedName -> Reference[]
+    private references: Map<string, SymReference[]> = new Map();
+
+    // SyntaxNode -> Symbol.qualifiedName
+    private nodeSymMap: WeakMap<SyntaxNode, string> = new WeakMap();
+    // SyntaxNode -> Type
+    private nodeTypeMap: WeakMap<SyntaxNode, Type> = new WeakMap();
+
+    private errors: ElaborationError[] = [];
+
+    // Current function
+    private currentFunc: FuncSym | undefined
+    private nextLocalIndex: number = 0
 
     constructor(
         private parsingService: ParsingService,
         private includeResolver: IncludeResolver,
         private path: string,
-    ) { }
-
-    elab(tree: Tree) {
-        this.scope = new Scope(this.path, tree.rootNode);
-        this.references = new Map();
-        this.elabTree(tree);
+    ) {
+        this.parseTree = this.parsingService.parse(path);
+        this.scope = new Scope(this.path, this.parseTree.rootNode);
     }
 
-    gotoPosition(position: Point): boolean {
-        const scope = this.scope.findScopeForPosition(this.path, position);
-        if (!scope) {
-            return false;
-        }
-        this.scope = scope;
-        return true;
-    }
-
-    gotoRoot() {
-        while (this.scope.parent) {
-            this.scope = this.scope.parent;
+    run(): ElaboratorResult {
+        this.elabTree(this.parseTree);
+        return {
+            scope: this.scope,
+            symbols: this.symbols,
+            nodeSymMap: this.nodeSymMap,
+            nodeTypeMap: this.nodeTypeMap,
+            references: this.references,
+            errors: this.errors,
         }
     }
 
@@ -98,14 +112,12 @@ export class Elaborator {
         return unified;
     }
 
-    private checkType(node: SyntaxNode, expected: Type, actual: Type) {
-        if (!node || !expected || !actual)
-            debugger;
+    private checkType(node: SyntaxNode, expected: Type) {
+        let actual = this.nodeTypeMap.get(node) ?? mkErrorType();;
         actual = this.unifyTypes(node, expected, actual);
         if (!typeLe(expected, actual)) {
             this.reportError(node, `Expected type '${prettyType(expected)}', got '${prettyType(actual)}'.`);
         }
-        return expected;
     }
 
     private createOrigin(node: SyntaxNode, nameNode: SyntaxNode | Nullish): Origin {
@@ -129,138 +141,144 @@ export class Elaborator {
         this.scope = this.scope.parent;
     }
 
-    addSymbol<T extends Sym>(sym: T) {
+    private lookupSymbol(name: string) {
+        const qname = this.scope.lookup(name);
+        if (!qname)
+            return;
+        return this.symbols.get(qname);
+    }
+
+    private addSymbol<T extends Sym>(nameNode: SyntaxNode | Nullish, sym: T): T {
         if (!sym.name)
-            return;
+            return sym;
 
-        const existing = this.scope.get(sym.name);
+        const existing = this.lookupSymbol(sym.name);
         if (!existing) {
-            this.scope.add(sym);
-            return;
-        }
-
-        if (sym.kind === existing.kind) {
-            const [ok, merged] = tryMergeSym(existing, sym);
-            this.scope.add(merged);
-            if (ok) {
-                return;
+            this.scope.add(sym.name, sym.qualifiedName);
+            this.symbols.set(sym.qualifiedName, sym);
+        } else if (sym.kind === existing.kind) {
+            const [merged, mergeErr] = tryMergeSym(existing, sym);
+            if (mergeErr) {
+                this.reportError(sym.origins[0].node, `Conflicting declaration of '${sym.name}'.`);
             }
+            assert(existing.qualifiedName === merged.qualifiedName);
+            this.symbols.set(merged.qualifiedName, merged);
+            sym = merged as T;
+        } else {
+            this.reportError(sym.origins[0].node, `Another symbol with the same name already exists.`);
         }
 
-        this.reportError(sym.origins[0].node, `Conflicting declaration of '${sym.name}'.`);
+        if (nameNode) {
+            this.recordNameIntroduction(sym, nameNode);
+        }
+
+        return sym;
     }
 
     private resolveName(nameNode: SyntaxNode): Sym | undefined {
         const name = nameNode.text;
-        const sym = this.scope.lookup(name);
+        const sym = this.lookupSymbol(name);
         if (sym) {
-            this.trackReference(sym, nameNode);
+            this.recordNameResolution(sym, nameNode);
+            return sym;
+        } else {
+            this.reportError(nameNode, `Unknown symbol '${name}'.`);
+            return undefined;
         }
-        return sym;
     }
 
-    private trackReference(sym: Sym, nameNode: SyntaxNode) {
+    private recordNameIntroduction(sym: Sym, nameNode: SyntaxNode) {
+        assert(nameNode.type === "identifier");
+        this.nodeSymMap.set(nameNode, sym.qualifiedName);
+    }
+
+    private recordNameResolution(sym: Sym, nameNode: SyntaxNode) {
+        assert(nameNode.type === "identifier");
+        this.nodeSymMap.set(nameNode, sym.qualifiedName);
+
         const origin = this.createOrigin(nameNode, nameNode);
         const references = this.references.get(sym.qualifiedName) ?? [];
         references.push({ file: origin.file, nameNode: nameNode });
         this.references.set(sym.qualifiedName, references);
     }
 
+    private trackTyping(node: SyntaxNode, f: () => Type): Type {
+        const type = f();
+        this.nodeTypeMap.set(node, type);
+        return type;
+    }
+
     //==============================================================================
     //== Types
 
-    typeEval(typeNode: SyntaxNode | Nullish): Type {
+    private typeEval(typeNode: SyntaxNode | Nullish): Type {
         if (!typeNode)
-            return { kind: "error" }
+            return mkErrorType();
 
-        const nodeType = typeNode.type as TypeNodeType;
-        switch (nodeType) {
-            case TypeNodeType.GroupedType:
-                return this.typeEval(typeNode.childForFieldName("type"))
-            case TypeNodeType.NameType:
-                const nameNode = typeNode.firstChild!;
-                switch (nameNode.text) {
-                    case "Void":
-                        return { kind: "void" }
-                    case "Bool":
-                        return { kind: "bool" }
-                    case "Char":
-                    case "Int8":
-                        return { kind: "int", size: 8 }
-                    case "Int16":
-                        return { kind: "int", size: 16 }
-                    case "Int32":
-                        return { kind: "int", size: 32 }
-                    case "Int":
-                    case "Int64":
-                        return { kind: "int", size: 64 }
-                    default: {
-                        const sym = this.resolveName(nameNode);
-                        if (sym?.kind !== SymKind.Struct) {
-                            this.reportError(typeNode, `Unknown type '${typeNode.text}'.`)
-                            return { kind: "error" }
+        return this.trackTyping(typeNode, () => {
+            const nodeType = typeNode.type as TypeNodeType;
+            switch (nodeType) {
+                case TypeNodeType.GroupedType:
+                    return this.typeEval(typeNode.childForFieldName("type"))
+                case TypeNodeType.NameType:
+                    const nameNode = typeNode.firstChild!;
+                    switch (nameNode.text) {
+                        case "Void":
+                            return { kind: "void" }
+                        case "Bool":
+                            return { kind: "bool" }
+                        case "Char":
+                        case "Int8":
+                            return { kind: "int", size: 8 }
+                        case "Int16":
+                            return { kind: "int", size: 16 }
+                        case "Int32":
+                            return { kind: "int", size: 32 }
+                        case "Int":
+                        case "Int64":
+                            return { kind: "int", size: 64 }
+                        default: {
+                            const sym = this.resolveName(nameNode);
+                            if (!sym) {
+                                return mkErrorType();
+                            }
+                            if (sym.kind !== SymKind.Struct) {
+                                this.reportError(typeNode, `'${sym.name}' is not a struct.`);
+                                return mkErrorType();
+                            }
+                            return { kind: "struct", name: sym.name, qualifiedName: sym.qualifiedName }
                         }
-                        return { kind: "struct", name: sym.name }
                     }
-                }
-            case TypeNodeType.PointerType:
-                return {
-                    kind: "pointer",
-                    elementType: this.typeEval(typeNode.childForFieldName("pointee"))
-                }
-            case TypeNodeType.ArrayType:
-                return {
-                    kind: "array",
-                    elementType: this.typeEval(typeNode.childForFieldName("type")),
-                    size: this.constEval(typeNode.childForFieldName("size"))
-                }
-            default:
-                const unreachable: never = nodeType;
-                throw new Error(`Unexpected node type: ${unreachable}`);
-        }
-    }
-
-    typeLayout(type: Type): TypeLayout {
-        switch (type.kind) {
-            case "void":
-                return { size: 0, align: 1 }
-            case "bool":
-                return { size: 1, align: 1 }
-            case "int":
-                const size = type.size! / 8
-                return { size: size, align: size }
-            case "pointer":
-                return { size: 8, align: 8 }
-            case "array":
-                const elemLayout = this.typeLayout(type.elementType)
-                return { size: elemLayout.size * type.size!, align: elemLayout.align }
-            case "struct": {
-                const sym = this.scope.lookup(type.name)
-                if (sym?.kind !== SymKind.Struct)
-                    return { size: 0, align: 1 }
-                return stream(sym.fields ?? [])
-                    .map(field => this.typeLayout(field.type))
-                    .reduce(
-                        (a, b) => ({
-                            size: alignUp(a.size, b.align) + b.size,
-                            align: Math.max(a.align, b.align),
-                        }),
-                        { size: 0, align: 1 }
-                    )
+                case TypeNodeType.PointerType:
+                    return {
+                        kind: "pointer",
+                        elementType: this.typeEval(typeNode.childForFieldName("pointee"))
+                    }
+                case TypeNodeType.ArrayType:
+                    return {
+                        kind: "array",
+                        elementType: this.typeEval(typeNode.childForFieldName("type")),
+                        size: this.constEval(typeNode.childForFieldName("size"))
+                    }
+                default:
+                    const unreachable: never = nodeType;
+                    throw new Error(`Unexpected node type: ${unreachable}`);
             }
-            case "error":
-                return { size: 0, align: 1 }
-            default:
-                const unreachable: never = type;
-                throw new Error(`Unexpected type: ${unreachable}`);
-        }
-
-        function alignUp(size: number, align: number) {
-            return Math.ceil(size / align) * align
-        }
+        });
     }
 
-    typeSize(type: Type): number {
+    private typeLayout(type: Type): TypeLayout {
+        return typeLayout(type, {
+            getStruct: name => {
+                const sym = this.symbols.get(name);
+                if (!sym || sym.kind !== SymKind.Struct)
+                    return;
+                return sym;
+            }
+        });
+    }
+
+    private typeSize(type: Type): number {
         return this.typeLayout(type).size
     }
 
@@ -281,8 +299,11 @@ export class Elaborator {
             case ExprNodeType.NameExpr:
                 const nameNode = node.firstChild!;
                 const sym = this.resolveName(nameNode);
-                if (!sym || sym.kind !== SymKind.Const) {
-                    this.reportError(node, `Unknown constant '${nameNode.text}'.`);
+                if (!sym) {
+                    return;
+                }
+                if (sym.kind !== SymKind.Const) {
+                    this.reportError(nameNode, `'${sym.name}' is not a constant.`);
                     return;
                 }
                 return sym.value;
@@ -405,7 +426,7 @@ export class Elaborator {
             fields: undefined,
         }
 
-        this.addSymbol<StructSym>({ ...sym });
+        this.addSymbol<StructSym>(nameNode, { ...sym });
 
         const bodyNode = node.childForFieldName("body");
         if (bodyNode) {
@@ -428,13 +449,13 @@ export class Elaborator {
                     type: fieldType,
                 }
                 sym.fields.push(fieldSymbol);
-                this.addSymbol<StructFieldSym>(fieldSymbol);
+                this.addSymbol(fieldNameNode, fieldSymbol);
             }
 
             this.exitScope();
         }
 
-        this.addSymbol<StructSym>(sym);
+        this.addSymbol(nameNode, sym);
     }
 
     private elabEnum(node: SyntaxNode) {
@@ -449,7 +470,7 @@ export class Elaborator {
             const valueNode = memberNode.childForFieldName("value");
             const value = valueNode ? this.constEval(valueNode) : nextValue;
 
-            this.addSymbol<ConstSym>({
+            this.addSymbol<ConstSym>(memberNameNode, {
                 kind: SymKind.Const,
                 name: memberName,
                 qualifiedName: memberName,
@@ -474,10 +495,12 @@ export class Elaborator {
                 const paramNameNode = paramNode.childForFieldName("name");
                 const paramName = paramNameNode?.text ?? "";
 
+                const paramQualifiedName = `${name}.${index}`;
+
                 return {
                     kind: SymKind.FuncParam,
                     name: paramName,
-                    qualifiedName: `${name}.${index}`,
+                    qualifiedName: paramQualifiedName,
                     origins: [this.createOrigin(paramNode, paramNameNode)],
                     type: paramType,
                 }
@@ -491,7 +514,7 @@ export class Elaborator {
 
         const bodyNode = node.childForFieldName("body");
 
-        this.addSymbol<FuncSym>({
+        const unmergedSym: FuncSym = {
             kind: SymKind.Func,
             name,
             qualifiedName: name,
@@ -500,15 +523,16 @@ export class Elaborator {
             returnType,
             isVariadic,
             isDefined: !!bodyNode,
-        });
+        };
+        const mergedSym = this.addSymbol(nameNode, unmergedSym);
 
         this.enterScope(node);
 
         for (const param of params) {
-            this.addSymbol<FuncParamSym>(param);
+            this.addSymbol(param.origins[0].nameNode, param);
         }
 
-        this.currentFunc = this.scope.lookup(name) as FuncSym;
+        this.currentFunc = mergedSym.kind === SymKind.Func ? mergedSym : unmergedSym;
         this.nextLocalIndex = 0;
 
         if (bodyNode) {
@@ -528,7 +552,7 @@ export class Elaborator {
         const isExtern = !!node.children.find(n => n.type === "extern");
         const type = this.typeEval(node.childForFieldName("type"));
 
-        this.addSymbol<GlobalSym>({
+        this.addSymbol<GlobalSym>(nameNode, {
             kind: SymKind.Global,
             name,
             qualifiedName: name,
@@ -544,7 +568,7 @@ export class Elaborator {
 
         const value = this.constEval(node.childForFieldName("value"));
 
-        this.addSymbol<ConstSym>({
+        this.addSymbol<ConstSym>(nameNode, {
             kind: SymKind.Const,
             name,
             qualifiedName: name,
@@ -616,18 +640,18 @@ export class Elaborator {
         let inferedType = initNode ? this.elabExprInfer(initNode) : undefined;
 
         if (declaredType && inferedType) {
-            this.checkType(node, declaredType, inferedType);
+            this.checkType(node, declaredType);
         }
         let type = declaredType ?? inferedType;
 
         if (!type) {
             this.reportError(node, `Missing type in local declaration.`);
-            type ??= { kind: "error" }
+            type ??= mkErrorType();
         }
 
         const qname = `${this.currentFunc!.name}.x${this.nextLocalIndex++}`;
 
-        this.addSymbol<LocalSym>({
+        this.addSymbol<LocalSym>(nameNode, {
             kind: SymKind.Local,
             name,
             qualifiedName: qname,
@@ -675,10 +699,10 @@ export class Elaborator {
 
     private elabExpr(node: SyntaxNode | Nullish, expectedType: Type) {
         if (!node)
-            return { kind: "error" }
+            return mkErrorType();
 
-        let inferredType = this.elabExprInfer(node);
-        this.checkType(node, expectedType, inferredType);
+        this.elabExprInfer(node);
+        this.checkType(node, expectedType);
     }
 
     private elabExprBool(node: SyntaxNode | Nullish): Type {
@@ -688,7 +712,7 @@ export class Elaborator {
 
     private elabExprInt(node: SyntaxNode | Nullish, expectedType?: Type): Type {
         if (!node)
-            return { kind: "error" }
+            return mkErrorType();
 
         assert(!expectedType || expectedType.kind === "int");
 
@@ -697,52 +721,53 @@ export class Elaborator {
             if (type.kind !== "error") {
                 this.reportError(node, `Expected integer expression.`);
             }
-            return expectedType ?? { kind: "error" }
+            return expectedType ?? mkErrorType();
         } else {
             return type;
         }
     }
 
-    public elabExprInfer(node: SyntaxNode | Nullish): Type {
+    private elabExprInfer(node: SyntaxNode | Nullish): Type {
         if (!node)
-            return { kind: "error" }
+            return mkErrorType();
 
-        const nodeType = node.type as ExprNodeType;
-        switch (nodeType) {
-            case ExprNodeType.GroupedExpr:
-                return this.elabExprInfer(node.childForFieldName("expr"))
-            case ExprNodeType.NameExpr:
-                return this.elabNameExpr(node)
-            case ExprNodeType.SizeofExpr:
-                return this.elabSizeofExpr(node)
-            case ExprNodeType.LiteralExpr:
-                return this.elabLiteralExpr(node)
-            case ExprNodeType.BinaryExpr:
-                return this.elabBinaryExpr(node)
-            case ExprNodeType.TernaryExpr:
-                return this.elabTernaryExpr(node)
-            case ExprNodeType.UnaryExpr:
-                return this.elabUnaryExpr(node)
-            case ExprNodeType.CallExpr:
-                return this.elabCallExpr(node)
-            case ExprNodeType.IndexExpr:
-                return this.elabIndexExpr(node)
-            case ExprNodeType.FieldExpr:
-                return this.elabFieldExpr(node)
-            case ExprNodeType.CastExpr:
-                return this.elabCastExpr(node)
-            default:
-                const unreachable: never = nodeType;
-                throw new Error(`Unexpected node type: ${unreachable} `)
-        }
+        return this.trackTyping(node, () => {
+            const nodeType = node.type as ExprNodeType;
+            switch (nodeType) {
+                case ExprNodeType.GroupedExpr:
+                    return this.elabExprInfer(node.childForFieldName("expr"))
+                case ExprNodeType.NameExpr:
+                    return this.elabNameExpr(node)
+                case ExprNodeType.SizeofExpr:
+                    return this.elabSizeofExpr(node)
+                case ExprNodeType.LiteralExpr:
+                    return this.elabLiteralExpr(node)
+                case ExprNodeType.BinaryExpr:
+                    return this.elabBinaryExpr(node)
+                case ExprNodeType.TernaryExpr:
+                    return this.elabTernaryExpr(node)
+                case ExprNodeType.UnaryExpr:
+                    return this.elabUnaryExpr(node)
+                case ExprNodeType.CallExpr:
+                    return this.elabCallExpr(node)
+                case ExprNodeType.IndexExpr:
+                    return this.elabIndexExpr(node)
+                case ExprNodeType.FieldExpr:
+                    return this.elabFieldExpr(node)
+                case ExprNodeType.CastExpr:
+                    return this.elabCastExpr(node)
+                default:
+                    const unreachable: never = nodeType;
+                    throw new Error(`Unexpected node type: ${unreachable} `)
+            }
+        });
     }
 
-    private elabNameExpr(nameNode: SyntaxNode): Type {
-        const name = nameNode.text;
+    private elabNameExpr(nameExpr: SyntaxNode): Type {
+        const nameNode = nameExpr.firstChild!;
         const sym = this.resolveName(nameNode);
         if (!sym) {
-            this.reportError(nameNode, `Unknown symbol '${name}'.`);
-            return { kind: "error" }
+            return mkErrorType();
         }
 
         switch (sym.kind) {
@@ -755,7 +780,7 @@ export class Elaborator {
             case SymKind.Struct:
             case SymKind.Func:
             case SymKind.StructField:
-                return { kind: "error" }
+                return mkErrorType();
             default:
                 const unreachable: never = sym;
                 throw new Error(`Unreachable: ${unreachable} `);
@@ -811,12 +836,12 @@ export class Elaborator {
                         if (operandNode && operandType.kind !== "error") {
                             this.reportError(operandNode, `Expected pointer type.`);
                         }
-                        return { kind: "error" }
+                        return mkErrorType();
                     }
                     return operandType.elementType;
                 }
             default:
-                return { kind: "error" }
+                return mkErrorType();
         }
     }
 
@@ -839,7 +864,7 @@ export class Elaborator {
 
                     const rightType = this.elabExprInfer(rightNode);
                     if (rightNode) {
-                        this.checkType(rightNode, leftType, rightType);
+                        this.checkType(rightNode, leftType);
                     }
 
                     if (!isScalarType(leftType)) {
@@ -885,7 +910,7 @@ export class Elaborator {
                     return { kind: "bool" }
                 }
             default:
-                return { kind: "error" }
+                return mkErrorType();
         }
     }
 
@@ -899,21 +924,24 @@ export class Elaborator {
     private elabCallExpr(node: SyntaxNode): Type {
         const calleeNode = node.childForFieldName("callee");
         const argsNodes = node.childrenForFieldName("args");
-        if (!calleeNode)
-            return { kind: "error" }
-
+        if (!calleeNode) {
+            return mkErrorType();
+        }
         if (calleeNode.type !== ExprNodeType.NameExpr) {
             this.reportError(calleeNode, `Function name expected.`);
-            return { kind: "error" }
+            return mkErrorType();
         }
 
         const funcNameNode = calleeNode.firstChild!;
         const funcName = funcNameNode.text;
 
         const funcSym = this.resolveName(funcNameNode);
-        if (!funcSym || funcSym.kind !== SymKind.Func) {
-            this.reportError(calleeNode, `Unknown function '${funcName}'.`);
-            return { kind: "error" }
+        if (!funcSym) {
+            return mkErrorType();
+        }
+        if (funcSym.kind !== SymKind.Func) {
+            this.reportError(calleeNode, `'${funcName}' is not a function.`);
+            return mkErrorType();
         }
 
         const params = funcSym.params;
@@ -945,13 +973,13 @@ export class Elaborator {
             if (indexeeType.kind !== "error") {
                 this.reportError(indexeeNode ?? node, `Expression is not indexable.`);
             }
-            return { kind: "error" }
+            return mkErrorType();
         }
         this.elabExprInt(node.childForFieldName("index"));
         return indexeeType.elementType;
     }
 
-    public elabField(node: SyntaxNode): StructFieldSym | undefined {
+    private elabField(node: SyntaxNode): StructFieldSym | undefined {
         let leftType = this.elabExprInfer(node.childForFieldName("left"));
         if (leftType.kind === "pointer") {
             leftType = leftType.elementType;
@@ -964,7 +992,7 @@ export class Elaborator {
             return undefined;
         }
 
-        const sym = this.scope.lookup(leftType.name);
+        const sym = this.symbols.get(leftType.qualifiedName);
         assert(sym?.kind === SymKind.Struct);
 
         const nameNode = node.childForFieldName("name");
@@ -978,13 +1006,13 @@ export class Elaborator {
             this.reportError(node, `Unknown field '${fieldName}'.`);
             return undefined;
         }
-        this.trackReference(field, nameNode); // track use of field
+        this.recordNameResolution(field, nameNode);
         return field;
     }
 
     private elabFieldExpr(node: SyntaxNode): Type {
         const field = this.elabField(node);
-        return field?.type ?? { kind: "error" }
+        return field?.type ?? mkErrorType();
     }
 
     private elabCastExpr(node: SyntaxNode): Type {
@@ -1043,168 +1071,6 @@ function isLvalue(node: SyntaxNode | Nullish): boolean {
     }
 }
 
-//================================================================================
-//== Symbol merging
-
-type ErrorSignal = () => void;
-
-function tryMergeSym(existing: Sym, sym: Sym): [ok: boolean, sym: Sym] {
-    assert(existing.name === sym.name);
-    assert(existing.kind === sym.kind);
-
-    let ok = true;
-    const onError = () => {
-        ok = false;
-    }
-
-    const merged = (() => {
-        switch (existing.kind) {
-            case SymKind.Struct:
-                return tryMergeStructSym(existing, <StructSym>sym, onError);
-            case SymKind.Func:
-                return tryMergeFuncSym(existing, <FuncSym>sym, onError);
-            case SymKind.Global:
-                return tryMergeGlobalSym(existing, <GlobalSym>sym, onError);
-            case SymKind.Const:
-                return tryMergeConstSym(existing, <ConstSym>sym, onError);
-            case SymKind.StructField:
-                return tryMergeStructFieldSym(existing, <StructFieldSym>sym, onError);
-            case SymKind.FuncParam:
-                return tryMergeFuncParamSym(existing, <FuncParamSym>sym, onError);
-            case SymKind.Local:
-                return tryMergeLocalSym(existing, <LocalSym>sym, onError);
-            default:
-                const unreachable: never = existing;
-                throw new Error(`Unexpected symbol kind: ${unreachable}`);
-        }
-    })();
-
-    return [ok, merged];
-}
-
-function tryMergeStructSym(existing: StructSym, sym: StructSym, onError: ErrorSignal): StructSym {
-    return {
-        kind: SymKind.Struct,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        fields: tryMergeStructFields(existing, sym, onError),
-    };
-
-    function tryMergeStructFields(existing: StructSym, sym: StructSym, onError: ErrorSignal): StructFieldSym[] | undefined {
-        if (!existing.fields || !sym.fields) {
-            return existing.fields || sym.fields;
-        }
-
-        onError();
-        return stream(existing.fields).concat(sym.fields)
-            .groupBy(field => field.name)
-            .map(([_, fields]) => fields.reduce((a, b) => tryMergeStructFieldSym(a, b, () => { })))
-            .toArray();
-    }
-}
-
-function tryMergeStructFieldSym(field1: StructFieldSym, field2: StructFieldSym, onError: ErrorSignal): StructFieldSym {
-    return {
-        kind: SymKind.StructField,
-        name: field1.name,
-        qualifiedName: field1.qualifiedName,
-        origins: mergeOrigins(field1.origins, field2.origins),
-        type: tryUnifyTypes(field1.type, field2.type, onError),
-    };
-}
-
-function tryMergeFuncSym(existing: FuncSym, sym: FuncSym, onError: ErrorSignal): FuncSym {
-    return {
-        kind: SymKind.Func,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        params: tryMergeFuncParams(existing.params, sym.params, onError),
-        returnType: tryUnifyTypes(existing.returnType, sym.returnType, onError),
-        isVariadic: tryMergeIsVariadic(),
-        isDefined: tryMergeIsDefined(),
-    };
-
-    function tryMergeIsVariadic(): boolean {
-        if (existing.isVariadic !== sym.isVariadic) {
-            onError();
-        }
-        return existing.isVariadic || sym.isVariadic;
-    }
-
-    function tryMergeIsDefined(): boolean {
-        if (existing.isDefined && sym.isDefined) {
-            onError();
-        }
-        return existing.isDefined || sym.isDefined;
-    }
-}
-
-function tryMergeFuncParams(params1: FuncParamSym[], params2: FuncParamSym[], onError: ErrorSignal): FuncParamSym[] {
-    if (params1.length !== params2.length) {
-        onError();
-    }
-    return stream(params1).zipLongest(params2)
-        .map(([p1, p2]) => p1 && p2 ? tryMergeFuncParamSym(p1, p2, onError) : p1 || p2)
-        .toArray();
-}
-
-function tryMergeFuncParamSym(param1: FuncParamSym, param2: FuncParamSym, onError: ErrorSignal): FuncParamSym {
-    return {
-        kind: SymKind.FuncParam,
-        name: param1.name === param2.name ? param1.name : "{unknown}",
-        qualifiedName: param1.qualifiedName,
-        origins: mergeOrigins(param1.origins, param2.origins),
-        type: tryUnifyTypes(param1.type, param2.type, onError),
-    };
-}
-
-function tryMergeGlobalSym(existing: GlobalSym, sym: GlobalSym, onError: ErrorSignal): GlobalSym {
-    if (existing.isDefined && sym.isDefined) {
-        onError();
-    }
-    return {
-        kind: SymKind.Global,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        type: tryUnifyTypes(existing.type, sym.type, onError),
-        isDefined: existing.isDefined || sym.isDefined,
-    };
-}
-
-function tryMergeConstSym(existing: ConstSym, sym: ConstSym, onError: ErrorSignal): ConstSym {
-    return {
-        kind: SymKind.Const,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        value: mergeValue(existing.value, sym.value),
-    };
-
-    function mergeValue(x1: number | undefined, x2: number | undefined): number | undefined {
-        if (x1 !== undefined && x2 !== undefined && x1 !== x2) {
-            onError();
-        }
-        x1 ??= x2;
-        x2 ??= x1;
-        return x1 === x2 ? x1 : undefined;
-    }
-}
-
-function tryMergeLocalSym(existing: LocalSym, sym: LocalSym, onError: ErrorSignal): LocalSym {
-    onError();
-    return {
-        kind: SymKind.Local,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        type: tryUnifyTypes(existing.type, sym.type, onError),
-    };
-}
-
-// Should be good enough for now. It's only structs that add the same symbol twice.
-function mergeOrigins(origins1: Origin[], origins2: Origin[]): Origin[] {
-    return origins1 === origins2 ? origins1 : [...origins1, ...origins2];
+function mkErrorType(): Type {
+    return { kind: "error" };
 }

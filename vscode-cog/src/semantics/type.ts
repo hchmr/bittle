@@ -35,6 +35,7 @@ export type ArrayType = {
 export type StructType = {
     kind: "struct";
     name: string;
+    qualifiedName: string;
 }
 
 export type ErrorType = {

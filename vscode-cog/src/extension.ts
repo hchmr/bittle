@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const includeResolver = new IncludeResolver(vfs);
 
-    const elaborationService = new ElaborationService(parsingService, includeResolver);
+    const elaborationService = new ElaborationService(parsingService, includeResolver, cache);
 
     // Hover
 

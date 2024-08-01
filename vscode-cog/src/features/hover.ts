@@ -1,12 +1,12 @@
 import { SyntaxNode } from 'cog-parser';
 import * as vscode from 'vscode';
-import { TypeLayout } from '../semantics/Elaborator';
 import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { prettyType, Type } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { toVscRange } from '../utils';
+import { TypeLayout } from '../semantics/typeLayout';
 
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
@@ -68,7 +68,7 @@ export class HoverProvider implements vscode.HoverProvider {
 
         function structSymType(sym: Sym): Type | undefined {
             if (sym.kind === SymKind.Struct) {
-                return { kind: 'struct', name: sym.name };
+                return { kind: 'struct', name: sym.name, qualifiedName: sym.qualifiedName };
             }
         }
     }

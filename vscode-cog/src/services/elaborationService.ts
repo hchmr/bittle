@@ -1,34 +1,35 @@
 import { SyntaxNode } from "cog-parser";
-import { ElaborationError, Elaborator, SymReference, TypeLayout } from "../semantics/Elaborator";
-import { StructFieldSym, Sym } from "../semantics/sym";
+import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from "../semantics/elaborator";
+import { StructFieldSym, Sym, SymKind } from "../semantics/sym";
 import { Type } from "../semantics/type";
+import { typeLayout, TypeLayout } from "../semantics/typeLayout";
 import { Stream, stream } from "../utils/stream";
 import { IncludeResolver } from "./IncludeResolver";
 import { ParsingService } from './parsingService';
+import { ReactiveCache } from "../utils/reactiveCache";
 
-interface IElaborationService {
-    resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined;
-    inferType(path: string, exprNode: SyntaxNode): Type;
-    evalType(path: string, node: SyntaxNode): Type;
-}
-
-export class ElaborationService implements IElaborationService {
+export class ElaborationService {
     constructor(
         private parsingService: ParsingService,
         private includeResolver: IncludeResolver,
+        private cache: ReactiveCache,
     ) { }
 
     getErrors(path: string): ElaborationError[] {
-        return this.createElaborator(path).errors;
+        return this.elaborateFile(path).errors;
     }
 
     getSymbolsAtNode(path: string, node: SyntaxNode): Stream<Sym> {
-        let innerScope = this.createElaboratorForScope(path, node).scope;
+        const module = this.elaborateFile(path);
+        const innerScope = module.scope.findScopeForPosition(path, node.startPosition);
+        if (!innerScope) {
+            return stream([]);
+        }
         return stream(function* go(scope): Iterable<Sym> {
             if (!scope) {
                 return;
             }
-            yield* scope.symbols.values();
+            yield* stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
             yield* go(scope.parent!);
         }(innerScope))
     }
@@ -46,55 +47,71 @@ export class ElaborationService implements IElaborationService {
     }
 
     private resolveTypeName(path: string, nameNode: SyntaxNode): Sym | undefined {
-        let node: SyntaxNode | undefined = nameNode.parent!;
-
-        return this.lookup(path, node, nameNode.text);
+        return this.resolveName(path, nameNode);
     }
 
     private resolveValueName(path: string, nameNode: SyntaxNode): Sym | undefined {
-        let node: SyntaxNode | undefined = nameNode.parent!;
-
-        return this.lookup(path, node, nameNode.text);
+        return this.resolveName(path, nameNode);
     }
 
     private resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSym | undefined {
-        return this.createElaboratorForScope(path, nameNode).elabField(nameNode.parent!);
+        const module = this.elaborateFile(path);
+        const qname = module.nodeSymMap.get(nameNode);
+        if (!qname) {
+            return;
+        }
+        const sym = module.symbols.get(qname)!;
+        if (sym.kind !== SymKind.StructField) {
+            return;
+        }
+        return sym;
+    }
+
+    public resolveName(path: string, nameNode: SyntaxNode): Sym | undefined {
+        const module = this.elaborateFile(path);
+        const qname = module.nodeSymMap.get(nameNode);
+        if (!qname) {
+            return;
+        }
+        return module.symbols.get(qname)!;
+    }
+
+    public getSymbol(path: string, qualifiedName: string): Sym | undefined {
+        const module = this.elaborateFile(path);
+        return module.symbols.get(qualifiedName);
     }
 
     inferType(path: string, exprNode: SyntaxNode): Type {
-        return this.createElaboratorForScope(path, exprNode).elabExprInfer(exprNode);
+        const module = this.elaborateFile(path);
+        return module.nodeTypeMap.get(exprNode) ?? { kind: "error" };
     }
 
     evalType(path: string, node: SyntaxNode): Type {
-        return this.createElaboratorForScope(path, node).typeEval(node);
+        const module = this.elaborateFile(path);
+        return module.nodeTypeMap.get(node) ?? { kind: "error" };
     }
 
     getLayout(path: string, type: Type): TypeLayout {
-        return this.createElaborator(path).typeLayout(type);
-    }
-
-    public lookup(path: string, node: SyntaxNode, name: string): Sym | undefined {
-        return this.createElaboratorForScope(path, node).scope.lookup(name);
+        const module = this.elaborateFile(path);
+        return typeLayout(type, {
+            getStruct: name => {
+                const sym = module.symbols.get(name);
+                if (!sym || sym.kind !== SymKind.Struct)
+                    return;
+                return sym;
+            }
+        });
     }
 
     public references(path: string, qname: string): SymReference[] {
-        const elaborator = this.createElaborator(path);
-        return elaborator.references.get(qname) ?? [];
+        const module = this.elaborateFile(path);
+        return module.references.get(qname) ?? [];
     }
 
-    private createElaboratorForScope(path: string, node: SyntaxNode | null): Elaborator {
-        const elaborator = this.createElaborator(path);
-        if (node && !elaborator.gotoPosition(node.startPosition)) {
-            throw new Error("Failed to create elaborator for scope");
-        }
-        return elaborator;
-    }
-
-    private createElaborator(path: string) {
-        const tree = this.parsingService.parse(path);
-        const elaborator = new Elaborator(this.parsingService, this.includeResolver, path);
-        elaborator.elab(tree);
-        return elaborator;
+    private elaborateFile(path: string): ElaboratorResult {
+        return this.cache.compute('elaborationService:elaborateFile:' + path, () =>
+            new Elaborator(this.parsingService, this.includeResolver, path).run()
+        );
     }
 }
 
