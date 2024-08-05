@@ -1086,6 +1086,8 @@ function isLvalue(node: SyntaxNode | Nullish): boolean {
             return isLvalue(node.childForFieldName('expr'));
         case ExprNodeType.FieldExpr:
             return isLvalue(node.childForFieldName('expr'));
+        case ExprNodeType.UnaryExpr:
+            return node.childForFieldName('operator')?.text === '*';
         default:
             return false;
     }
