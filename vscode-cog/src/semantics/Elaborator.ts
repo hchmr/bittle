@@ -332,7 +332,7 @@ export class Elaborator {
             case ExprNodeType.BinaryExpr: {
                 const left = this.constEval(node.childForFieldName('left'));
                 const right = this.constEval(node.childForFieldName('right'));
-                const op = node.childForFieldName('op')?.text;
+                const op = node.childForFieldName('operator')?.text;
                 if (left === undefined || right === undefined || !op)
                     return;
                 switch (op) {
@@ -353,7 +353,7 @@ export class Elaborator {
             }
             case ExprNodeType.UnaryExpr: {
                 const operand = this.constEval(node.childForFieldName('operand'));
-                const uop = node.childForFieldName('op')?.text;
+                const uop = node.childForFieldName('operator')?.text;
                 if (operand === undefined || !uop)
                     return;
                 switch (uop) {
