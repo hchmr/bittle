@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
+import { builtinTypes, builtinValues } from '../semantics/builtins';
 import { prettySym, Sym, SymKind } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeType } from '../syntax/nodeTypes';
+import { keywords } from '../syntax/token';
 import { fromVscPosition } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { getNodesAtPosition } from '../utils/nodeSearch';
@@ -30,7 +32,6 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         return this.autoCompleteFieldAccess(filePath, node)
-            || this.autoCompleteIdentifier(filePath, node)
             || this.autoCompleteDefault(filePath, node);
     }
 
@@ -85,33 +86,51 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         return results.map(toCompletionItem);
     }
 
-    private autoCompleteIdentifier(
-        filePath: string,
-        node: SyntaxNode,
-    ): vscode.CompletionItem[] | undefined {
-        const symbols = this.elaborationService.getSymbolsAtNode(filePath, node).toArray();
-
-        const results = fuzzySearch(node.text, symbols, { key: 'name' });
-        if (results.length === 0) {
-            return;
-        }
-
-        return results.map(toCompletionItem);
-    }
-
     private autoCompleteDefault(
         filePath: string,
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
-        const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
-        return symbols?.map(toCompletionItem).toArray();
+        const candidates
+            = this.elaborationService.getSymbolsAtNode(filePath, node)
+                .concat(generateBuiltins())
+                .toArray();
+
+        let results: CompletionCandidate[];
+        if (node.type === 'identifier') {
+            results = fuzzySearch(node.text, candidates, { key: 'name' });
+        } else {
+            results = candidates;
+        }
+
+        return results.map(toCompletionItem);
     }
 }
 
-function toCompletionItem(sym: Sym): vscode.CompletionItem {
-    const item = new vscode.CompletionItem(sym.name, toCompletionType(sym.kind));
-    item.detail = prettySym(sym);
-    return item;
+type CompletionCandidate =
+    | Sym
+    | { kind: 'static'; name: string; completionKind: vscode.CompletionItemKind };
+
+function* generateBuiltins(): Iterable<CompletionCandidate> {
+    yield * builtinValues
+        .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Constant }));
+    yield * builtinTypes
+        .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Class }));
+    yield * keywords
+        .filter(name => !(<readonly string[]>builtinValues).includes(name))
+        .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Keyword }));
+}
+
+function toCompletionItem(candidate: CompletionCandidate): vscode.CompletionItem {
+    if (candidate.kind === 'static') {
+        const item = new vscode.CompletionItem(candidate.name, candidate.completionKind);
+        item.detail = item.kind === vscode.CompletionItemKind.Keyword ? 'keyword' : 'builtin';
+        return item;
+    } else {
+        const sym = candidate;
+        const item = new vscode.CompletionItem(sym.name, toCompletionType(sym.kind));
+        item.detail = prettySym(sym);
+        return item;
+    }
 }
 
 function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
