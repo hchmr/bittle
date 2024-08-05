@@ -5,7 +5,7 @@ import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeType } from '../syntax/nodeTypes';
 import { fromVscPosition } from '../utils';
-import { FuzzyMatcher } from '../utils/fuzzyMatcher';
+import { fuzzySearch } from '../utils/fuzzySearch';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
@@ -72,26 +72,31 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
         const fields = structSym?.fields;
-
-        const matcher = new FuzzyMatcher(searchText);
+        if (!fields) {
+            return;
+        }
 
         // Filter fields
-        return fields
-            ?.filter((field) => matcher.test(field.name))
-            .map(toCompletionItem);
+        const results = fuzzySearch(searchText, fields, { key: 'name' });
+        if (results.length === 0) {
+            return;
+        }
+
+        return results.map(toCompletionItem);
     }
 
     private autoCompleteIdentifier(
         filePath: string,
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
-        const matcher = new FuzzyMatcher(node.text);
+        const symbols = this.elaborationService.getSymbolsAtNode(filePath, node).toArray();
 
-        const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
-        return symbols
-            .filter((sym) => matcher.test(sym.name))
-            .map(toCompletionItem)
-            .toArray();
+        const results = fuzzySearch(node.text, symbols, { key: 'name' });
+        if (results.length === 0) {
+            return;
+        }
+
+        return results.map(toCompletionItem);
     }
 
     private autoCompleteDefault(

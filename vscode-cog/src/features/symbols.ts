@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { toVscRange } from '../utils';
-import { FuzzyMatcher } from '../utils/fuzzyMatcher';
+import { fuzzySearch as searchFuzzy } from '../utils/fuzzySearch';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 import { VirtualFileSystem } from '../vfs';
@@ -30,10 +30,8 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     }
 
     provideWorkspaceSymbols(query: string, token: vscode.CancellationToken): vscode.ProviderResult<vscode.SymbolInformation[]> {
-        const fuzzyMatcher = new FuzzyMatcher(query);
-
-        return this.getUnfilteredWorkspaceSymbols()
-            .filter(symbol => fuzzyMatcher.test(symbol.name));
+        const unfilteredSymbols = this.getUnfilteredWorkspaceSymbols();
+        return searchFuzzy(query, unfilteredSymbols, { key: 'name' });
     }
 
     private getDocumentSymbols(path: string) {
