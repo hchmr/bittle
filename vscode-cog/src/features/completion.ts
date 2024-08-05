@@ -5,6 +5,7 @@ import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeType } from '../syntax/nodeTypes';
 import { fromVscPosition } from '../utils';
+import { FuzzyMatcher } from '../utils/fuzzyMatcher';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
@@ -72,9 +73,11 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
         const fields = structSym?.fields;
 
+        const matcher = new FuzzyMatcher(searchText);
+
         // Filter fields
         return fields
-            ?.filter((field) => field.name.startsWith(searchText))
+            ?.filter((field) => matcher.test(field.name))
             .map(toCompletionItem);
     }
 
@@ -82,9 +85,11 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         filePath: string,
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
+        const matcher = new FuzzyMatcher(node.text);
+
         const symbols = this.elaborationService.getSymbolsAtNode(filePath, node);
         return symbols
-            .filter((sym) => sym.name.startsWith(node.text))
+            .filter((sym) => matcher.test(sym.name))
             .map(toCompletionItem)
             .toArray();
     }

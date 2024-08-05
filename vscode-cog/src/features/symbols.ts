@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { toVscRange } from '../utils';
+import { FuzzyMatcher } from '../utils/fuzzyMatcher';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 import { VirtualFileSystem } from '../vfs';
@@ -29,16 +30,10 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     }
 
     provideWorkspaceSymbols(query: string, token: vscode.CancellationToken): vscode.ProviderResult<vscode.SymbolInformation[]> {
-        const subsequence
-            = new RegExp(
-                stream(query)
-                    .map(letter => `\\u{${letter.charCodeAt(0).toString(16)}}`)
-                    .join('.*'),
-                'iu',
-            );
+        const fuzzyMatcher = new FuzzyMatcher(query);
 
         return this.getUnfilteredWorkspaceSymbols()
-            .filter(symbol => subsequence.test(symbol.name));
+            .filter(symbol => fuzzyMatcher.test(symbol.name));
     }
 
     private getDocumentSymbols(path: string) {
