@@ -682,7 +682,7 @@ export class Parser extends ParserBase {
         this.bump(op);
         this.finishField('operator');
         this.beginField('operand');
-        this.expr();
+        this.expr(Prec.Unary);
         this.finishField('operand');
         this.finishNode(CompositeNodeKind.UnaryExpr);
     }
