@@ -129,7 +129,6 @@ function isTypeName(nameNode: SyntaxNode): boolean {
 function isValueName(nameNode: SyntaxNode): boolean {
     return [
         'enum_member',
-        'struct_decl',
         'struct_member',
         'func_decl',
         'param_decl',
