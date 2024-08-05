@@ -1,4 +1,3 @@
-
 export class ReactiveCache {
     private dependencies = new Map<string, Set<string>>();
     private dependents = new Map<string, Set<string>>();
