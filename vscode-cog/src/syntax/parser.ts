@@ -949,7 +949,6 @@ const ledTable: Record<TokenKind, Led> = (function () {
     return createTable(
         ...(['=', '+=', '-='] as const).map(op => mkBinaryOp(op, Prec.Assign, Assoc.Right)),
         mkRow('?', Prec.Cond, Assoc.Right, (parser, led, checkpoint) => parser.ternaryExpr(led.rbp, checkpoint)),
-        mkBinaryOp('?', Prec.Cond, Assoc.Right),
         mkBinaryOp('||', Prec.CondOr, Assoc.Left),
         mkBinaryOp('&&', Prec.CondAnd, Assoc.Left),
         mkBinaryOp('|', Prec.BitOr, Assoc.Left),
