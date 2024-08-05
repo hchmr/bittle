@@ -24,7 +24,7 @@ import {
     SymKind,
     tryMergeSym,
 } from './sym';
-import { isScalarType, prettyType, tryUnifyTypes, Type, typeLe } from './type';
+import { isScalarType, isValidReturnType, prettyType, tryUnifyTypes, Type, typeLe } from './type';
 import { TypeLayout, typeLayout } from './typeLayout';
 
 export type ErrorLocation = {
@@ -262,10 +262,19 @@ export class Elaborator {
                     };
                 }
                 case TypeNodeType.ArrayType: {
+                    const elementType = this.typeEval(typeNode.childForFieldName('type'));
+                    if (this.isUnsizedType(elementType)) {
+                        this.reportError(typeNode, `The element type of an array must have a known size.`);
+                    }
+                    let size = this.constEval(typeNode.childForFieldName('size'));
+                    if (size !== undefined && size <= 0) {
+                        this.reportError(typeNode, `Array size must be positive.`);
+                        size = undefined;
+                    }
                     return {
                         kind: 'array',
-                        elementType: this.typeEval(typeNode.childForFieldName('type')),
-                        size: this.constEval(typeNode.childForFieldName('size')),
+                        elementType,
+                        size,
                     };
                 }
                 default: {
@@ -289,6 +298,10 @@ export class Elaborator {
 
     private typeSize(type: Type): number {
         return this.typeLayout(type).size;
+    }
+
+    private isUnsizedType(type: Type): boolean {
+        return this.typeSize(type) === 0;
     }
 
     //==============================================================================
@@ -514,6 +527,10 @@ export class Elaborator {
 
                 const paramQualifiedName = `${name}.${index}`;
 
+                if (isNonScalarType(paramType)) {
+                    this.reportError(paramNode, `Function parameter must be of scalar type.`);
+                }
+
                 return {
                     kind: SymKind.FuncParam,
                     name: paramName,
@@ -528,6 +545,10 @@ export class Elaborator {
 
         const returnTypeNode = node.childForFieldName('return_type');
         const returnType: Type = returnTypeNode ? this.typeEval(returnTypeNode) : { kind: 'void' };
+
+        if (isInvalidReturnType(returnType)) {
+            this.reportError(returnTypeNode!, `Function return type must be void or of scalar type.`);
+        }
 
         const bodyNode = node.childForFieldName('body');
 
@@ -568,6 +589,10 @@ export class Elaborator {
 
         const isExtern = !!node.children.find(n => n.type === 'extern');
         const type = this.typeEval(node.childForFieldName('type'));
+
+        if (this.isUnsizedType(type)) {
+            this.reportError(node, `Variable must have a known size.`);
+        }
 
         this.addSymbol<GlobalSym>(nameNode, {
             kind: SymKind.Global,
@@ -664,6 +689,9 @@ export class Elaborator {
         if (!type) {
             this.reportError(node, `Missing type in local declaration.`);
             type ??= mkErrorType();
+        }
+        if (this.isUnsizedType(type)) {
+            this.reportError(node, `Variable must have a known size.`);
         }
 
         const qname = `${this.currentFunc!.name}.x${this.nextLocalIndex++}`;
@@ -876,19 +904,14 @@ export class Elaborator {
                 const rightNode = node.childForFieldName('right');
 
                 if (!isLvalue(leftNode)) {
-                    this.reportError(leftNode ?? node, `L - value expected.`);
+                    this.reportError(leftNode ?? node, `L-value expected.`);
                 }
                 const leftType = op !== '='
                     ? this.elabExprInt(leftNode)
                     : this.elabExprInfer(leftNode);
 
-                const rightType = this.elabExprInfer(rightNode);
                 if (rightNode) {
                     this.checkType(rightNode, leftType);
-                }
-
-                if (!isScalarType(leftType)) {
-                    this.reportError(leftNode ?? node, `Expected scalar type.`);
                 }
                 return { kind: 'void' };
             }
@@ -977,7 +1000,7 @@ export class Elaborator {
                 this.elabExpr(args[i], params[i].type);
             } else if (funcSym.isVariadic) {
                 const argType = this.elabExprInfer(args[i]);
-                if (!isScalarType(argType)) {
+                if (isNonScalarType(argType)) {
                     this.reportError(node, `Variadic argument must be scalar type.\n`);
                 }
             }
@@ -1042,7 +1065,7 @@ export class Elaborator {
         const castType = this.typeEval(typeNode);
         const exprType = this.elabExprInfer(exprNode);
 
-        if (!isScalarType(castType) || !isScalarType(exprType)) {
+        if (isNonScalarType(castType) || isNonScalarType(exprType)) {
             this.reportError(node, `Invalid cast type.`);
         }
 
@@ -1091,6 +1114,14 @@ function isLvalue(node: SyntaxNode | Nullish): boolean {
         default:
             return false;
     }
+}
+
+function isNonScalarType(type: Type): boolean {
+    return type.kind !== 'error' && !isScalarType(type);
+}
+
+function isInvalidReturnType(type: Type): boolean {
+    return type.kind !== 'error' && !isValidReturnType(type);
 }
 
 function mkErrorType(): Type {

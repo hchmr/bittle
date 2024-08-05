@@ -119,6 +119,11 @@ export function isScalarType(type: Type): boolean {
         || type.kind === 'pointer';
 }
 
+export function isValidReturnType(type: Type): boolean {
+    return type.kind === 'void'
+        || isScalarType(type);
+}
+
 export function typeLe(t1: Type, t2: Type): boolean {
     return typeEquals(t1, t2)
         || (t1.kind === 'error')
