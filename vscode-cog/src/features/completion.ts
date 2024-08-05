@@ -92,6 +92,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
     ): vscode.CompletionItem[] | undefined {
         const candidates
             = this.elaborationService.getSymbolsAtNode(filePath, node)
+                .filter(sym => sym.origins.some(origin => origin.nameNode !== node))
                 .concat(generateBuiltins())
                 .toArray();
 
