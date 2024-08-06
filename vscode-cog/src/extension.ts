@@ -17,6 +17,8 @@ import { ReactiveCache } from './utils/reactiveCache';
 import { VirtualFileSystemImpl } from './vfs';
 
 export function activate(context: vscode.ExtensionContext) {
+    // Services
+
     const cache = new ReactiveCache();
 
     const vfs = new VirtualFileSystemImpl(cache);
@@ -27,6 +29,8 @@ export function activate(context: vscode.ExtensionContext) {
     const includeResolver = new IncludeResolver(vfs);
 
     const elaborationService = new ElaborationService(parsingService, includeResolver, cache);
+
+    const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
 
     // Hover
 
@@ -71,7 +75,6 @@ export function activate(context: vscode.ExtensionContext) {
     // Document symbols and workspace symbols
 
     const symbolProvider = new SymbolProvider(parsingService, vfs, cache);
-
     context.subscriptions.push(
         vscode.languages.registerDocumentSymbolProvider('cog', symbolProvider),
         vscode.languages.registerWorkspaceSymbolProvider(symbolProvider),
@@ -83,7 +86,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider(parsingService)),
     );
 
-    // Resolve include
+    // Navigation
 
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
@@ -101,9 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ','),
     );
 
-    // References
-
-    const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
+    // Rename and references
 
     const referenceProvider = new ReferenceProvider(parsingService, elaborationService, includeGraphService);
     context.subscriptions.push(
