@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { pointEq } from '../utils/index.js';
-import { CompositeNodeKind, namedTokenKinds } from './compositeNodeKind.js';
 import { ErrorSink } from './errorSink.js';
+import { CompositeNodeType, CompositeNodeTypes, NamedTokenKinds } from './nodeTypes.js';
 import { Token, TokenKind } from './token.js';
 import { Point, Tree } from './tree.js';
 import {
@@ -21,7 +21,7 @@ type SyntaxNodeChild = {
 };
 
 type IncompleteCompositeNode = {
-    kind: CompositeNodeKind;
+    kind: CompositeNodeType;
     children: SyntaxNodeChild[];
     currentField?: string;
     startPosition: Point;
@@ -32,7 +32,7 @@ type IncompleteNode =
     | IncompleteCompositeNode;
 
 function tokenToSyntaxNode(tree: Tree, token: Token): SyntaxNodeImpl {
-    return new TokenNodeImpl(tree, token, namedTokenKinds[token.kind]);
+    return new TokenNodeImpl(tree, token, NamedTokenKinds[token.kind]);
 }
 
 function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point, startIndex: number): SyntaxNodeImpl {
@@ -92,7 +92,7 @@ abstract class NodeBuilder {
         }
     }
 
-    beginNode(nodeType: CompositeNodeKind) {
+    beginNode(nodeType: CompositeNodeType) {
         this.currentNodes.push(<IncompleteCompositeNode>{
             isPlaceholder: false,
             kind: nodeType,
@@ -102,7 +102,7 @@ abstract class NodeBuilder {
         });
     }
 
-    beginNodeAt(nodeType: CompositeNodeKind, checkpoint: Checkpoint | undefined) {
+    beginNodeAt(nodeType: CompositeNodeType, checkpoint: Checkpoint | undefined) {
         if (!checkpoint) {
             this.beginNode(nodeType);
             return;
@@ -120,7 +120,7 @@ abstract class NodeBuilder {
         });
     }
 
-    finishNode(nodeType: CompositeNodeKind) {
+    finishNode(nodeType: CompositeNodeType) {
         if (nodeType !== this.currentNode.kind) {
             throw new Error(`Expected node of type ${nodeType}, got ${this.currentNode.kind}`);
         }
@@ -177,7 +177,7 @@ class ParserBase extends NodeBuilder {
         super(
             new TreeImpl(text, null!),
             {
-                kind: CompositeNodeKind.Root,
+                kind: CompositeNodeTypes.Root,
                 children: [],
                 startPosition: token.startPosition,
                 startIndex: token.startIndex,
@@ -235,9 +235,9 @@ class ParserBase extends NodeBuilder {
             return;
         }
 
-        this.beginNode(CompositeNodeKind.Error);
+        this.beginNode(CompositeNodeTypes.Error);
         this.bump();
-        this.finishNode(CompositeNodeKind.Error);
+        this.finishNode(CompositeNodeTypes.Error);
     }
 
     addErrorAndBump(message: string) {
@@ -289,7 +289,7 @@ export class Parser extends ParserBase {
         this.addChild(tokenToSyntaxNode(this.tree, this.tok));
 
         assert(this.currentNodes.length === 1);
-        assert(this.currentNode.kind === CompositeNodeKind.Root);
+        assert(this.currentNode.kind === CompositeNodeTypes.Root);
         this.tree.rootNode = incompleteNodeToSyntaxNode(this.tree, this.currentNode);
         return this.tree;
     }
@@ -330,17 +330,17 @@ export class Parser extends ParserBase {
     }
 
     includeDecl() {
-        this.beginNode(CompositeNodeKind.IncludeDecl);
+        this.beginNode(CompositeNodeTypes.IncludeDecl);
         this.bump('include');
         this.beginField('path');
         this.expect('string_literal');
         this.finishField('path');
         this.expect(';');
-        this.finishNode(CompositeNodeKind.IncludeDecl);
+        this.finishNode(CompositeNodeTypes.IncludeDecl);
     }
 
     enumDecl() {
-        this.beginNode(CompositeNodeKind.EnumDecl);
+        this.beginNode(CompositeNodeTypes.EnumDecl);
         this.bump('enum');
         if (!this.match('{')) {
             this.addErrorAndTryBump(`Expected enum body.`);
@@ -350,13 +350,13 @@ export class Parser extends ParserBase {
             this.enumBody();
             this.finishField('body');
         }
-        this.finishNode(CompositeNodeKind.EnumDecl);
+        this.finishNode(CompositeNodeTypes.EnumDecl);
     }
 
     enumBody() {
-        this.beginNode(CompositeNodeKind.EnumBody);
+        this.beginNode(CompositeNodeTypes.EnumBody);
         this.delimited('{', '}', ',', () => this.enumMember());
-        this.finishNode(CompositeNodeKind.EnumBody);
+        this.finishNode(CompositeNodeTypes.EnumBody);
     }
 
     enumMember() {
@@ -364,7 +364,7 @@ export class Parser extends ParserBase {
             this.addErrorAndTryBump(`Expected enum member.`);
             return;
         }
-        this.beginNode(CompositeNodeKind.EnumMember);
+        this.beginNode(CompositeNodeTypes.EnumMember);
         this.beginField('name');
         this.bump('identifier');
         this.finishField('name');
@@ -374,11 +374,11 @@ export class Parser extends ParserBase {
             this.expr();
             this.finishField('value');
         }
-        this.finishNode(CompositeNodeKind.EnumMember);
+        this.finishNode(CompositeNodeTypes.EnumMember);
     }
 
     structDecl() {
-        this.beginNode(CompositeNodeKind.StructDecl);
+        this.beginNode(CompositeNodeTypes.StructDecl);
         this.bump('struct');
         this.beginField('name');
         this.expect('identifier');
@@ -393,13 +393,13 @@ export class Parser extends ParserBase {
             this.structBody();
             this.finishField('body');
         }
-        this.finishNode(CompositeNodeKind.StructDecl);
+        this.finishNode(CompositeNodeTypes.StructDecl);
     }
 
     structBody() {
-        this.beginNode(CompositeNodeKind.StructBody);
+        this.beginNode(CompositeNodeTypes.StructBody);
         this.delimited('{', '}', ',', () => this.structMember());
-        this.finishNode(CompositeNodeKind.StructBody);
+        this.finishNode(CompositeNodeTypes.StructBody);
     }
 
     structMember() {
@@ -407,7 +407,7 @@ export class Parser extends ParserBase {
             this.addErrorAndTryBump(`Expected struct member.`);
             return;
         }
-        this.beginNode(CompositeNodeKind.StructMember);
+        this.beginNode(CompositeNodeTypes.StructMember);
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
@@ -415,11 +415,11 @@ export class Parser extends ParserBase {
         this.beginField('type');
         this.type();
         this.finishField('type');
-        this.finishNode(CompositeNodeKind.StructMember);
+        this.finishNode(CompositeNodeTypes.StructMember);
     }
 
     funcDecl(checkpoint?: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.FuncDecl, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.FuncDecl, checkpoint);
         this.bump('func');
         this.beginField('name');
         this.expect('identifier');
@@ -443,7 +443,7 @@ export class Parser extends ParserBase {
             this.blockStmt();
             this.finishField('body');
         }
-        this.finishNode(CompositeNodeKind.FuncDecl);
+        this.finishNode(CompositeNodeTypes.FuncDecl);
     }
 
     private paramList() {
@@ -468,7 +468,7 @@ export class Parser extends ParserBase {
             this.addErrorAndTryBump(`Expected parameter.`);
             return;
         }
-        this.beginNode(CompositeNodeKind.FuncParam);
+        this.beginNode(CompositeNodeTypes.FuncParam);
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
@@ -476,11 +476,11 @@ export class Parser extends ParserBase {
         this.beginField('type');
         this.type();
         this.finishField('type');
-        this.finishNode(CompositeNodeKind.FuncParam);
+        this.finishNode(CompositeNodeTypes.FuncParam);
     }
 
     globalDecl(checkpoint?: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.GlobalDecl, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.GlobalDecl, checkpoint);
         this.expect('var');
         this.beginField('name');
         this.expect('identifier');
@@ -490,11 +490,11 @@ export class Parser extends ParserBase {
         this.type();
         this.finishField('type');
         this.expect(';');
-        this.finishNode(CompositeNodeKind.GlobalDecl);
+        this.finishNode(CompositeNodeTypes.GlobalDecl);
     }
 
     constDecl() {
-        this.beginNode(CompositeNodeKind.ConstDecl);
+        this.beginNode(CompositeNodeTypes.ConstDecl);
         this.bump('const');
         this.beginField('name');
         this.expect('identifier');
@@ -504,7 +504,7 @@ export class Parser extends ParserBase {
         this.expr();
         this.finishField('value');
         this.expect(';');
-        this.finishNode(CompositeNodeKind.ConstDecl);
+        this.finishNode(CompositeNodeTypes.ConstDecl);
     }
 
     //=========================================================================
@@ -533,7 +533,7 @@ export class Parser extends ParserBase {
     }
 
     varStmt() {
-        this.beginNode(CompositeNodeKind.VarStmt);
+        this.beginNode(CompositeNodeTypes.LocalDecl);
         this.bump('var');
         this.beginField('name');
         this.expect('identifier');
@@ -551,11 +551,11 @@ export class Parser extends ParserBase {
             this.finishField('value');
         }
         this.expect(';');
-        this.finishNode(CompositeNodeKind.VarStmt);
+        this.finishNode(CompositeNodeTypes.LocalDecl);
     }
 
     blockStmt() {
-        this.beginNode(CompositeNodeKind.BlockStmt);
+        this.beginNode(CompositeNodeTypes.BlockStmt);
         this.expect('{');
         while (!this.match('}')) {
             const startIndex = this.index;
@@ -567,11 +567,11 @@ export class Parser extends ParserBase {
             }
         }
         this.expect('}');
-        this.finishNode(CompositeNodeKind.BlockStmt);
+        this.finishNode(CompositeNodeTypes.BlockStmt);
     }
 
     ifStmt() {
-        this.beginNode(CompositeNodeKind.IfStmt);
+        this.beginNode(CompositeNodeTypes.IfStmt);
         this.bump('if');
         this.expect('(');
         this.beginField('cond');
@@ -587,11 +587,11 @@ export class Parser extends ParserBase {
             this.stmt();
             this.finishField('else');
         }
-        this.finishNode(CompositeNodeKind.IfStmt);
+        this.finishNode(CompositeNodeTypes.IfStmt);
     }
 
     whileStmt() {
-        this.beginNode(CompositeNodeKind.WhileStmt);
+        this.beginNode(CompositeNodeTypes.WhileStmt);
         this.bump('while');
         this.expect('(');
         this.beginField('cond');
@@ -601,11 +601,11 @@ export class Parser extends ParserBase {
         this.beginField('body');
         this.stmt();
         this.finishField('body');
-        this.finishNode(CompositeNodeKind.WhileStmt);
+        this.finishNode(CompositeNodeTypes.WhileStmt);
     }
 
     returnStmt() {
-        this.beginNode(CompositeNodeKind.ReturnStmt);
+        this.beginNode(CompositeNodeTypes.ReturnStmt);
         this.bump('return');
         if (!this.match(';')) {
             this.beginField('value');
@@ -613,30 +613,30 @@ export class Parser extends ParserBase {
             this.finishField('value');
         }
         this.expect(';');
-        this.finishNode(CompositeNodeKind.ReturnStmt);
+        this.finishNode(CompositeNodeTypes.ReturnStmt);
     }
 
     breakStmt() {
-        this.beginNode(CompositeNodeKind.BreakStmt);
+        this.beginNode(CompositeNodeTypes.BreakStmt);
         this.bump('break');
         this.expect(';');
-        this.finishNode(CompositeNodeKind.BreakStmt);
+        this.finishNode(CompositeNodeTypes.BreakStmt);
     }
 
     continueStmt() {
-        this.beginNode(CompositeNodeKind.ContinueStmt);
+        this.beginNode(CompositeNodeTypes.ContinueStmt);
         this.bump('continue');
         this.expect(';');
-        this.finishNode(CompositeNodeKind.ContinueStmt);
+        this.finishNode(CompositeNodeTypes.ContinueStmt);
     }
 
     exprStmt() {
-        this.beginNode(CompositeNodeKind.ExprStmt);
+        this.beginNode(CompositeNodeTypes.ExprStmt);
         this.beginField('expr');
         this.expr();
         this.finishField('expr');
         this.expect(';');
-        this.finishNode(CompositeNodeKind.ExprStmt);
+        this.finishNode(CompositeNodeTypes.ExprStmt);
     }
 
     //=========================================================================
@@ -664,49 +664,49 @@ export class Parser extends ParserBase {
     }
 
     groupExpr() {
-        this.beginNode(CompositeNodeKind.GroupExpr);
+        this.beginNode(CompositeNodeTypes.GroupedExpr);
         this.bump('(');
         this.beginField('expr');
         this.expr();
         this.finishField('expr');
         this.expect(')');
-        this.finishNode(CompositeNodeKind.GroupExpr);
+        this.finishNode(CompositeNodeTypes.GroupedExpr);
     }
 
     nameExpr() {
-        this.beginNode(CompositeNodeKind.NameExpr);
+        this.beginNode(CompositeNodeTypes.NameExpr);
         this.bump('identifier');
-        this.finishNode(CompositeNodeKind.NameExpr);
+        this.finishNode(CompositeNodeTypes.NameExpr);
     }
 
     literalExpr() {
-        this.beginNode(CompositeNodeKind.LiteralExpr);
+        this.beginNode(CompositeNodeTypes.LiteralExpr);
         this.literal();
-        this.finishNode(CompositeNodeKind.LiteralExpr);
+        this.finishNode(CompositeNodeTypes.LiteralExpr);
     }
 
     unaryExpr(op: TokenKind) {
-        this.beginNode(CompositeNodeKind.UnaryExpr);
+        this.beginNode(CompositeNodeTypes.UnaryExpr);
         this.beginField('operator');
         this.bump(op);
         this.finishField('operator');
         this.beginField('operand');
         this.expr(Prec.Unary);
         this.finishField('operand');
-        this.finishNode(CompositeNodeKind.UnaryExpr);
+        this.finishNode(CompositeNodeTypes.UnaryExpr);
     }
 
     sizeofExpr() {
-        this.beginNode(CompositeNodeKind.SizeofExpr);
+        this.beginNode(CompositeNodeTypes.SizeofExpr);
         this.bump('sizeof');
         this.beginField('type');
         this.type();
         this.finishField('type');
-        this.finishNode(CompositeNodeKind.SizeofExpr);
+        this.finishNode(CompositeNodeTypes.SizeofExpr);
     }
 
     binaryExpr(op: TokenKind, rbp: number, checkpoint: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.BinaryExpr, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.BinaryExpr, checkpoint);
         this.groupExistingChildren('left');
         this.beginField('operator');
         this.expect(op);
@@ -714,11 +714,11 @@ export class Parser extends ParserBase {
         this.beginField('right');
         this.expr(rbp);
         this.finishField('right');
-        this.finishNode(CompositeNodeKind.BinaryExpr);
+        this.finishNode(CompositeNodeTypes.BinaryExpr);
     }
 
     ternaryExpr(rbp: number, checkpoint: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.TernaryExpr, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.TernaryExpr, checkpoint);
         this.groupExistingChildren('cond');
         this.expect('?');
         this.beginField('then');
@@ -728,47 +728,47 @@ export class Parser extends ParserBase {
         this.beginField('else');
         this.expr(rbp);
         this.finishField('else');
-        this.finishNode(CompositeNodeKind.TernaryExpr);
+        this.finishNode(CompositeNodeTypes.TernaryExpr);
     }
 
     callExpr(checkpoint: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.CallExpr, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.CallExpr, checkpoint);
         this.groupExistingChildren('callee');
         this.beginField('args');
         this.delimited('(', ')', ',', () => this.expr());
         this.finishField('args');
-        this.finishNode(CompositeNodeKind.CallExpr);
+        this.finishNode(CompositeNodeTypes.CallExpr);
     }
 
     indexExpr(checkpoint: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.IndexExpr, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.IndexExpr, checkpoint);
         this.groupExistingChildren('indexee');
         this.expect('[');
         this.beginField('index');
         this.expr();
         this.finishField('index');
         this.expect(']');
-        this.finishNode(CompositeNodeKind.IndexExpr);
+        this.finishNode(CompositeNodeTypes.IndexExpr);
     }
 
     memberExpr(checkpoint: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.FieldExpr, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.FieldExpr, checkpoint);
         this.groupExistingChildren('left');
         this.expect('.');
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
-        this.finishNode(CompositeNodeKind.FieldExpr);
+        this.finishNode(CompositeNodeTypes.FieldExpr);
     }
 
     castExpr(checkpoint: Checkpoint) {
-        this.beginNodeAt(CompositeNodeKind.CastExpr, checkpoint);
+        this.beginNodeAt(CompositeNodeTypes.CastExpr, checkpoint);
         this.groupExistingChildren('expr');
         this.expect('as');
         this.beginField('type');
         this.type();
         this.finishField('type');
-        this.finishNode(CompositeNodeKind.CastExpr);
+        this.finishNode(CompositeNodeTypes.CastExpr);
     }
 
     //=========================================================================
@@ -789,32 +789,32 @@ export class Parser extends ParserBase {
     }
 
     groupType() {
-        this.beginNode(CompositeNodeKind.GroupType);
+        this.beginNode(CompositeNodeTypes.GroupedType);
         this.bump('(');
         this.beginField('type');
         this.type();
         this.finishField('type');
         this.expect(')');
-        this.finishNode(CompositeNodeKind.GroupType);
+        this.finishNode(CompositeNodeTypes.GroupedType);
     }
 
     nameType() {
-        this.beginNode(CompositeNodeKind.NameType);
+        this.beginNode(CompositeNodeTypes.NameType);
         this.bump('identifier');
-        this.finishNode(CompositeNodeKind.NameType);
+        this.finishNode(CompositeNodeTypes.NameType);
     }
 
     pointerType() {
-        this.beginNode(CompositeNodeKind.PointerType);
+        this.beginNode(CompositeNodeTypes.PointerType);
         this.bump('*');
         this.beginField('pointee');
         this.type();
         this.finishField('pointee');
-        this.finishNode(CompositeNodeKind.PointerType);
+        this.finishNode(CompositeNodeTypes.PointerType);
     }
 
     arrayType() {
-        this.beginNode(CompositeNodeKind.ArrayType);
+        this.beginNode(CompositeNodeTypes.ArrayType);
         this.bump('[');
         this.beginField('type');
         this.type();
@@ -824,7 +824,7 @@ export class Parser extends ParserBase {
         this.expr();
         this.finishField('size');
         this.expect(']');
-        this.finishNode(CompositeNodeKind.ArrayType);
+        this.finishNode(CompositeNodeTypes.ArrayType);
     }
 
     //=========================================================================
@@ -847,33 +847,33 @@ export class Parser extends ParserBase {
     }
 
     intLiteral() {
-        this.beginNode(CompositeNodeKind.IntLiteral);
+        this.beginNode(CompositeNodeTypes.IntLiteral);
         this.bump('number_literal');
-        this.finishNode(CompositeNodeKind.IntLiteral);
+        this.finishNode(CompositeNodeTypes.IntLiteral);
     }
 
     stringLiteral() {
-        this.beginNode(CompositeNodeKind.StringLiteral);
+        this.beginNode(CompositeNodeTypes.StringLiteral);
         this.bump('string_literal');
-        this.finishNode(CompositeNodeKind.StringLiteral);
+        this.finishNode(CompositeNodeTypes.StringLiteral);
     }
 
     charLiteral() {
-        this.beginNode(CompositeNodeKind.CharLiteral);
+        this.beginNode(CompositeNodeTypes.CharLiteral);
         this.bump('char_literal');
-        this.finishNode(CompositeNodeKind.CharLiteral);
+        this.finishNode(CompositeNodeTypes.CharLiteral);
     }
 
     nullLiteral() {
-        this.beginNode(CompositeNodeKind.NullLiteral);
+        this.beginNode(CompositeNodeTypes.NullLiteral);
         this.bump('null');
-        this.finishNode(CompositeNodeKind.NullLiteral);
+        this.finishNode(CompositeNodeTypes.NullLiteral);
     }
 
     boolLiteral() {
-        this.beginNode(CompositeNodeKind.BoolLiteral);
+        this.beginNode(CompositeNodeTypes.BoolLiteral);
         this.bump(this.match('true') ? 'true' : 'false');
-        this.finishNode(CompositeNodeKind.BoolLiteral);
+        this.finishNode(CompositeNodeTypes.BoolLiteral);
     }
 }
 

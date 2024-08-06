@@ -5,7 +5,7 @@ import { TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
-import { ExprNodeType } from '../syntax/nodeTypes';
+import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
 import { fromVscPosition } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
@@ -40,7 +40,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         filePath: string,
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
-        if (node.parent?.type !== ExprNodeType.FieldExpr) {
+        if (node.parent?.type !== ExprNodeTypes.FieldExpr) {
             return;
         }
 

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
-import { ExprNodeType, TopLevelNodeType, TypeNodeType } from '../syntax/nodeTypes';
+import { ExprNodeTypes, TopLevelNodeTypes, TypeNodeTypes } from '../syntax/nodeTypes';
 import { Nullish, toVscRange } from '../utils';
 
 export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
@@ -18,16 +18,16 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
         const builder = new vscode.SemanticTokensBuilder(this.legend);
 
         for (const node of traverse(tree.rootNode)) {
-            if (node.type === TypeNodeType.NameType) {
+            if (node.type === TypeNodeTypes.NameType) {
                 const nameNode = node.firstChild;
                 makeToken(builder, nameNode, 'type');
-            } else if (node.type === TopLevelNodeType.Struct) {
+            } else if (node.type === TopLevelNodeTypes.Struct) {
                 const nameNode = node.childForFieldName('name');
                 makeToken(builder, nameNode, 'type');
-            } else if (node.type === TopLevelNodeType.Func) {
+            } else if (node.type === TopLevelNodeTypes.Func) {
                 const nameNode = node.childForFieldName('name');
                 makeToken(builder, nameNode, 'function');
-            } else if (node.type === ExprNodeType.CallExpr) {
+            } else if (node.type === ExprNodeTypes.CallExpr) {
                 const nameNode = node.childForFieldName('callee')?.firstChild;
                 makeToken(builder, nameNode, 'function');
             }

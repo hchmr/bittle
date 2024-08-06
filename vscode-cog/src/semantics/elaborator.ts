@@ -4,13 +4,17 @@ import { ParsingService } from '../services/parsingService';
 import { SyntaxNode, Tree } from '../syntax';
 import {
     ExprNodeType,
+    ExprNodeTypes,
     isExprNode,
     isStmtNode,
     isTopLevelNode,
     LiteralNodeType,
-    StmtNodeType,
+    LiteralNodeTypes,
+    StmtNodeTypes,
     TopLevelNodeType,
+    TopLevelNodeTypes,
     TypeNodeType,
+    TypeNodeTypes,
 } from '../syntax/nodeTypes';
 import { Nullish, PointRange } from '../utils';
 import { stream } from '../utils/stream';
@@ -220,11 +224,11 @@ export class Elaborator {
         return this.trackTyping(typeNode, () => {
             const nodeType = typeNode.type as TypeNodeType;
             switch (nodeType) {
-                case TypeNodeType.GroupedType: {
+                case TypeNodeTypes.GroupedType: {
                     const nestedTypeNode = typeNode.childForFieldName('type');
                     return this.typeEval(nestedTypeNode);
                 }
-                case TypeNodeType.NameType: {
+                case TypeNodeTypes.NameType: {
                     const nameNode = typeNode.firstChild!;
                     switch (nameNode.text) {
                         case 'Void':
@@ -254,11 +258,11 @@ export class Elaborator {
                         }
                     }
                 }
-                case TypeNodeType.PointerType: {
+                case TypeNodeTypes.PointerType: {
                     const pointeeNode = typeNode.childForFieldName('pointee');
                     return mkPointerType(this.typeEval(pointeeNode));
                 }
-                case TypeNodeType.ArrayType: {
+                case TypeNodeTypes.ArrayType: {
                     const elemNode = typeNode.childForFieldName('type');
                     const sizeNode = typeNode.childForFieldName('size');
 
@@ -295,11 +299,11 @@ export class Elaborator {
         };
 
         switch (node.type) {
-            case ExprNodeType.GroupedExpr: {
+            case ExprNodeTypes.GroupedExpr: {
                 const nestedNode = node.childForFieldName('expr');
                 return this.constEval(nestedNode);
             }
-            case ExprNodeType.NameExpr: {
+            case ExprNodeTypes.NameExpr: {
                 const nameNode = node.firstChild!;
                 const sym = this.resolveName(nameNode);
                 if (!sym) {
@@ -311,18 +315,18 @@ export class Elaborator {
                 }
                 return sym.value;
             }
-            case ExprNodeType.LiteralExpr: {
+            case ExprNodeTypes.LiteralExpr: {
                 switch (node.firstChild!.type) {
-                    case LiteralNodeType.Number:
+                    case LiteralNodeTypes.Number:
                         return parseInt(node.firstChild!.text);
-                    case LiteralNodeType.Char:
+                    case LiteralNodeTypes.Char:
                         return parseChar(node.firstChild!.text);
                     default:
                         reportInvalidConstExpr();
                         return;
                 }
             }
-            case ExprNodeType.BinaryExpr: {
+            case ExprNodeTypes.BinaryExpr: {
                 const left = this.constEval(node.childForFieldName('left'));
                 const right = this.constEval(node.childForFieldName('right'));
                 const op = node.childForFieldName('operator')?.text;
@@ -346,7 +350,7 @@ export class Elaborator {
                         return;
                 }
             }
-            case ExprNodeType.UnaryExpr: {
+            case ExprNodeTypes.UnaryExpr: {
                 const operand = this.constEval(node.childForFieldName('operand'));
                 const op = node.childForFieldName('operator')?.text;
 
@@ -361,7 +365,7 @@ export class Elaborator {
                         return;
                 }
             }
-            case ExprNodeType.SizeofExpr: {
+            case ExprNodeTypes.SizeofExpr: {
                 const typeNode = node.childForFieldName('type');
                 const type = this.typeEval(typeNode);
                 return this.typeSize(type);
@@ -385,22 +389,22 @@ export class Elaborator {
     private elabTopLevelDecl(node: SyntaxNode) {
         const nodeType = node.type as TopLevelNodeType;
         switch (nodeType) {
-            case TopLevelNodeType.Include:
+            case TopLevelNodeTypes.Include:
                 this.elabInclude(node);
                 break;
-            case TopLevelNodeType.Struct:
+            case TopLevelNodeTypes.Struct:
                 this.elabStruct(node);
                 break;
-            case TopLevelNodeType.Func:
+            case TopLevelNodeTypes.Func:
                 this.elabFunc(node);
                 break;
-            case TopLevelNodeType.Global:
+            case TopLevelNodeTypes.Global:
                 this.elabGlobal(node);
                 break;
-            case TopLevelNodeType.Const:
+            case TopLevelNodeTypes.Const:
                 this.elabConst(node);
                 break;
-            case TopLevelNodeType.Enum:
+            case TopLevelNodeTypes.Enum:
                 this.elabEnum(node);
                 break;
             default: {
@@ -626,25 +630,25 @@ export class Elaborator {
             return;
 
         switch (node.type) {
-            case StmtNodeType.BlockStmt:
+            case StmtNodeTypes.BlockStmt:
                 this.elabBlockStmt(node);
                 break;
-            case StmtNodeType.LocalDecl:
+            case StmtNodeTypes.LocalDecl:
                 this.elabLocalDecl(node);
                 break;
-            case StmtNodeType.IfStmt:
+            case StmtNodeTypes.IfStmt:
                 this.elabIfStmt(node);
                 break;
-            case StmtNodeType.WhileStmt:
+            case StmtNodeTypes.WhileStmt:
                 this.elabWhileStmt(node);
                 break;
-            case StmtNodeType.ReturnStmt:
+            case StmtNodeTypes.ReturnStmt:
                 this.elabReturnStmt(node);
                 break;
-            case StmtNodeType.BreakStmt:
-            case StmtNodeType.ContinueStmt:
+            case StmtNodeTypes.BreakStmt:
+            case StmtNodeTypes.ContinueStmt:
                 break;
-            case StmtNodeType.ExprStmt:
+            case StmtNodeTypes.ExprStmt:
                 this.elabExprStmt(node);
                 break;
             default:
@@ -778,27 +782,27 @@ export class Elaborator {
         return this.trackTyping(node, () => {
             const nodeType = node.type as ExprNodeType;
             switch (nodeType) {
-                case ExprNodeType.GroupedExpr:
+                case ExprNodeTypes.GroupedExpr:
                     return this.elabGroupedExpr(node);
-                case ExprNodeType.NameExpr:
+                case ExprNodeTypes.NameExpr:
                     return this.elabNameExpr(node);
-                case ExprNodeType.SizeofExpr:
+                case ExprNodeTypes.SizeofExpr:
                     return this.elabSizeofExpr(node);
-                case ExprNodeType.LiteralExpr:
+                case ExprNodeTypes.LiteralExpr:
                     return this.elabLiteralExpr(node);
-                case ExprNodeType.BinaryExpr:
+                case ExprNodeTypes.BinaryExpr:
                     return this.elabBinaryExpr(node);
-                case ExprNodeType.TernaryExpr:
+                case ExprNodeTypes.TernaryExpr:
                     return this.elabTernaryExpr(node);
-                case ExprNodeType.UnaryExpr:
+                case ExprNodeTypes.UnaryExpr:
                     return this.elabUnaryExpr(node);
-                case ExprNodeType.CallExpr:
+                case ExprNodeTypes.CallExpr:
                     return this.elabCallExpr(node);
-                case ExprNodeType.IndexExpr:
+                case ExprNodeTypes.IndexExpr:
                     return this.elabIndexExpr(node);
-                case ExprNodeType.FieldExpr:
+                case ExprNodeTypes.FieldExpr:
                     return this.elabFieldExpr(node);
-                case ExprNodeType.CastExpr:
+                case ExprNodeTypes.CastExpr:
                     return this.elabCastExpr(node);
                 default: {
                     const unreachable: never = nodeType;
@@ -847,15 +851,15 @@ export class Elaborator {
     private elabLiteralExpr(node: SyntaxNode): Type {
         const nodeType = (node.firstChild!).type as LiteralNodeType;
         switch (nodeType) {
-            case LiteralNodeType.Bool:
+            case LiteralNodeTypes.Bool:
                 return mkBoolType();
-            case LiteralNodeType.Number:
+            case LiteralNodeTypes.Number:
                 return mkIntType(64);
-            case LiteralNodeType.Char:
+            case LiteralNodeTypes.Char:
                 return mkIntType(8);
-            case LiteralNodeType.String:
+            case LiteralNodeTypes.String:
                 return mkPointerType(mkIntType(8));
-            case LiteralNodeType.Null:
+            case LiteralNodeTypes.Null:
                 return mkPointerType(mkVoidType());
             default: {
                 const unreachable: never = nodeType;
@@ -982,7 +986,7 @@ export class Elaborator {
         if (!calleeNode) {
             return mkErrorType();
         }
-        if (calleeNode.type !== ExprNodeType.NameExpr) {
+        if (calleeNode.type !== ExprNodeTypes.NameExpr) {
             this.reportError(calleeNode, `Function name expected.`);
             return mkErrorType();
         }
@@ -1206,13 +1210,13 @@ function isLvalue(node: SyntaxNode | Nullish): boolean {
     if (!node)
         return true;
     switch (node?.type) {
-        case ExprNodeType.NameExpr:
+        case ExprNodeTypes.NameExpr:
             return true;
-        case ExprNodeType.IndexExpr:
+        case ExprNodeTypes.IndexExpr:
             return isLvalue(node.childForFieldName('expr'));
-        case ExprNodeType.FieldExpr:
+        case ExprNodeTypes.FieldExpr:
             return isLvalue(node.childForFieldName('expr'));
-        case ExprNodeType.UnaryExpr:
+        case ExprNodeTypes.UnaryExpr:
             return node.childForFieldName('operator')?.text === '*';
         default:
             return false;
@@ -1228,6 +1232,6 @@ function isInvalidReturnType(type: Type): boolean {
 }
 
 function isIntegerLiteralExpr(node: SyntaxNode): boolean {
-    return node.type === ExprNodeType.LiteralExpr
-        && node.firstChild!.type === LiteralNodeType.Number;
+    return node.type === ExprNodeTypes.LiteralExpr
+        && node.firstChild!.type === LiteralNodeTypes.Number;
 }

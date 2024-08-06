@@ -1,5 +1,5 @@
 import { Tree } from '../syntax';
-import { TopLevelNodeType } from '../syntax/nodeTypes';
+import { TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { VirtualFileSystem } from '../vfs';
 import { IncludeResolver } from './IncludeResolver';
 import { ParsingService } from './parsingService';
@@ -57,7 +57,7 @@ export class IncludeGraphService {
         const includePaths = new Set<string>();
 
         for (const node of tree.rootNode.children) {
-            if (node.type === TopLevelNodeType.Include) {
+            if (node.type === TopLevelNodeTypes.Include) {
                 const pathNode = node.childForFieldName('path');
                 if (pathNode) {
                     const includePath = this.includeResolver.resolveInclude(path, pathNode);

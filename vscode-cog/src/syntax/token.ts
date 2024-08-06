@@ -9,15 +9,7 @@ export type Token = {
     trailingTrivia: string[];
 };
 
-export type TokenKind =
-    | '<eof>'
-    | 'identifier'
-    | 'number_literal'
-    | 'string_literal'
-    | 'char_literal'
-    | '<error>'
-    | (typeof symbols)[number]
-    | (typeof keywords)[number];
+export type TokenKind = (typeof tokenKinds)[number];
 
 export const symbols = [
     '(',
@@ -82,4 +74,15 @@ export const keywords = [
     'true',
     'var',
     'while',
+] as const;
+
+export const tokenKinds = [
+    '<eof>',
+    'identifier',
+    'number_literal',
+    'string_literal',
+    'char_literal',
+    '<error>',
+    ...symbols,
+    ...keywords,
 ] as const;
