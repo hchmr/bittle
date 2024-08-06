@@ -1,4 +1,5 @@
-export * from './tree.js';
-export * from './parser.js';
-export * from './ErrorSink.js';
+export * from './errorSink.js';
 export * from './lexer.js';
+export * from './parser.js';
+export * from './tree.js';
+

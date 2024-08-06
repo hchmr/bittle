@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { Error, ErrorSink } from './ErrorSink.js';
+import { Error, ErrorSink } from './errorSink.js';
 import { tokenize } from './lexer.js';
 import { Parser } from './parser.js';
 import { Tree } from './tree.js';

@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { CharCursor } from './charCursor.js';
-import { ErrorSink } from './ErrorSink.js';
+import { ErrorSink } from './errorSink.js';
 import { keywords, symbols, Token, TokenKind } from './token.js';
 import { Point } from './tree.js';
 
