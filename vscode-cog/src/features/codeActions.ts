@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode, Tree } from '../syntax';
-import { fromVscRange, rangeEmpty, toVscRange } from '../utils';
+import { fromVscRange, isRangeEmpty, toVscRange } from '../utils';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CodeActionsProvider implements vscode.CodeActionProvider {
@@ -10,8 +10,8 @@ export class CodeActionsProvider implements vscode.CodeActionProvider {
     provideCodeActions(
         document: vscode.TextDocument,
         range: vscode.Range,
-        context: vscode.CodeActionContext,
-        token: vscode.CancellationToken,
+        _context: vscode.CodeActionContext,
+        _token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
 
@@ -23,7 +23,7 @@ export class CodeActionsProvider implements vscode.CodeActionProvider {
 
 function tryFlipComma(tree: Tree, documentUri: vscode.Uri, vscRange: vscode.Range): vscode.CodeAction[] {
     const range = fromVscRange(vscRange);
-    if (!rangeEmpty(range))
+    if (!isRangeEmpty(range))
         return [];
 
     return getNodesAtPosition(tree, range.startPosition)

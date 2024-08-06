@@ -91,13 +91,13 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         filePath: string,
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
-        const candidates
+        const candidates: Array<CompletionCandidate>
             = this.elaborationService.getSymbolsAtNode(filePath, node)
                 .filter(sym => sym.origins.some(origin => origin.nameNode !== node))
                 .concat(generateBuiltins())
                 .toArray();
 
-        let results: CompletionCandidate[];
+        let results: Array<CompletionCandidate>;
         if (node.type === 'identifier') {
             results = fuzzySearch(node.text, candidates, { key: 'name' });
         } else {

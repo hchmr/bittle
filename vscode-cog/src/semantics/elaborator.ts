@@ -7,7 +7,10 @@ import {
     isExprNode,
     isStmtNode,
     isTopLevelNode,
-    LiteralNodeType, StmtNodeType, TopLevelNodeType, TypeNodeType,
+    LiteralNodeType,
+    StmtNodeType,
+    TopLevelNodeType,
+    TypeNodeType,
 } from '../syntax/nodeTypes';
 import { Nullish, PointRange } from '../utils';
 import { stream } from '../utils/stream';
@@ -16,7 +19,8 @@ import {
     ConstSym,
     FuncParamSym,
     FuncSym,
-    GlobalSym, LocalSym,
+    GlobalSym,
+    LocalSym,
     Origin,
     StructFieldSym,
     StructSym,
@@ -24,7 +28,22 @@ import {
     SymKind,
     tryMergeSym,
 } from './sym';
-import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkPointerType, mkStructType, mkVoidType, prettyType, tryUnifyTypes, Type, TypeKind, typeLe } from './type';
+import {
+    isScalarType,
+    isValidReturnType,
+    mkArrayType,
+    mkBoolType,
+    mkErrorType,
+    mkIntType,
+    mkPointerType,
+    mkStructType,
+    mkVoidType,
+    prettyType,
+    tryUnifyTypes,
+    Type,
+    TypeKind,
+    typeLe,
+} from './type';
 import { TypeLayout, typeLayout } from './typeLayout';
 
 export type ErrorLocation = {
@@ -72,7 +91,7 @@ export class Elaborator {
     private currentFunc: FuncSym | undefined;
     private nextLocalIndex: number = 0;
 
-    constructor(
+    private constructor(
         private parsingService: ParsingService,
         private includeResolver: IncludeResolver,
         private path: string,
@@ -81,7 +100,7 @@ export class Elaborator {
         this.scope = new Scope(this.path, this.parseTree.rootNode);
     }
 
-    run(): ElaboratorResult {
+    private run(): ElaboratorResult {
         this.elabTree(this.parseTree);
         return {
             scope: this.scope,
@@ -93,77 +112,12 @@ export class Elaborator {
         };
     }
 
-    private reportError(node: SyntaxNode, message: string) {
-        this.errors.push({
-            message,
-            location: {
-                file: this.path,
-                range: node,
-            },
-        });
-    }
-
-    private setType(node: SyntaxNode, type: Type) {
-        this.nodeTypeMap.set(node, type);
-    }
-
-    private getType(node: SyntaxNode): Type {
-        const type = this.nodeTypeMap.get(node);
-        assert(type, `Missing type for node: ${node.type}`);
-        return type;
-    }
-
-    private tryCoerce(node: SyntaxNode, expected: Type) {
-        if (expected.kind === TypeKind.Int && expected.size && isIntegerLiteralExpr(node)) {
-            const bitsRequired = Math.ceil(Math.log2(parseInt(node.text)) + 1);
-            if (bitsRequired < expected.size) {
-                this.nodeTypeMap.set(node, expected);
-            }
-        }
-    }
-
-    private unifyTypes(node: SyntaxNode, e1: SyntaxNode | Nullish, e2: SyntaxNode | Nullish): Type {
-        if (!(e1 && e2)) {
-            return e1 ? this.getType(e1) : e2 ? this.getType(e2) : mkErrorType();
-        }
-
-        this.tryCoerce(e1, this.getType(e2));
-        this.tryCoerce(e2, this.getType(e1));
-
-        const t1 = this.getType(e1);
-        const t2 = this.getType(e2);
-
-        let err = false;
-        const unified = tryUnifyTypes(t1, t2, () => {
-            err = true;
-        });
-        if (err) {
-            this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
-        }
-
-        return unified;
-    }
-
-    private checkType(node: SyntaxNode, expected: Type) {
-        this.tryCoerce(node, expected);
-
-        const actual = this.getType(node);
-
-        if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
-            return;
-        }
-        if (!typeLe(actual, expected)) {
-            this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
-        }
-    }
-
-    private createOrigin(node: SyntaxNode, nameNode: SyntaxNode | Nullish, isForwardDecl: boolean = false): Origin {
-        return {
-            file: this.path,
-            node,
-            nameNode: nameNode ?? undefined,
-            isForwardDecl,
-        };
+    public static elaborate(
+        parsingService: ParsingService,
+        includeResolver: IncludeResolver,
+        path: string,
+    ): ElaboratorResult {
+        return new Elaborator(parsingService, includeResolver, path).run();
     }
 
     //==============================================================================
@@ -227,6 +181,21 @@ export class Elaborator {
         }
     }
 
+    private resolveStructField(structName: string, nameNode: SyntaxNode) {
+        const sym = this.symbols.get(structName);
+        assert(sym?.kind === SymKind.Struct);
+
+        const fieldName = nameNode.text;
+        const field = sym.fields?.find(f => f.name === fieldName);
+        if (!field) {
+            this.reportError(nameNode, `Unknown field '${fieldName}'.`);
+            return undefined;
+        }
+
+        this.recordNameResolution(field, nameNode);
+        return field;
+    }
+
     private recordNameIntroduction(sym: Sym, nameNode: SyntaxNode) {
         assert(nameNode.type === 'identifier');
         this.nodeSymMap.set(nameNode, sym.qualifiedName);
@@ -241,12 +210,6 @@ export class Elaborator {
         this.references.set(sym.qualifiedName, references);
     }
 
-    private trackTyping(node: SyntaxNode, f: () => Type): Type {
-        const type = f();
-        this.setType(node, type);
-        return type;
-    }
-
     //==============================================================================
     //== Types
 
@@ -258,7 +221,8 @@ export class Elaborator {
             const nodeType = typeNode.type as TypeNodeType;
             switch (nodeType) {
                 case TypeNodeType.GroupedType: {
-                    return this.typeEval(typeNode.childForFieldName('type'));
+                    const nestedTypeNode = typeNode.childForFieldName('type');
+                    return this.typeEval(nestedTypeNode);
                 }
                 case TypeNodeType.NameType: {
                     const nameNode = typeNode.firstChild!;
@@ -291,18 +255,24 @@ export class Elaborator {
                     }
                 }
                 case TypeNodeType.PointerType: {
-                    return mkPointerType(this.typeEval(typeNode.childForFieldName('pointee')));
+                    const pointeeNode = typeNode.childForFieldName('pointee');
+                    return mkPointerType(this.typeEval(pointeeNode));
                 }
                 case TypeNodeType.ArrayType: {
-                    const elemType = this.typeEval(typeNode.childForFieldName('type'));
+                    const elemNode = typeNode.childForFieldName('type');
+                    const sizeNode = typeNode.childForFieldName('size');
+
+                    const elemType = this.typeEval(elemNode);
                     if (this.isUnsizedType(elemType)) {
                         this.reportError(typeNode, `The element type of an array must have a known size.`);
                     }
-                    let size = this.constEval(typeNode.childForFieldName('size'));
+
+                    let size = this.constEval(sizeNode);
                     if (size !== undefined && size <= 0) {
                         this.reportError(typeNode, `Array size must be positive.`);
                         size = undefined;
                     }
+
                     return mkArrayType(elemType, size);
                 }
                 default: {
@@ -311,25 +281,6 @@ export class Elaborator {
                 }
             }
         });
-    }
-
-    private typeLayout(type: Type): TypeLayout | undefined {
-        return typeLayout(type, {
-            getStruct: name => {
-                const sym = this.symbols.get(name);
-                if (!sym || sym.kind !== SymKind.Struct)
-                    return;
-                return sym;
-            },
-        });
-    }
-
-    private typeSize(type: Type): number | undefined {
-        return this.typeLayout(type)?.size;
-    }
-
-    private isUnsizedType(type: Type): boolean {
-        return this.typeSize(type) === undefined;
     }
 
     //==============================================================================
@@ -345,7 +296,8 @@ export class Elaborator {
 
         switch (node.type) {
             case ExprNodeType.GroupedExpr: {
-                return this.constEval(node.childForFieldName('expr'));
+                const nestedNode = node.childForFieldName('expr');
+                return this.constEval(nestedNode);
             }
             case ExprNodeType.NameExpr: {
                 const nameNode = node.firstChild!;
@@ -374,8 +326,10 @@ export class Elaborator {
                 const left = this.constEval(node.childForFieldName('left'));
                 const right = this.constEval(node.childForFieldName('right'));
                 const op = node.childForFieldName('operator')?.text;
-                if (left === undefined || right === undefined || !op)
+
+                if (left === undefined || right === undefined || !op) {
                     return;
+                }
                 switch (op) {
                     case '+': return left + right;
                     case '-': return left - right;
@@ -394,10 +348,12 @@ export class Elaborator {
             }
             case ExprNodeType.UnaryExpr: {
                 const operand = this.constEval(node.childForFieldName('operand'));
-                const uop = node.childForFieldName('operator')?.text;
-                if (operand === undefined || !uop)
+                const op = node.childForFieldName('operator')?.text;
+
+                if (operand === undefined || !op) {
                     return;
-                switch (uop) {
+                }
+                switch (op) {
                     case '-': return -operand;
                     case '~': return ~operand;
                     default:
@@ -406,7 +362,8 @@ export class Elaborator {
                 }
             }
             case ExprNodeType.SizeofExpr: {
-                const type = this.typeEval(node.childForFieldName('type'));
+                const typeNode = node.childForFieldName('type');
+                const type = this.typeEval(typeNode);
                 return this.typeSize(type);
             }
             default: {
@@ -474,10 +431,9 @@ export class Elaborator {
 
     private elabStruct(node: SyntaxNode) {
         const nameNode = node?.childForFieldName('name');
-        const name = nameNode?.text ?? '';
-
         const bodyNode = node.childForFieldName('body');
 
+        const name = nameNode?.text ?? '';
         const sym: StructSym = {
             kind: SymKind.Struct,
             name,
@@ -493,28 +449,34 @@ export class Elaborator {
             this.enterScope(bodyNode);
 
             for (const fieldNode of stream(bodyNode.children).filter(n => n.type === 'struct_member')) {
-                const fieldType = this.typeEval(fieldNode.childForFieldName('type'));
-
-                const fieldNameNode = fieldNode.childForFieldName('name');
-                const fieldName = fieldNameNode?.text;
-                if (!fieldName)
-                    continue;
-
-                const fieldSymbol: StructFieldSym = {
-                    kind: SymKind.StructField,
-                    name: fieldName,
-                    qualifiedName: `${sym.name}.${fieldName}`,
-                    origins: [this.createOrigin(fieldNode, fieldNameNode)],
-                    type: fieldType,
-                };
-                sym.fields.push(fieldSymbol);
-                this.addSymbol(fieldNameNode, fieldSymbol);
+                this.elabStructField(fieldNode, sym);
             }
 
             this.exitScope();
         }
 
         this.addSymbol(nameNode, sym);
+    }
+
+    private elabStructField(fieldNode: SyntaxNode, structSym: StructSym) {
+        const nameNode = fieldNode.childForFieldName('name');
+        const typeNode = fieldNode.childForFieldName('type');
+
+        const fieldType = this.typeEval(typeNode);
+
+        const fieldName = nameNode?.text;
+        if (!fieldName)
+            return;
+
+        const fieldSym: StructFieldSym = {
+            kind: SymKind.StructField,
+            name: fieldName,
+            qualifiedName: `${structSym.name}.${fieldName}`,
+            origins: [this.createOrigin(fieldNode, nameNode)],
+            type: fieldType,
+        };
+        this.addSymbol(nameNode, fieldSym);
+        structSym.fields!.push(fieldSym);
     }
 
     private elabEnum(node: SyntaxNode) {
@@ -524,50 +486,37 @@ export class Elaborator {
 
         let nextValue: number = 0;
         for (const memberNode of stream(body.children).filter(n => n.type === 'enum_member')) {
-            const memberNameNode = memberNode.childForFieldName('name');
-            const memberName = memberNameNode?.text ?? '';
-            const valueNode = memberNode.childForFieldName('value');
-            const value = valueNode ? this.constEval(valueNode) : nextValue;
-
-            this.addSymbol<ConstSym>(memberNameNode, {
-                kind: SymKind.Const,
-                name: memberName,
-                qualifiedName: memberName,
-                origins: [this.createOrigin(memberNode, memberNameNode)],
-                value,
-            });
-
-            nextValue = (value ?? nextValue) + 1;
+            nextValue = this.elabEnumMember(memberNode, nextValue);
         }
+    }
+
+    private elabEnumMember(memberNode: SyntaxNode, nextValue: number) {
+        const nameNode = memberNode.childForFieldName('name');
+        const valueNode = memberNode.childForFieldName('value');
+
+        const name = nameNode?.text ?? '';
+        const value = valueNode ? this.constEval(valueNode) : nextValue;
+
+        this.addSymbol<ConstSym>(nameNode, {
+            kind: SymKind.Const,
+            name,
+            qualifiedName: name,
+            origins: [this.createOrigin(memberNode, nameNode)],
+            value,
+        });
+
+        return (value ?? nextValue) + 1;
     }
 
     private elabFunc(node: SyntaxNode) {
         const nameNode = node?.childForFieldName('name');
-        const name = nameNode?.text ?? '';
-
         const paramNodes = node.childrenForFieldName('params');
+        const bodyNode = node.childForFieldName('body');
+
+        const name = nameNode?.text ?? '';
         const params = stream(paramNodes)
             .filter(n => n.type === 'param_decl')
-            .map<FuncParamSym>((paramNode, index) => {
-                const paramType = this.typeEval(paramNode.childForFieldName('type'));
-
-                const paramNameNode = paramNode.childForFieldName('name');
-                const paramName = paramNameNode?.text ?? '';
-
-                const paramQualifiedName = `${name}.${index}`;
-
-                if (isNonScalarType(paramType)) {
-                    this.reportError(paramNode, `Function parameter must be of scalar type.`);
-                }
-
-                return {
-                    kind: SymKind.FuncParam,
-                    name: paramName,
-                    qualifiedName: paramQualifiedName,
-                    origins: [this.createOrigin(paramNode, paramNameNode)],
-                    type: paramType,
-                };
-            })
+            .map<FuncParamSym>((paramNode, index) => this.elabFuncParam(paramNode, name, index))
             .toArray();
 
         const isVariadic = !!paramNodes.some(child => child.type === 'variadic_param');
@@ -578,8 +527,6 @@ export class Elaborator {
         if (isInvalidReturnType(returnType)) {
             this.reportError(returnTypeNode!, `Function return type must be void or of scalar type.`);
         }
-
-        const bodyNode = node.childForFieldName('body');
 
         const unmergedSym: FuncSym = {
             kind: SymKind.Func,
@@ -612,13 +559,35 @@ export class Elaborator {
         this.exitScope();
     }
 
-    private elabGlobal(node: SyntaxNode) {
-        const nameNode = node?.childForFieldName('name');
+    private elabFuncParam(paramNode: SyntaxNode, funcName: string, paramIndex: number): FuncParamSym {
+        const nameNode = paramNode.childForFieldName('name');
+        const typeNode = paramNode.childForFieldName('type');
+
         const name = nameNode?.text ?? '';
 
-        const isExtern = !!node.children.find(n => n.type === 'extern');
-        const type = this.typeEval(node.childForFieldName('type'));
+        const type = this.typeEval(typeNode);
+        if (isNonScalarType(type)) {
+            this.reportError(paramNode, `Function parameter must be of scalar type.`);
+        }
 
+        return {
+            kind: SymKind.FuncParam,
+            name,
+            qualifiedName: `${funcName}.${paramIndex}`,
+            origins: [this.createOrigin(paramNode, nameNode)],
+            type,
+        };
+    }
+
+    private elabGlobal(node: SyntaxNode) {
+        const externNode = node.children.find(n => n.type === 'extern');
+        const nameNode = node?.childForFieldName('name');
+        const typeNode = node.childForFieldName('type');
+
+        const isExtern = !!externNode;
+        const name = nameNode?.text ?? '';
+
+        const type = this.typeEval(typeNode);
         if (this.isUnsizedType(type)) {
             this.reportError(node, `Variable must have a known size.`);
         }
@@ -635,9 +604,10 @@ export class Elaborator {
 
     private elabConst(node: SyntaxNode) {
         const nameNode = node?.childForFieldName('name');
-        const name = nameNode?.text ?? '';
+        const valueNode = node.childForFieldName('value');
 
-        const value = this.constEval(node.childForFieldName('value'));
+        const name = nameNode?.text ?? '';
+        const value = this.constEval(valueNode);
 
         this.addSymbol<ConstSym>(nameNode, {
             kind: SymKind.Const,
@@ -701,10 +671,10 @@ export class Elaborator {
 
     private elabLocalDecl(node: SyntaxNode) {
         const nameNode = node?.childForFieldName('name');
-        const name = nameNode?.text ?? '';
-
         const typeNode = node.childForFieldName('type');
         const initNode = node.childForFieldName('value');
+
+        const name = nameNode?.text ?? '';
 
         const declaredType = typeNode ? this.typeEval(typeNode) : undefined;
 
@@ -753,9 +723,9 @@ export class Elaborator {
     }
 
     private elabReturnStmt(node: SyntaxNode) {
-        const returnType = this.currentFunc!.returnType;
         const valueNode = node.childForFieldName('value');
 
+        const returnType = this.currentFunc!.returnType;
         if (valueNode) {
             this.elabExpr(valueNode, returnType);
         } else if (returnType.kind !== TypeKind.Void) {
@@ -809,7 +779,7 @@ export class Elaborator {
             const nodeType = node.type as ExprNodeType;
             switch (nodeType) {
                 case ExprNodeType.GroupedExpr:
-                    return this.elabExprInfer(node.childForFieldName('expr'));
+                    return this.elabGroupedExpr(node);
                 case ExprNodeType.NameExpr:
                     return this.elabNameExpr(node);
                 case ExprNodeType.SizeofExpr:
@@ -836,6 +806,11 @@ export class Elaborator {
                 }
             }
         });
+    }
+
+    private elabGroupedExpr(node: SyntaxNode): Type {
+        const nestedNode = node.childForFieldName('expr');
+        return this.elabExprInfer(nestedNode);
     }
 
     private elabNameExpr(nameExpr: SyntaxNode): Type {
@@ -1028,9 +1003,9 @@ export class Elaborator {
         const args = argsNodes.filter(x => isExprNode(x));
 
         if (args.length < params.length) {
-            this.reportError(node, `Too few arguments provided(${args.length} < ${params.length}).`);
+            this.reportError(node, `Too few arguments provided (${args.length} < ${params.length}).`);
         } else if (args.length > params.length && !funcSym.isVariadic) {
-            this.reportError(node, `Too many arguments provided(${args.length} > ${params.length}).`);
+            this.reportError(node, `Too many arguments provided (${args.length} > ${params.length}).`);
         }
         for (let i = 0; i < args.length; i++) {
             if (i < params.length) {
@@ -1038,7 +1013,7 @@ export class Elaborator {
             } else if (funcSym.isVariadic) {
                 const argType = this.elabExprInfer(args[i]);
                 if (isNonScalarType(argType)) {
-                    this.reportError(node, `Variadic argument must be scalar type.\n`);
+                    this.reportError(node, `Variadic argument must be scalar type.`);
                 }
             }
         }
@@ -1048,6 +1023,8 @@ export class Elaborator {
 
     private elabIndexExpr(node: SyntaxNode): Type {
         const indexeeNode = node.childForFieldName('indexee');
+        const indexNode = node.childForFieldName('index');
+
         const indexeeType = this.elabExprInfer(indexeeNode);
         if (indexeeType.kind !== TypeKind.Arr && indexeeType.kind !== TypeKind.Ptr) {
             if (indexeeType.kind !== TypeKind.Err) {
@@ -1055,41 +1032,33 @@ export class Elaborator {
             }
             return mkErrorType();
         }
-        this.elabExprInt(node.childForFieldName('index'));
+
+        this.elabExprInt(indexNode);
+
         return indexeeType.kind === TypeKind.Arr
             ? indexeeType.elemType
             : indexeeType.pointeeType;
     }
 
     private elabField(node: SyntaxNode): StructFieldSym | undefined {
-        let leftType = this.elabExprInfer(node.childForFieldName('left'));
+        const leftNode = node.childForFieldName('left');
+        const nameNode = node.childForFieldName('name');
+
+        let leftType = this.elabExprInfer(leftNode);
         if (leftType.kind === TypeKind.Ptr) {
             leftType = leftType.pointeeType;
         }
-
         if (leftType.kind !== TypeKind.Struct) {
             if (leftType.kind !== TypeKind.Err) {
                 this.reportError(node, `Expected struct type.`);
             }
-            return undefined;
+            return;
         }
 
-        const sym = this.symbols.get(leftType.qualifiedName);
-        assert(sym?.kind === SymKind.Struct);
-
-        const nameNode = node.childForFieldName('name');
         if (!nameNode) {
             return;
         }
-        const fieldName = nameNode.text;
-
-        const field = sym.fields?.find(f => f.name === fieldName);
-        if (!field) {
-            this.reportError(node, `Unknown field '${fieldName}'.`);
-            return undefined;
-        }
-        this.recordNameResolution(field, nameNode);
-        return field;
+        return this.resolveStructField(leftType.qualifiedName, nameNode);
     }
 
     private elabFieldExpr(node: SyntaxNode): Type {
@@ -1110,19 +1079,114 @@ export class Elaborator {
 
         return castType;
     }
+
+    //==============================================================================
+    //== Type checking
+
+    private tryCoerce(node: SyntaxNode, expected: Type) {
+        if (expected.kind === TypeKind.Int && expected.size && isIntegerLiteralExpr(node)) {
+            const bitsRequired = Math.ceil(Math.log2(parseInt(node.text)) + 1);
+            if (bitsRequired < expected.size) {
+                this.nodeTypeMap.set(node, expected);
+            }
+        }
+    }
+
+    private unifyTypes(node: SyntaxNode, e1: SyntaxNode | Nullish, e2: SyntaxNode | Nullish): Type {
+        if (!(e1 && e2)) {
+            return e1 ? this.getType(e1) : e2 ? this.getType(e2) : mkErrorType();
+        }
+
+        this.tryCoerce(e1, this.getType(e2));
+        this.tryCoerce(e2, this.getType(e1));
+
+        const t1 = this.getType(e1);
+        const t2 = this.getType(e2);
+
+        let err = false;
+        const unified = tryUnifyTypes(t1, t2, () => {
+            err = true;
+        });
+        if (err) {
+            this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+        }
+
+        return unified;
+    }
+
+    private checkType(node: SyntaxNode, expected: Type) {
+        this.tryCoerce(node, expected);
+
+        const actual = this.getType(node);
+
+        if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
+            return;
+        }
+        if (!typeLe(actual, expected)) {
+            this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
+        }
+    }
+
+    //==============================================================================
+    //== Helper methods
+
+    private setType(node: SyntaxNode, type: Type) {
+        this.nodeTypeMap.set(node, type);
+    }
+
+    private getType(node: SyntaxNode): Type {
+        const type = this.nodeTypeMap.get(node);
+        assert(type, `Missing type for node: ${node.type}`);
+        return type;
+    }
+
+    private trackTyping(node: SyntaxNode, f: () => Type): Type {
+        const type = f();
+        this.setType(node, type);
+        return type;
+    }
+
+    private reportError(node: SyntaxNode, message: string) {
+        this.errors.push({
+            message,
+            location: {
+                file: this.path,
+                range: node,
+            },
+        });
+    }
+
+    private typeLayout(type: Type): TypeLayout | undefined {
+        return typeLayout(type, {
+            getStruct: name => {
+                const sym = this.symbols.get(name);
+                if (!sym || sym.kind !== SymKind.Struct)
+                    return;
+                return sym;
+            },
+        });
+    }
+
+    private typeSize(type: Type): number | undefined {
+        return this.typeLayout(type)?.size;
+    }
+
+    private isUnsizedType(type: Type): boolean {
+        return this.typeSize(type) === undefined;
+    }
+
+    private createOrigin(node: SyntaxNode, nameNode: SyntaxNode | Nullish, isForwardDecl: boolean = false): Origin {
+        return {
+            file: this.path,
+            node,
+            nameNode: nameNode ?? undefined,
+            isForwardDecl,
+        };
+    }
 }
 
 //================================================================================
 //== Utility functions
-
-function getName(node: SyntaxNode): string | undefined {
-    const nameNode = node.childForFieldName('name');
-    if (!nameNode) {
-        return;
-    }
-
-    return nameNode.text;
-}
 
 // 'a' => 97
 // '\n' => 10

@@ -4,13 +4,13 @@ import { stream } from '../utils/stream';
 import { mkIntType, mkStructType, prettyType, tryUnifyTypes, Type, TypeKind } from './type';
 
 export enum SymKind {
-    Struct,
-    StructField,
-    Func,
-    FuncParam,
-    Global,
-    Const,
-    Local,
+    Struct = 'Struct',
+    StructField = 'StructField',
+    Func = 'Func',
+    FuncParam = 'FuncParam',
+    Global = 'Global',
+    Const = 'Const',
+    Local = 'Local',
 }
 
 export type Sym =

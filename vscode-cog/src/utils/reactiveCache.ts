@@ -41,7 +41,7 @@ export class ReactiveCache {
         if (!this.values.has(key)) {
             return;
         }
-        console.log(`Deleting ${key}`);
+        console.log(`Invalidating ${key}`);
         for (const dep of this.dependents.get(key) ?? []) {
             this.delete(dep);
         }

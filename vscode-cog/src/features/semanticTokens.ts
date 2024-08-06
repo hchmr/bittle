@@ -10,7 +10,10 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
 
     constructor(private parsingService: ParsingService) { }
 
-    provideDocumentSemanticTokens(document: vscode.TextDocument) {
+    provideDocumentSemanticTokens(
+        document: vscode.TextDocument,
+        _token: vscode.CancellationToken,
+    ) {
         const tree = this.parsingService.parse(document.uri.fsPath);
         const builder = new vscode.SemanticTokensBuilder(this.legend);
 

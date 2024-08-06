@@ -1,9 +1,16 @@
 import assert from 'assert';
+import { pointEq } from '../utils/index.js';
 import { CompositeNodeKind, namedTokenKinds } from './compositeNodeKind.js';
 import { ErrorSink } from './errorSink.js';
 import { Token, TokenKind } from './token.js';
 import { Point, Tree } from './tree.js';
-import { CompositeNodeImpl, MissingTokenNodeImpl, pointEqual, SyntaxNodeImpl, TokenNodeImpl, TreeImpl } from './tree/impl';
+import {
+    CompositeNodeImpl,
+    MissingTokenNodeImpl,
+    SyntaxNodeImpl,
+    TokenNodeImpl,
+    TreeImpl,
+} from './treeImpl.js';
 
 //=========================================================================
 //== Node building
@@ -214,7 +221,7 @@ class ParserBase extends NodeBuilder {
     }
 
     addError(position: Point, message: string) {
-        if (pointEqual(position, this.lastErrorPosition)) {
+        if (pointEq(position, this.lastErrorPosition)) {
             return;
         }
         this.errorSink.add({ position, message });

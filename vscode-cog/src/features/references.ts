@@ -19,8 +19,9 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         document: vscode.TextDocument,
         position: vscode.Position,
         newName: string,
+        token: vscode.CancellationToken,
     ): vscode.ProviderResult<vscode.WorkspaceEdit> {
-        const references = this.provideReferences(document, position, { includeDeclaration: true });
+        const references = this.provideReferences(document, position, { includeDeclaration: true }, token);
 
         const workspaceEdit = new vscode.WorkspaceEdit();
         for (const reference of references) {
@@ -33,6 +34,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
         context: vscode.ReferenceContext,
+        _token: vscode.CancellationToken,
     ) {
         const path = document.uri.fsPath;
         const tree = this.parsingService.parse(path);

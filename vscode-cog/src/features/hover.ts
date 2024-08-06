@@ -14,7 +14,11 @@ export class HoverProvider implements vscode.HoverProvider {
         private elaborationService: ElaborationService,
     ) { }
 
-    provideHover(document: vscode.TextDocument, position: vscode.Position) {
+    provideHover(
+        document: vscode.TextDocument,
+        position: vscode.Position,
+        _token: vscode.CancellationToken,
+    ) {
         const detail = this.getDetailForPosition(document, position);
         if (detail) {
             return toHover(detail);

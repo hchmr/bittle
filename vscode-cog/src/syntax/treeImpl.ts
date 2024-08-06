@@ -1,19 +1,8 @@
 import assert from 'assert';
 import util from 'util';
-import { Token, TokenKind } from '../token.js';
-import { Point, SyntaxNode, Tree, TreeCursor } from '../tree.js';
-
-export function pointEqual(a: Point, b: Point): boolean {
-    return a.row === b.row && a.column === b.column;
-}
-
-export function pointGte(a: Point, b: Point): boolean {
-    return a.row > b.row || (a.row === b.row && a.column >= b.column);
-}
-
-export function pointLte(a: Point, b: Point): boolean {
-    return pointGte(b, a);
-}
+import { pointGe, pointLe } from '../utils/index.js';
+import { Token, TokenKind } from './token.js';
+import { Point, SyntaxNode, Tree, TreeCursor } from './tree.js';
 
 export abstract class SyntaxNodeImpl implements SyntaxNode {
     private _type: string;
@@ -214,7 +203,7 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
     descendantForPosition(startPosition: Point, endPosition?: Point): SyntaxNode {
         endPosition ??= startPosition;
         return (function search(node: SyntaxNodeImpl): SyntaxNode | null {
-            if (!pointLte(node.startPosition, startPosition) || !pointLte(endPosition, node.endPosition)) {
+            if (!pointLe(node.startPosition, startPosition) || !pointLe(endPosition, node.endPosition)) {
                 return null;
             }
             for (const child of node._children) {
@@ -422,7 +411,7 @@ export class TreeCursorImpl implements TreeCursor {
     }
 
     gotoFirstChildForPosition(goalPosition: Point): boolean {
-        const index = this.node.children.findIndex(child => pointGte(child.startPosition, goalPosition));
+        const index = this.node.children.findIndex(child => pointGe(child.startPosition, goalPosition));
         return this.gotoChild(index);
     }
 

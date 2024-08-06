@@ -5,8 +5,7 @@ export type Type =
     | PointerType
     | ArrayType
     | StructType
-    | ErrorType
-    ;
+    | ErrorType;
 
 export enum TypeKind {
     Void = 'Void',

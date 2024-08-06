@@ -110,7 +110,7 @@ export class ElaborationService {
 
     private elaborateFile(path: string): ElaboratorResult {
         return this.cache.compute('elaborationService:elaborateFile:' + path, () =>
-            new Elaborator(this.parsingService, this.includeResolver, path).run(),
+            Elaborator.elaborate(this.parsingService, this.includeResolver, path),
         );
     }
 }

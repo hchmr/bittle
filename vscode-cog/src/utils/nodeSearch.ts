@@ -1,4 +1,4 @@
-import { nodeContains, PointRange, rangeContains, rangeContainsPoint } from '.';
+import { PointRange, rangeContains, rangeContainsPoint } from '.';
 import { Point, SyntaxNode, Tree } from '../syntax';
 
 export function getIdentifierAtPosition(tree: Tree, point: Point): SyntaxNode | null {
@@ -64,4 +64,20 @@ function getAdjacentNode(node: SyntaxNode, point: Point): SyntaxNode | null {
         return null;
     }
     return node.nextSibling;
+}
+
+export function nodeContains(x1: SyntaxNode, x2: SyntaxNode): boolean {
+    if (rangeContains(x1, x2)) {
+        return true;
+    }
+
+    let node: SyntaxNode | null = x2;
+    do {
+        if (node === x1) {
+            return true;
+        }
+        node = node.parent;
+    } while (node);
+
+    return false;
 }

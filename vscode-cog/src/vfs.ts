@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
 import * as vscode from 'vscode';
+import { isCogFile } from './utils';
 import { ReactiveCache } from './utils/reactiveCache';
 
 /** A virtual file system that keeps files in with changes in memory. */
@@ -122,8 +123,4 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
             }
         }
     }
-}
-
-function isCogFile(name: string) {
-    return name.endsWith('.cog') || name.endsWith('.cogs');
 }

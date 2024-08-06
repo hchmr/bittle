@@ -21,7 +21,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
-        token: vscode.CancellationToken,
+        _token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
@@ -61,6 +61,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
+        _token: vscode.CancellationToken,
     ) {
         const position = fromVscPosition(vscPosition);
         const filePath = document.fileName;
@@ -119,7 +120,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     provideTypeDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
-        token: vscode.CancellationToken,
+        _token: vscode.CancellationToken,
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
