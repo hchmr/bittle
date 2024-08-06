@@ -8,6 +8,7 @@ import { ParsingService } from '../services/parsingService';
 import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { fromVscPosition, toVscRange } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
 import { VirtualFileSystem } from '../vfs';
@@ -18,6 +19,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
         private parsingService: ParsingService,
     ) { }
 
+    @interceptExceptions
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
@@ -58,6 +60,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
         private includeGraphService: IncludeGraphService,
     ) { }
 
+    @interceptExceptions
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
@@ -68,6 +71,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
         return this.getDefinitionOrigins(filePath, position);
     }
 
+    @interceptExceptions
     provideImplementation(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
@@ -117,6 +121,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         private elaborationService: ElaborationService,
     ) { }
 
+    @interceptExceptions
     provideTypeDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,

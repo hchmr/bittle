@@ -7,6 +7,7 @@ import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { toVscRange } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
@@ -14,6 +15,7 @@ export class HoverProvider implements vscode.HoverProvider {
         private elaborationService: ElaborationService,
     ) { }
 
+    @interceptExceptions
     provideHover(
         document: vscode.TextDocument,
         position: vscode.Position,

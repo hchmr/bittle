@@ -3,6 +3,7 @@ import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeTypes, TopLevelNodeTypes, TypeNodeTypes } from '../syntax/nodeTypes';
 import { Nullish, toVscRange } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 
 export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProvider {
     public readonly tokenTypes = ['type', 'function'];
@@ -10,6 +11,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
 
     constructor(private parsingService: ParsingService) { }
 
+    @interceptExceptions
     provideDocumentSemanticTokens(
         document: vscode.TextDocument,
         _token: vscode.CancellationToken,

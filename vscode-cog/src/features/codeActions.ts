@@ -2,11 +2,13 @@ import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode, Tree } from '../syntax';
 import { fromVscRange, isRangeEmpty, toVscRange } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CodeActionsProvider implements vscode.CodeActionProvider {
     constructor(private parsingService: ParsingService) { }
 
+    @interceptExceptions
     provideCodeActions(
         document: vscode.TextDocument,
         range: vscode.Range,

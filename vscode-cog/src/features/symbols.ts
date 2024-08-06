@@ -3,6 +3,7 @@ import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { toVscRange } from '../utils';
 import { fuzzySearch as searchFuzzy } from '../utils/fuzzySearch';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 import { VirtualFileSystem } from '../vfs';
@@ -25,10 +26,12 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
         private cache: ReactiveCache,
     ) { }
 
+    @interceptExceptions
     provideDocumentSymbols(document: vscode.TextDocument) {
         return this.getDocumentSymbols(document.uri.fsPath);
     }
 
+    @interceptExceptions
     provideWorkspaceSymbols(query: string, token: vscode.CancellationToken): vscode.ProviderResult<vscode.SymbolInformation[]> {
         const unfilteredSymbols = this.getUnfilteredWorkspaceSymbols();
         return searchFuzzy(query, unfilteredSymbols, { key: 'name' });

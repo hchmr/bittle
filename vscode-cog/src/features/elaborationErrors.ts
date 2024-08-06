@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ElaborationService } from '../services/elaborationService';
 import { toVscRange } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 
@@ -16,6 +17,7 @@ export class ElaborationErrorProvider implements vscode.Disposable {
         this.diagnosticsCollection.dispose();
     }
 
+    @interceptExceptions
     updateDiagnostics() {
         this.diagnosticsCollection.clear();
         stream(vscode.workspace.textDocuments)

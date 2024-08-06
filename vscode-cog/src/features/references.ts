@@ -5,6 +5,7 @@ import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
 import { fromVscPosition, toVscRange } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { getIdentifierAtPosition } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
 
@@ -15,6 +16,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         private includeGraphService: IncludeGraphService,
     ) { }
 
+    @interceptExceptions
     provideRenameEdits(
         document: vscode.TextDocument,
         position: vscode.Position,
@@ -30,6 +32,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         return workspaceEdit;
     }
 
+    @interceptExceptions
     provideReferences(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { Error } from '../syntax';
 import { toVscPosition } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 
 export class SyntaxErrorProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
@@ -12,6 +13,7 @@ export class SyntaxErrorProvider implements vscode.Disposable {
         this.diagnosticsCollection.dispose();
     }
 
+    @interceptExceptions
     updateDiagnostics(document: vscode.TextDocument) {
         if (document.isClosed) {
             this.diagnosticsCollection.delete(document.uri);

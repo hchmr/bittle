@@ -4,6 +4,7 @@ import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { Point, SyntaxNode } from '../syntax';
 import { fromVscPosition, pointLe } from '../utils';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
@@ -12,6 +13,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         private elaborationService: ElaborationService,
     ) { }
 
+    @interceptExceptions
     provideSignatureHelp(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,

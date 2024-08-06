@@ -9,6 +9,7 @@ import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
 import { fromVscPosition } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
+import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
@@ -17,6 +18,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         private elaborationService: ElaborationService,
     ) { }
 
+    @interceptExceptions
     provideCompletionItems(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
