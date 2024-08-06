@@ -3,8 +3,9 @@ import * as vscode from 'vscode';
 import { Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { Type, TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
+import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
-import { SyntaxNode } from '../syntax';
+import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { fromVscPosition, toVscRange } from '../utils';
 import { getNodesAtPosition } from '../utils/nodeSearch';
@@ -12,7 +13,10 @@ import { stream } from '../utils/stream';
 import { VirtualFileSystem } from '../vfs';
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
-    constructor(private vfs: VirtualFileSystem, private parsingService: ParsingService) { }
+    constructor(
+        private vfs: VirtualFileSystem,
+        private parsingService: ParsingService,
+    ) { }
 
     provideDefinition(
         document: vscode.TextDocument,
@@ -46,36 +50,70 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     }
 }
 
-export class NameDefinitionProvider implements vscode.DefinitionProvider {
+export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode.ImplementationProvider {
     constructor(
         private parsingService: ParsingService,
         private elaborator: ElaborationService,
+        private includeGraphService: IncludeGraphService,
     ) { }
 
     provideDefinition(
         document: vscode.TextDocument,
         vscPosition: vscode.Position,
-        token: vscode.CancellationToken,
     ) {
-        const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
+        const filePath = document.fileName;
+        return this.getDefinitionOrigins(filePath, position);
+    }
+
+    provideImplementation(
+        document: vscode.TextDocument,
+        vscPosition: vscode.Position,
+    ) {
+        const position = fromVscPosition(vscPosition);
+        const filePath = document.fileName;
+        return this.getDefinitionOrigins(filePath, position, true);
+    }
+
+    private getDefinitionOrigins(filePath: string, position: Point, definitionOnly = false): vscode.LocationLink[] {
+        const tree = this.parsingService.parse(filePath);
         return getNodesAtPosition(tree, position)
             .filter(node => node.type === 'identifier')
             .flatMap(nameNode => {
-                const symbol = this.elaborator.resolveSymbol(document.fileName, nameNode);
+                const symbol = this.elaborator.resolveSymbol(filePath, nameNode);
                 if (!symbol) {
                     return [];
                 }
+
                 const originSelectionRange = toVscRange(nameNode);
-                return symbol.origins.map(origin => {
-                    return {
-                        originSelectionRange,
-                        targetUri: vscode.Uri.file(origin.file),
-                        targetRange: toVscRange(origin.node),
-                        targetSelectionRange: origin.nameNode ? toVscRange(origin.nameNode) : undefined,
-                    };
-                });
+                return stream([symbol]).concat(this.getSameSymbolInReferringFiles(symbol))
+                    .flatMap(sym => sym.origins)
+                    .filter(origin => !definitionOnly || !origin.isForwardDecl)
+                    .distinctBy(origin => origin.file + '|' + origin.node.startIndex)
+                    .map(origin => {
+                        return {
+                            originSelectionRange,
+                            targetUri: vscode.Uri.file(origin.file),
+                            targetRange: toVscRange(origin.node),
+                            targetSelectionRange: origin.nameNode ? toVscRange(origin.nameNode) : undefined,
+                        };
+                    })
+                    .toArray();
             });
+    }
+
+    private getSameSymbolInReferringFiles(symbol: Sym) {
+        return this.findReferringFiles(symbol)
+            .filterMap(filePath => this.elaborator.getSymbol(filePath, symbol.qualifiedName));
+    }
+
+    // TODO: Copied from references.ts
+    private findReferringFiles(symbol: Sym) {
+        return stream(symbol.origins)
+            .map(origin => origin.file)
+            .distinct()
+            .flatMap(filePath => this.includeGraphService.getFinalReferences(filePath))
+            .distinct();
     }
 }
 

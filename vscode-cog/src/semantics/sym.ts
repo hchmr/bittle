@@ -72,6 +72,7 @@ export type Origin = {
     file: string;
     node: SyntaxNode;
     nameNode?: SyntaxNode;
+    isForwardDecl: boolean;
 };
 
 export function symRelatedType(sym: Sym): Type {

@@ -157,11 +157,12 @@ export class Elaborator {
         }
     }
 
-    private createOrigin(node: SyntaxNode, nameNode: SyntaxNode | Nullish): Origin {
+    private createOrigin(node: SyntaxNode, nameNode: SyntaxNode | Nullish, isForwardDecl: boolean = false): Origin {
         return {
             file: this.path,
             node,
             nameNode: nameNode ?? undefined,
+            isForwardDecl,
         };
     }
 
@@ -235,9 +236,8 @@ export class Elaborator {
         assert(nameNode.type === 'identifier');
         this.nodeSymMap.set(nameNode, sym.qualifiedName);
 
-        const origin = this.createOrigin(nameNode, nameNode);
         const references = this.references.get(sym.qualifiedName) ?? [];
-        references.push({ file: origin.file, nameNode: nameNode });
+        references.push({ file: this.path, nameNode: nameNode });
         this.references.set(sym.qualifiedName, references);
     }
 
@@ -476,17 +476,18 @@ export class Elaborator {
         const nameNode = node?.childForFieldName('name');
         const name = nameNode?.text ?? '';
 
+        const bodyNode = node.childForFieldName('body');
+
         const sym: StructSym = {
             kind: SymKind.Struct,
             name,
             qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode)],
+            origins: [this.createOrigin(node, nameNode, !bodyNode)],
             fields: undefined,
         };
 
         this.addSymbol<StructSym>(nameNode, { ...sym });
 
-        const bodyNode = node.childForFieldName('body');
         if (bodyNode) {
             sym.fields = [];
             this.enterScope(bodyNode);
@@ -584,7 +585,7 @@ export class Elaborator {
             kind: SymKind.Func,
             name,
             qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode)],
+            origins: [this.createOrigin(node, nameNode, !bodyNode)],
             params,
             returnType,
             isVariadic,
@@ -626,7 +627,7 @@ export class Elaborator {
             kind: SymKind.Global,
             name,
             qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode)],
+            origins: [this.createOrigin(node, nameNode, isExtern)],
             isDefined: !isExtern,
             type,
         });

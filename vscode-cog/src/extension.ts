@@ -88,9 +88,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Navigation
 
+    const nameDefinitionProvider = new NameDefinitionProvider(parsingService, elaborationService, includeGraphService);
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
-        vscode.languages.registerDefinitionProvider('cog', new NameDefinitionProvider(parsingService, elaborationService)),
+        vscode.languages.registerDefinitionProvider('cog', nameDefinitionProvider),
+        vscode.languages.registerImplementationProvider('cog', nameDefinitionProvider),
         vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, elaborationService)),
     );
 
@@ -113,8 +115,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // TODO:
-    // - Go to definition VS declaration
-    // - Go directly to definition
     // - More code actions
     // - Formatting
 }
