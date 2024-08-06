@@ -659,7 +659,9 @@ export class Parser extends ParserBase {
     groupExpr() {
         this.beginNode(CompositeNodeKind.GroupExpr);
         this.bump('(');
+        this.beginField('expr');
         this.expr();
+        this.finishField('expr');
         this.expect(')');
         this.finishNode(CompositeNodeKind.GroupExpr);
     }
@@ -710,7 +712,7 @@ export class Parser extends ParserBase {
 
     ternaryExpr(rbp: number, checkpoint: Checkpoint) {
         this.beginNodeAt(CompositeNodeKind.TernaryExpr, checkpoint);
-        this.groupExistingChildren('condition');
+        this.groupExistingChildren('cond');
         this.expect('?');
         this.beginField('then');
         this.expr(rbp);
