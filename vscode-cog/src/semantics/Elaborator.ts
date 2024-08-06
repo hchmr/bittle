@@ -103,22 +103,57 @@ export class Elaborator {
         });
     }
 
-    private unifyTypes(node: SyntaxNode, t1: Type, t2: Type): Type {
-        let ok = true;
-        const unified = tryUnifyTypes(t1, t2, () => {
-            ok = false;
-        });
-        if (node && !ok) {
-            this.reportError(node, `Cannot unify types '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+    private setType(node: SyntaxNode, type: Type) {
+        this.nodeTypeMap.set(node, type);
+    }
+
+    private getType(node: SyntaxNode): Type {
+        const type = this.nodeTypeMap.get(node);
+        assert(type, `Missing type for node: ${node.type}`);
+        return type;
+    }
+
+    private tryCoerce(node: SyntaxNode, expected: Type) {
+        if (expected.kind === 'int' && expected.size && isIntegerLiteralExpr(node)) {
+            const bitsRequired = Math.ceil(Math.log2(parseInt(node.text)) + 1);
+            if (bitsRequired < expected.size) {
+                this.nodeTypeMap.set(node, expected);
+            }
         }
+    }
+
+    private unifyTypes(node: SyntaxNode, e1: SyntaxNode | Nullish, e2: SyntaxNode | Nullish): Type {
+        if (!(e1 && e2)) {
+            return e1 ? this.getType(e1) : e2 ? this.getType(e2) : mkErrorType();
+        }
+
+        this.tryCoerce(e1, this.getType(e2));
+        this.tryCoerce(e2, this.getType(e1));
+
+        const t1 = this.getType(e1);
+        const t2 = this.getType(e2);
+
+        let err = false;
+        const unified = tryUnifyTypes(t1, t2, () => {
+            err = true;
+        });
+        if (err) {
+            this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+        }
+
         return unified;
     }
 
     private checkType(node: SyntaxNode, expected: Type) {
-        let actual = this.nodeTypeMap.get(node) ?? mkErrorType(); ;
-        actual = this.unifyTypes(node, expected, actual);
-        if (!typeLe(expected, actual)) {
-            this.reportError(node, `Expected type '${prettyType(expected)}', got '${prettyType(actual)}'.`);
+        this.tryCoerce(node, expected);
+
+        const actual = this.getType(node);
+
+        if (expected.kind === 'pointer' && expected.elementType.kind === 'void' && actual.kind === 'pointer') {
+            return;
+        }
+        if (!typeLe(actual, expected)) {
+            this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
         }
     }
 
@@ -208,7 +243,7 @@ export class Elaborator {
 
     private trackTyping(node: SyntaxNode, f: () => Type): Type {
         const type = f();
-        this.nodeTypeMap.set(node, type);
+        this.setType(node, type);
         return type;
     }
 
@@ -682,7 +717,7 @@ export class Elaborator {
         const inferedType = initNode ? this.elabExprInfer(initNode) : undefined;
 
         if (declaredType && inferedType) {
-            this.checkType(node, declaredType);
+            this.checkType(initNode!, declaredType);
         }
         let type = declaredType ?? inferedType;
 
@@ -911,7 +946,7 @@ export class Elaborator {
                     : this.elabExprInfer(leftNode);
 
                 if (rightNode) {
-                    this.checkType(rightNode, leftType);
+                    this.elabExpr(rightNode, leftType);
                 }
                 return { kind: 'void' };
             }
@@ -926,9 +961,11 @@ export class Elaborator {
             case '|':
             case '^':
             {
-                const leftType = this.elabExprInt(node.childForFieldName('left'));
-                const rightType = this.elabExprInt(node.childForFieldName('right'));
-                return this.unifyTypes(node, leftType, rightType);
+                const leftNode = node.childForFieldName('left');
+                const rightNode = node.childForFieldName('right');
+                this.elabExprInt(leftNode);
+                this.elabExprInt(rightNode);
+                return this.unifyTypes(node, leftNode, rightNode);
             }
             case '==':
             case '!=':
@@ -937,9 +974,11 @@ export class Elaborator {
             case '>':
             case '>=':
             {
-                const leftType = this.elabExprInfer(node.childForFieldName('left'));
-                const rightType = this.elabExprInfer(node.childForFieldName('right'));
-                const cmpType = this.unifyTypes(node, leftType, rightType);
+                const leftNode = node.childForFieldName('left');
+                const rightNode = node.childForFieldName('right');
+                this.elabExprInfer(leftNode);
+                this.elabExprInfer(rightNode);
+                const cmpType = this.unifyTypes(node, leftNode, rightNode);
                 if (cmpType.kind === 'error' && !isScalarType(cmpType)) {
                     this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
                 }
@@ -948,8 +987,10 @@ export class Elaborator {
             case '&&':
             case '||':
             {
-                this.elabExprBool(node.childForFieldName('left'));
-                this.elabExprBool(node.childForFieldName('right'));
+                const leftNode = node.childForFieldName('left');
+                const rightNode = node.childForFieldName('right');
+                this.elabExprBool(leftNode);
+                this.elabExprBool(rightNode);
                 return { kind: 'bool' };
             }
             default:
@@ -959,9 +1000,11 @@ export class Elaborator {
 
     private elabTernaryExpr(node: SyntaxNode): Type {
         this.elabExprBool(node.childForFieldName('cond'));
-        const thenType = this.elabExprInfer(node.childForFieldName('then'));
-        const elseType = this.elabExprInfer(node.childForFieldName('else'));
-        return this.unifyTypes(node, thenType, elseType);
+        const thenNode = node.childForFieldName('then');
+        const elseNode = node.childForFieldName('else');
+        this.elabExprInfer(thenNode);
+        this.elabExprInfer(elseNode);
+        return this.unifyTypes(node, thenNode, elseNode);
     }
 
     private elabCallExpr(node: SyntaxNode): Type {
@@ -1122,6 +1165,11 @@ function isNonScalarType(type: Type): boolean {
 
 function isInvalidReturnType(type: Type): boolean {
     return type.kind !== 'error' && !isValidReturnType(type);
+}
+
+function isIntegerLiteralExpr(node: SyntaxNode): boolean {
+    return node.type === ExprNodeType.LiteralExpr
+        && node.firstChild!.type === LiteralNodeType.Number;
 }
 
 function mkErrorType(): Type {

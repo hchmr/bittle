@@ -45,7 +45,8 @@ export type ErrorType = {
 //= Type merging
 
 export function unifyTypes(t1: Type, t2: Type): Type {
-    return tryUnifyTypes(t1, t2, () => { });
+    return tryUnifyTypes(t1, t2, () => {
+    });
 }
 
 export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
