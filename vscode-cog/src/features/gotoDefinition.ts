@@ -1,7 +1,7 @@
 import path from 'path';
 import * as vscode from 'vscode';
 import { Sym, SymKind, symRelatedType } from '../semantics/sym';
-import { Type } from '../semantics/type';
+import { Type, TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
@@ -138,10 +138,10 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     }
 
     fromType(filePath: string, node: SyntaxNode, type: Type): Sym | undefined {
-        if (type.kind === 'pointer') {
-            type = type.elementType;
+        if (type.kind === TypeKind.Ptr) {
+            type = type.pointeeType;
         }
-        if (type.kind !== 'struct') {
+        if (type.kind !== TypeKind.Struct) {
             return;
         }
         return this.elaborationService.getSymbol(filePath, type.qualifiedName);

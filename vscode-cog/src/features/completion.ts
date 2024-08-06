@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
 import { prettySym, Sym, SymKind } from '../semantics/sym';
+import { TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
@@ -60,10 +61,10 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         // Infer type
         let structType = this.elaborationService.inferType(filePath, leftNode);
-        if (structType.kind === 'pointer') {
-            structType = structType.elementType;
+        if (structType.kind === TypeKind.Ptr) {
+            structType = structType.pointeeType;
         }
-        if (structType.kind !== 'struct') {
+        if (structType.kind !== TypeKind.Struct) {
             return;
         }
 

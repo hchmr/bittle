@@ -1,6 +1,6 @@
 import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
-import { Type } from '../semantics/type';
+import { mkErrorType, Type } from '../semantics/type';
 import { typeLayout, TypeLayout } from '../semantics/typeLayout';
 import { SyntaxNode } from '../syntax';
 import { ReactiveCache } from '../utils/reactiveCache';
@@ -83,12 +83,12 @@ export class ElaborationService {
 
     inferType(path: string, exprNode: SyntaxNode): Type {
         const module = this.elaborateFile(path);
-        return module.nodeTypeMap.get(exprNode) ?? { kind: 'error' };
+        return module.nodeTypeMap.get(exprNode) ?? mkErrorType();
     }
 
     evalType(path: string, node: SyntaxNode): Type {
         const module = this.elaborateFile(path);
-        return module.nodeTypeMap.get(node) ?? { kind: 'error' };
+        return module.nodeTypeMap.get(node) ?? mkErrorType();
     }
 
     getLayout(path: string, type: Type): TypeLayout {

@@ -1,6 +1,6 @@
 import { stream } from '../utils/stream';
 import { StructSym, SymKind } from './sym';
-import { Type } from './type';
+import { Type, TypeKind } from './type';
 
 export type TypeLayout = {
     size: number;
@@ -13,24 +13,24 @@ export type TypeLayoutContext = {
 
 export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout {
     switch (type.kind) {
-        case 'void': {
+        case TypeKind.Void: {
             return { size: 0, align: 1 };
         }
-        case 'bool': {
+        case TypeKind.Bool: {
             return { size: 1, align: 1 };
         }
-        case 'int': {
+        case TypeKind.Int: {
             const size = type.size! / 8;
             return { size: size, align: size };
         }
-        case 'pointer': {
+        case TypeKind.Ptr: {
             return { size: 8, align: 8 };
         }
-        case 'array': {
-            const elemLayout = typeLayout(type.elementType, ctx);
+        case TypeKind.Arr: {
+            const elemLayout = typeLayout(type.elemType, ctx);
             return { size: elemLayout.size * type.size!, align: elemLayout.align };
         }
-        case 'struct': {
+        case TypeKind.Struct: {
             const sym = ctx.getStruct(type.qualifiedName);
             if (sym?.kind !== SymKind.Struct)
                 return { size: 0, align: 1 };
@@ -44,7 +44,7 @@ export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout {
                     { size: 0, align: 1 },
                 );
         }
-        case 'error': {
+        case TypeKind.Err: {
             return { size: 0, align: 1 };
         }
         default: {

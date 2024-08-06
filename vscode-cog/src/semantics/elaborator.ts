@@ -24,7 +24,7 @@ import {
     SymKind,
     tryMergeSym,
 } from './sym';
-import { isScalarType, isValidReturnType, prettyType, tryUnifyTypes, Type, typeLe } from './type';
+import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkPointerType, mkStructType, mkVoidType, prettyType, tryUnifyTypes, Type, TypeKind, typeLe } from './type';
 import { TypeLayout, typeLayout } from './typeLayout';
 
 export type ErrorLocation = {
@@ -114,7 +114,7 @@ export class Elaborator {
     }
 
     private tryCoerce(node: SyntaxNode, expected: Type) {
-        if (expected.kind === 'int' && expected.size && isIntegerLiteralExpr(node)) {
+        if (expected.kind === TypeKind.Int && expected.size && isIntegerLiteralExpr(node)) {
             const bitsRequired = Math.ceil(Math.log2(parseInt(node.text)) + 1);
             if (bitsRequired < expected.size) {
                 this.nodeTypeMap.set(node, expected);
@@ -149,7 +149,7 @@ export class Elaborator {
 
         const actual = this.getType(node);
 
-        if (expected.kind === 'pointer' && expected.elementType.kind === 'void' && actual.kind === 'pointer') {
+        if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
             return;
         }
         if (!typeLe(actual, expected)) {
@@ -264,19 +264,19 @@ export class Elaborator {
                     const nameNode = typeNode.firstChild!;
                     switch (nameNode.text) {
                         case 'Void':
-                            return { kind: 'void' };
+                            return mkVoidType();
                         case 'Bool':
-                            return { kind: 'bool' };
+                            return mkBoolType();
                         case 'Char':
                         case 'Int8':
-                            return { kind: 'int', size: 8 };
+                            return mkIntType(8);
                         case 'Int16':
-                            return { kind: 'int', size: 16 };
+                            return mkIntType(16);
                         case 'Int32':
-                            return { kind: 'int', size: 32 };
+                            return mkIntType(32);
                         case 'Int':
                         case 'Int64':
-                            return { kind: 'int', size: 64 };
+                            return mkIntType(64);
                         default: {
                             const sym = this.resolveName(nameNode);
                             if (!sym) {
@@ -286,19 +286,16 @@ export class Elaborator {
                                 this.reportError(typeNode, `'${sym.name}' is not a struct.`);
                                 return mkErrorType();
                             }
-                            return { kind: 'struct', name: sym.name, qualifiedName: sym.qualifiedName };
+                            return mkStructType(sym.name, sym.qualifiedName);
                         }
                     }
                 }
                 case TypeNodeType.PointerType: {
-                    return {
-                        kind: 'pointer',
-                        elementType: this.typeEval(typeNode.childForFieldName('pointee')),
-                    };
+                    return mkPointerType(this.typeEval(typeNode.childForFieldName('pointee')));
                 }
                 case TypeNodeType.ArrayType: {
-                    const elementType = this.typeEval(typeNode.childForFieldName('type'));
-                    if (this.isUnsizedType(elementType)) {
+                    const elemType = this.typeEval(typeNode.childForFieldName('type'));
+                    if (this.isUnsizedType(elemType)) {
                         this.reportError(typeNode, `The element type of an array must have a known size.`);
                     }
                     let size = this.constEval(typeNode.childForFieldName('size'));
@@ -306,11 +303,7 @@ export class Elaborator {
                         this.reportError(typeNode, `Array size must be positive.`);
                         size = undefined;
                     }
-                    return {
-                        kind: 'array',
-                        elementType,
-                        size,
-                    };
+                    return mkArrayType(elemType, size);
                 }
                 default: {
                     const unreachable: never = nodeType;
@@ -579,7 +572,7 @@ export class Elaborator {
         const isVariadic = !!paramNodes.some(child => child.type === 'variadic_param');
 
         const returnTypeNode = node.childForFieldName('return_type');
-        const returnType: Type = returnTypeNode ? this.typeEval(returnTypeNode) : { kind: 'void' };
+        const returnType: Type = returnTypeNode ? this.typeEval(returnTypeNode) : mkVoidType();
 
         if (isInvalidReturnType(returnType)) {
             this.reportError(returnTypeNode!, `Function return type must be void or of scalar type.`);
@@ -764,7 +757,7 @@ export class Elaborator {
 
         if (valueNode) {
             this.elabExpr(valueNode, returnType);
-        } else if (returnType.kind !== 'void') {
+        } else if (returnType.kind !== TypeKind.Void) {
             this.reportError(node, `Missing return value.`);
         }
     }
@@ -786,19 +779,19 @@ export class Elaborator {
     }
 
     private elabExprBool(node: SyntaxNode | Nullish): Type {
-        this.elabExpr(node, { kind: 'bool' });
-        return { kind: 'bool' };
+        this.elabExpr(node, mkBoolType());
+        return mkBoolType();
     }
 
     private elabExprInt(node: SyntaxNode | Nullish, expectedType?: Type): Type {
         if (!node)
             return mkErrorType();
 
-        assert(!expectedType || expectedType.kind === 'int');
+        assert(!expectedType || expectedType.kind === TypeKind.Int);
 
         const type = this.elabExprInfer(node);
-        if (type.kind !== 'int') {
-            if (type.kind !== 'error') {
+        if (type.kind !== TypeKind.Int) {
+            if (type.kind !== TypeKind.Err) {
                 this.reportError(node, `Expected integer expression.`);
             }
             return expectedType ?? mkErrorType();
@@ -853,7 +846,7 @@ export class Elaborator {
 
         switch (sym.kind) {
             case SymKind.Const:
-                return { kind: 'int', size: 64 };
+                return mkIntType(64);
             case SymKind.Global:
             case SymKind.Local:
             case SymKind.FuncParam:
@@ -872,22 +865,22 @@ export class Elaborator {
     private elabSizeofExpr(node: SyntaxNode): Type {
         const typeNode = node.childForFieldName('type');
         this.typeEval(typeNode);
-        return { kind: 'int', size: 64 };
+        return mkIntType(64);
     }
 
     private elabLiteralExpr(node: SyntaxNode): Type {
         const nodeType = (node.firstChild!).type as LiteralNodeType;
         switch (nodeType) {
             case LiteralNodeType.Bool:
-                return { kind: 'bool' };
+                return mkBoolType();
             case LiteralNodeType.Number:
-                return { kind: 'int', size: 64 };
+                return mkIntType(64);
             case LiteralNodeType.Char:
-                return { kind: 'int', size: 8 };
+                return mkIntType(8);
             case LiteralNodeType.String:
-                return { kind: 'pointer', elementType: { kind: 'int', size: 8 } };
+                return mkPointerType(mkIntType(8));
             case LiteralNodeType.Null:
-                return { kind: 'pointer', elementType: { kind: 'void' } };
+                return mkPointerType(mkVoidType());
             default: {
                 const unreachable: never = nodeType;
                 throw new Error(`Unexpected literal type: ${unreachable} `);
@@ -910,18 +903,18 @@ export class Elaborator {
                 if (operandNode && !isLvalue(operandNode)) {
                     this.reportError(operandNode, `Expected lvalue.`);
                 }
-                return { kind: 'pointer', elementType: this.elabExprInfer(operandNode) };
+                return mkPointerType(this.elabExprInfer(operandNode));
             }
             case '*':
             {
                 const operandType = this.elabExprInfer(operandNode);
-                if (operandType?.kind !== 'pointer') {
-                    if (operandNode && operandType.kind !== 'error') {
+                if (operandType?.kind !== TypeKind.Ptr) {
+                    if (operandNode && operandType.kind !== TypeKind.Err) {
                         this.reportError(operandNode, `Expected pointer type.`);
                     }
                     return mkErrorType();
                 }
-                return operandType.elementType;
+                return operandType.pointeeType;
             }
             default:
                 return mkErrorType();
@@ -948,7 +941,7 @@ export class Elaborator {
                 if (rightNode) {
                     this.elabExpr(rightNode, leftType);
                 }
-                return { kind: 'void' };
+                return mkVoidType();
             }
             case '+':
             case '-':
@@ -979,10 +972,10 @@ export class Elaborator {
                 this.elabExprInfer(leftNode);
                 this.elabExprInfer(rightNode);
                 const cmpType = this.unifyTypes(node, leftNode, rightNode);
-                if (cmpType.kind === 'error' && !isScalarType(cmpType)) {
+                if (cmpType.kind === TypeKind.Err && !isScalarType(cmpType)) {
                     this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
                 }
-                return { kind: 'bool' };
+                return mkBoolType();
             }
             case '&&':
             case '||':
@@ -991,7 +984,7 @@ export class Elaborator {
                 const rightNode = node.childForFieldName('right');
                 this.elabExprBool(leftNode);
                 this.elabExprBool(rightNode);
-                return { kind: 'bool' };
+                return mkBoolType();
             }
             default:
                 return mkErrorType();
@@ -1055,24 +1048,26 @@ export class Elaborator {
     private elabIndexExpr(node: SyntaxNode): Type {
         const indexeeNode = node.childForFieldName('indexee');
         const indexeeType = this.elabExprInfer(indexeeNode);
-        if (indexeeType.kind !== 'array' && indexeeType.kind !== 'pointer') {
-            if (indexeeType.kind !== 'error') {
+        if (indexeeType.kind !== TypeKind.Arr && indexeeType.kind !== TypeKind.Ptr) {
+            if (indexeeType.kind !== TypeKind.Err) {
                 this.reportError(indexeeNode ?? node, `Expression is not indexable.`);
             }
             return mkErrorType();
         }
         this.elabExprInt(node.childForFieldName('index'));
-        return indexeeType.elementType;
+        return indexeeType.kind === TypeKind.Arr
+            ? indexeeType.elemType
+            : indexeeType.pointeeType;
     }
 
     private elabField(node: SyntaxNode): StructFieldSym | undefined {
         let leftType = this.elabExprInfer(node.childForFieldName('left'));
-        if (leftType.kind === 'pointer') {
-            leftType = leftType.elementType;
+        if (leftType.kind === TypeKind.Ptr) {
+            leftType = leftType.pointeeType;
         }
 
-        if (leftType.kind !== 'struct') {
-            if (leftType.kind !== 'error') {
+        if (leftType.kind !== TypeKind.Struct) {
+            if (leftType.kind !== TypeKind.Err) {
                 this.reportError(node, `Expected struct type.`);
             }
             return undefined;
@@ -1160,18 +1155,14 @@ function isLvalue(node: SyntaxNode | Nullish): boolean {
 }
 
 function isNonScalarType(type: Type): boolean {
-    return type.kind !== 'error' && !isScalarType(type);
+    return type.kind !== TypeKind.Err && !isScalarType(type);
 }
 
 function isInvalidReturnType(type: Type): boolean {
-    return type.kind !== 'error' && !isValidReturnType(type);
+    return type.kind !== TypeKind.Err && !isValidReturnType(type);
 }
 
 function isIntegerLiteralExpr(node: SyntaxNode): boolean {
     return node.type === ExprNodeType.LiteralExpr
         && node.firstChild!.type === LiteralNodeType.Number;
-}
-
-function mkErrorType(): Type {
-    return { kind: 'error' };
 }

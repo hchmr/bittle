@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { SyntaxNode } from '../syntax';
 import { stream } from '../utils/stream';
-import { prettyType, tryUnifyTypes, Type } from './type';
+import { mkIntType, mkStructType, prettyType, tryUnifyTypes, Type, TypeKind } from './type';
 
 export enum SymKind {
     Struct,
@@ -76,7 +76,7 @@ export type Origin = {
 
 export function symRelatedType(sym: Sym): Type {
     if (sym.kind === SymKind.Struct) {
-        return { kind: 'struct', name: sym.name, qualifiedName: sym.qualifiedName };
+        return mkStructType(sym.name, sym.qualifiedName);
     } else if (sym.kind === SymKind.StructField) {
         return sym.type;
     } else if (sym.kind === SymKind.Func) {
@@ -86,7 +86,7 @@ export function symRelatedType(sym: Sym): Type {
     } else if (sym.kind === SymKind.Local) {
         return sym.type;
     } else if (sym.kind === SymKind.Const) {
-        return { kind: 'int', size: 64 };
+        return mkIntType(64);
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {

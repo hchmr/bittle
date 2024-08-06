@@ -8,39 +8,108 @@ export type Type =
     | ErrorType
     ;
 
-export type VoidType = {
-    kind: 'void';
-};
+export enum TypeKind {
+    Void = 'Void',
+    Bool = 'Bool',
+    Int = 'Int',
+    Ptr = 'Ptr',
+    Arr = 'Arr',
+    Struct = 'Struct',
+    Err = 'Err',
+}
 
-export type BoolType = {
-    kind: 'bool';
-};
+export type VoidType = Readonly<{
+    kind: TypeKind.Void;
+}>;
 
-export type IntType = {
-    kind: 'int';
+export type BoolType = Readonly<{
+    kind: TypeKind.Bool;
+}>;
+
+export type IntType = Readonly<{
+    kind: TypeKind.Int;
     size: number | undefined;
-};
+}>;
 
-export type PointerType = {
-    kind: 'pointer';
-    elementType: Type;
-};
+export type PointerType = Readonly<{
+    kind: TypeKind.Ptr;
+    pointeeType: Type;
+}>;
 
-export type ArrayType = {
-    kind: 'array';
-    elementType: Type;
+export type ArrayType = Readonly<{
+    kind: TypeKind.Arr;
+    elemType: Type;
     size: number | undefined;
-};
+}>;
 
-export type StructType = {
-    kind: 'struct';
+export type StructType = Readonly<{
+    kind: TypeKind.Struct;
     name: string;
     qualifiedName: string;
-};
+}>;
 
-export type ErrorType = {
-    kind: 'error';
-};
+export type ErrorType = Readonly<{
+    kind: TypeKind.Err;
+}>;
+
+//= Factory functions
+
+const VOID_TYPE: VoidType = { kind: TypeKind.Void };
+
+const BOOL_TYPE: BoolType = { kind: TypeKind.Bool };
+
+const INT8_TYPE: IntType = { kind: TypeKind.Int, size: 8 };
+
+const INT16_TYPE: IntType = { kind: TypeKind.Int, size: 16 };
+
+const INT32_TYPE: IntType = { kind: TypeKind.Int, size: 32 };
+
+const INT64_TYPE: IntType = { kind: TypeKind.Int, size: 64 };
+
+const INT_UNKNOWN_TYPE: IntType = { kind: TypeKind.Int, size: undefined };
+
+const ERROR_TYPE: ErrorType = { kind: TypeKind.Err };
+
+const POINTER_TYPES = new WeakMap<Type, PointerType>();
+
+export function mkVoidType(): Type {
+    return VOID_TYPE;
+}
+
+export function mkBoolType(): Type {
+    return BOOL_TYPE;
+}
+
+export function mkIntType(size: number | undefined): Type {
+    switch (size) {
+        case 8: return INT8_TYPE;
+        case 16: return INT16_TYPE;
+        case 32: return INT32_TYPE;
+        case 64: return INT64_TYPE;
+        default: return INT_UNKNOWN_TYPE;
+    }
+}
+
+export function mkPointerType(pointeeType: Type): Type {
+    let ptrType = POINTER_TYPES.get(pointeeType);
+    if (ptrType === undefined) {
+        ptrType = { kind: TypeKind.Ptr, pointeeType };
+        POINTER_TYPES.set(pointeeType, ptrType);
+    }
+    return ptrType;
+}
+
+export function mkArrayType(elemType: Type, size: number | undefined): Type {
+    return { kind: TypeKind.Arr, elemType, size };
+}
+
+export function mkStructType(name: string, qualifiedName: string): Type {
+    return { kind: TypeKind.Struct, name, qualifiedName };
+}
+
+export function mkErrorType(): Type {
+    return ERROR_TYPE;
+}
 
 //= Type merging
 
@@ -58,23 +127,23 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
 
     if (t1.kind !== t2.kind) {
         onError();
-        return { kind: 'error' };
+        return mkErrorType();
     }
 
-    if (t1.kind === 'int' && t2.kind == t1.kind) {
+    if (t1.kind === TypeKind.Int && t2.kind === t1.kind) {
         const size = unifySize(t1.size, t2.size, onError);
-        return { kind: 'int', size: size };
-    } else if (t1.kind === 'pointer' && t2.kind == t1.kind) {
-        const elementType = tryUnifyTypes(t1.elementType, t2.elementType, onError);
-        return { kind: 'pointer', elementType: elementType };
-    } else if (t1.kind === 'array' && t2.kind == t1.kind) {
-        const elementType = tryUnifyTypes(t1.elementType, t2.elementType, onError);
+        return mkIntType(size);
+    } else if (t1.kind === TypeKind.Ptr && t2.kind === t1.kind) {
+        const pointeeType = tryUnifyTypes(t1.pointeeType, t2.pointeeType, onError);
+        return mkPointerType(pointeeType);
+    } else if (t1.kind === TypeKind.Arr && t2.kind === t1.kind) {
+        const elemType = tryUnifyTypes(t1.elemType, t2.elemType, onError);
         const size = unifySize(t1.size, t2.size, onError);
-        return { kind: 'array', elementType: elementType, size: size };
-    } else if (t1.kind === 'struct' && t2.kind == t1.kind) {
+        return mkArrayType(elemType, size);
+    } else if (t1.kind === TypeKind.Struct && t2.kind === t1.kind) {
         if (t1.name !== t2.name) {
             onError();
-            return { kind: 'error' };
+            return mkErrorType();
         }
         return t1;
     } else {
@@ -97,16 +166,16 @@ function typeEquals(t1: Type, t2: Type): boolean {
     if (t1.kind !== t2.kind) {
         return false;
     }
-    if (t1.kind === 'int') {
+    if (t1.kind === TypeKind.Int) {
         t2 = t2 as IntType;
         return t1.size === t2.size;
-    } else if (t1.kind === 'pointer') {
+    } else if (t1.kind === TypeKind.Ptr) {
         t2 = t2 as PointerType;
-        return typeEquals(t1.elementType, t2.elementType);
-    } else if (t1.kind === 'array') {
+        return typeEquals(t1.pointeeType, t2.pointeeType);
+    } else if (t1.kind === TypeKind.Arr) {
         t2 = t2 as ArrayType;
-        return typeEquals(t1.elementType, t2.elementType) && t1.size === t2.size;
-    } else if (t1.kind === 'struct') {
+        return typeEquals(t1.elemType, t2.elemType) && t1.size === t2.size;
+    } else if (t1.kind === TypeKind.Struct) {
         t2 = t2 as StructType;
         return t1.name === t2.name;
     } else {
@@ -115,32 +184,32 @@ function typeEquals(t1: Type, t2: Type): boolean {
 }
 
 export function isScalarType(type: Type): boolean {
-    return type.kind === 'bool'
-        || type.kind === 'int'
-        || type.kind === 'pointer';
+    return type.kind === TypeKind.Bool
+        || type.kind === TypeKind.Int
+        || type.kind === TypeKind.Ptr;
 }
 
 export function isValidReturnType(type: Type): boolean {
-    return type.kind === 'void'
+    return type.kind === TypeKind.Void
         || isScalarType(type);
 }
 
 export function typeLe(t1: Type, t2: Type): boolean {
     return typeEquals(t1, t2)
-        || (t1.kind === 'error')
-        || (isScalarType(t1) && t2.kind === 'bool')
-        || (t1.kind === 'int' && t2.kind === 'int' && t1.size! <= t2.size!)
-        || (t1.kind === 'pointer' && t2.kind === 'pointer' && t1.elementType.kind === 'void');
+        || (t1.kind === TypeKind.Err)
+        || (isScalarType(t1) && t2.kind === TypeKind.Bool)
+        || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Int && t1.size! <= t2.size!)
+        || (t1.kind === TypeKind.Ptr && t2.kind === TypeKind.Ptr && t1.pointeeType.kind === TypeKind.Void);
 }
 
 export function prettyType(t: Type): string {
     switch (t.kind) {
-        case 'void': return 'Void';
-        case 'bool': return 'Bool';
-        case 'int': return `Int${t.size ?? ''}`;
-        case 'pointer': return '*' + prettyType(t.elementType);
-        case 'array': return `[${prettyType(t.elementType)}; ${t.size ?? '?'}]`;
-        case 'struct': return t.name;
-        case 'error': return '{unknown}';
+        case TypeKind.Void: return 'Void';
+        case TypeKind.Bool: return 'Bool';
+        case TypeKind.Int: return `Int${t.size ?? ''}`;
+        case TypeKind.Ptr: return '*' + prettyType(t.pointeeType);
+        case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
+        case TypeKind.Struct: return t.name;
+        case TypeKind.Err: return '{unknown}';
     }
 }
