@@ -8,3 +8,4 @@ __pycache__/
 .devcontainer/
 docker-compose.yml
 Dockerfile
+.DS_Store
