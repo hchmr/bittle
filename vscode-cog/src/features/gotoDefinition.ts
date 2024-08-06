@@ -1,6 +1,6 @@
 import path from 'path';
 import * as vscode from 'vscode';
-import { Sym, SymKind, symRelatedType } from '../semantics/sym';
+import { Origin, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { Type, TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';
@@ -25,21 +25,22 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
-        return getNodesAtPosition(tree, position)
+        return stream(getNodesAtPosition(tree, position))
             .filter(node => node.type === 'string_literal'
             && node.parent?.type === 'include_decl')
-            .flatMap(node => {
+            .filterMap(node => {
                 const stringValue = JSON.parse(node.text);
                 const includePath = this.resolveInclude(document.uri.fsPath, stringValue);
                 if (!includePath) {
-                    return [];
+                    return;
                 }
-                return [{
+                return {
                     originSelectionRange: toVscRange(node),
                     targetUri: vscode.Uri.file(includePath),
                     targetRange: new vscode.Range(0, 0, 0, 0),
-                }];
-            });
+                };
+            })
+            .toArray();
     }
 
     resolveInclude(filePath: string, stringValue: string) {
@@ -85,19 +86,11 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
                     return [];
                 }
 
-                const originSelectionRange = toVscRange(nameNode);
                 return stream([symbol]).concat(this.getSameSymbolInReferringFiles(symbol))
                     .flatMap(sym => sym.origins)
                     .filter(origin => !definitionOnly || !origin.isForwardDecl)
                     .distinctBy(origin => origin.file + '|' + origin.node.startIndex)
-                    .map(origin => {
-                        return {
-                            originSelectionRange,
-                            targetUri: vscode.Uri.file(origin.file),
-                            targetRange: toVscRange(origin.node),
-                            targetSelectionRange: origin.nameNode ? toVscRange(origin.nameNode) : undefined,
-                        };
-                    })
+                    .map(origin => originToLocationLink(nameNode, origin))
                     .toArray();
             });
     }
@@ -141,14 +134,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
                 }
             })
             .flatMap(({ node, symbol }) =>
-                symbol.origins.map(origin => {
-                    return <vscode.LocationLink>{
-                        originSelectionRange: toVscRange(node),
-                        targetUri: vscode.Uri.file(origin.file),
-                        targetRange: toVscRange(origin.node),
-                        targetSelectionRange: origin.nameNode ? toVscRange(origin.nameNode) : undefined,
-                    };
-                }),
+                symbol.origins.map(origin => originToLocationLink(node, origin)),
             )
             .toArray();
     }
@@ -184,4 +170,13 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         }
         return this.elaborationService.getSymbol(filePath, type.qualifiedName);
     }
+}
+
+function originToLocationLink(sourceNode: SyntaxNode, target: Origin): vscode.LocationLink {
+    return {
+        originSelectionRange: toVscRange(sourceNode),
+        targetUri: vscode.Uri.file(target.file),
+        targetRange: toVscRange(target.node),
+        targetSelectionRange: target.nameNode ? toVscRange(target.nameNode) : undefined,
+    };
 }
