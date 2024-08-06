@@ -313,7 +313,7 @@ export class Elaborator {
         });
     }
 
-    private typeLayout(type: Type): TypeLayout {
+    private typeLayout(type: Type): TypeLayout | undefined {
         return typeLayout(type, {
             getStruct: name => {
                 const sym = this.symbols.get(name);
@@ -324,12 +324,12 @@ export class Elaborator {
         });
     }
 
-    private typeSize(type: Type): number {
-        return this.typeLayout(type).size;
+    private typeSize(type: Type): number | undefined {
+        return this.typeLayout(type)?.size;
     }
 
     private isUnsizedType(type: Type): boolean {
-        return this.typeSize(type) === 0;
+        return this.typeSize(type) === undefined;
     }
 
     //==============================================================================

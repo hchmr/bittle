@@ -91,7 +91,7 @@ export class ElaborationService {
         return module.nodeTypeMap.get(node) ?? mkErrorType();
     }
 
-    getLayout(path: string, type: Type): TypeLayout {
+    getLayout(path: string, type: Type): TypeLayout | undefined {
         const module = this.elaborateFile(path);
         return typeLayout(type, {
             getStruct: name => {

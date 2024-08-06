@@ -11,41 +11,45 @@ export type TypeLayoutContext = {
     getStruct(name: string): StructSym | undefined;
 };
 
-export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout {
+export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout | undefined {
     switch (type.kind) {
         case TypeKind.Void: {
-            return { size: 0, align: 1 };
+            return undefined;
         }
         case TypeKind.Bool: {
             return { size: 1, align: 1 };
         }
         case TypeKind.Int: {
-            const size = type.size! / 8;
-            return { size: size, align: size };
+            const byteCount = type.size! / 8;
+            return { size: byteCount, align: byteCount };
         }
         case TypeKind.Ptr: {
             return { size: 8, align: 8 };
         }
         case TypeKind.Arr: {
             const elemLayout = typeLayout(type.elemType, ctx);
-            return { size: elemLayout.size * type.size!, align: elemLayout.align };
+            return elemLayout && { size: elemLayout.size * type.size!, align: elemLayout.align };
         }
         case TypeKind.Struct: {
             const sym = ctx.getStruct(type.qualifiedName);
-            if (sym?.kind !== SymKind.Struct)
-                return { size: 0, align: 1 };
-            return stream(sym.fields ?? [])
+            if (sym?.kind !== SymKind.Struct) {
+                return undefined;
+            }
+            if (!sym.fields || sym.fields.length === 0) {
+                return undefined;
+            }
+            return stream(sym.fields)
                 .map(field => typeLayout(field.type, ctx))
-                .reduce(
-                    (a, b) => ({
+                .reduce<TypeLayout | undefined>(
+                    (a, b) => a && b && ({
                         size: alignUp(a.size, b.align) + b.size,
                         align: Math.max(a.align, b.align),
                     }),
-                    { size: 0, align: 1 },
+                    { size: 0, align: 0 },
                 );
         }
         case TypeKind.Err: {
-            return { size: 0, align: 1 };
+            return undefined;
         }
         default: {
             const unreachable: never = type;

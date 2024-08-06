@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
-import { mkStructType, prettyType, Type } from '../semantics/type';
+import { prettyType, Type } from '../semantics/type';
 import { TypeLayout } from '../semantics/typeLayout';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
@@ -56,8 +56,12 @@ export class HoverProvider implements vscode.HoverProvider {
     }
 
     addLayout(document: vscode.TextDocument, hoverDetail: HoverDetail): HoverDetail {
+        if (hoverDetail.kind === 'sym' && hoverDetail.sym.kind === SymKind.Func) {
+            return hoverDetail; // Don't show layout for return type of functions
+        }
+
         const type = hoverDetail.kind === 'sym'
-            ? structSymType(hoverDetail.sym) ?? symRelatedType(hoverDetail.sym)
+            ? symRelatedType(hoverDetail.sym)
             : hoverDetail.type;
 
         if (type) {
@@ -65,12 +69,6 @@ export class HoverProvider implements vscode.HoverProvider {
         }
 
         return hoverDetail;
-
-        function structSymType(sym: Sym): Type | undefined {
-            if (sym.kind === SymKind.Struct) {
-                return mkStructType(sym.name, sym.qualifiedName);
-            }
-        }
     }
 };
 
