@@ -116,7 +116,7 @@ function* generateBuiltins(): Iterable<CompletionCandidate> {
     yield * builtinValues
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Constant }));
     yield * builtinTypes
-        .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Class }));
+        .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Struct }));
     yield * keywords
         .filter(name => !(<readonly string[]>builtinValues).includes(name))
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Keyword }));
