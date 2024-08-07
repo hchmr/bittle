@@ -15,6 +15,21 @@ export function interceptExceptions(target: unknown, propertyKey: string, descri
     return descriptor;
 }
 
+export function interceptExceptionsAsync(target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+
+    descriptor.value = async function (...args: unknown[]) {
+        try {
+            return await originalMethod.apply(this, args);
+        } catch (error) {
+            vscode.window.showErrorMessage('Uncaught exception: ' + getErrorDescription(error));
+            throw error;
+        }
+    };
+
+    return descriptor;
+}
+
 function getErrorDescription(error: unknown) {
     return error instanceof Error ? error.message : error;
 }

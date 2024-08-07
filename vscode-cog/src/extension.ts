@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CodeActionsProvider } from './features/codeActions';
+import { createCompilerErrorProvider } from './features/compilerErrors';
 import { CompletionProvider } from './features/completion';
 import { ElaborationErrorProvider } from './features/elaborationErrors';
 import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
@@ -9,6 +10,7 @@ import { SemanticTokensProvider } from './features/semanticTokens';
 import { SignatureHelpProvider } from './features/signatureHelp';
 import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
+import { CompilerService } from './services/compilerService';
 import { ElaborationService } from './services/elaborationService';
 import { IncludeGraphService } from './services/includeGraphService';
 import { IncludeResolver } from './services/IncludeResolver';
@@ -31,6 +33,8 @@ export function activate(context: vscode.ExtensionContext) {
     const elaborationService = new ElaborationService(parsingService, includeResolver, cache);
 
     const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
+
+    const compilerService = new CompilerService();
 
     // Hover
 
@@ -57,12 +61,16 @@ export function activate(context: vscode.ExtensionContext) {
     const elaborationErrorProvider = new ElaborationErrorProvider(elaborationService, cache);
     context.subscriptions.push(elaborationErrorProvider);
 
+    const compilerErrorProvider = createCompilerErrorProvider(compilerService);
+    context.subscriptions.push(compilerErrorProvider);
+
     function refreshDiagnostics(document: vscode.TextDocument) {
         if (document.languageId !== 'cog')
             return;
 
         syntaxErrorProvider.updateDiagnostics(document);
         elaborationErrorProvider.updateDiagnostics();
+        compilerErrorProvider.updateDiagnostics();
     }
 
     context.subscriptions.push(
