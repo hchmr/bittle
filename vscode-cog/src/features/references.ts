@@ -59,7 +59,8 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         // add definitions
         if (context.includeDeclaration) {
             references.push(
-                ...stream(symbol.origins)
+                ...stream([symbol]).concat(this.getSameSymbolInReferringFiles(symbol))
+                    .flatMap(sym => sym.origins)
                     .filterMap(origin => origin.nameNode && { file: origin.file, nameNode: origin.nameNode }),
             );
         }
@@ -83,6 +84,11 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
                 };
             })
             .toArray();
+    }
+
+    private getSameSymbolInReferringFiles(symbol: Sym) {
+        return this.findReferringFiles(symbol)
+            .filterMap(filePath => this.elaborationService.getSymbol(filePath, symbol.qualifiedName));
     }
 
     private findReferringFiles(symbol: Sym) {
