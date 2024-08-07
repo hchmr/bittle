@@ -79,7 +79,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     private generateDocumentSymbol(node: SyntaxNode) {
         const nameNode = node.children.find(child => child.type === 'identifier');
         const symbol = new vscode.DocumentSymbol(
-            nameNode?.text ?? '',
+            nameNode?.text || '{unknown}',
             '',
             this.convertSymbolKind(node.type),
             toVscRange(node),
