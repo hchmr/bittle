@@ -84,12 +84,12 @@ export class Lexer {
         let token: Token | undefined;
 
         while (!token) {
+            this.startPos = this.pos;
+            this.startIndex = this.index;
+            
             if (this.isEof) {
                 return this.makeToken('<eof>', '');
             }
-
-            this.startPos = this.pos;
-            this.startIndex = this.index;
             const scanner = Lexer.table(this.cc);
             token = scanner.call(this);
         }
