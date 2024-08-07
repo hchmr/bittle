@@ -144,13 +144,20 @@ export class Elaborator {
         return this.symbols.get(qname);
     }
 
+    private lookupExistingSymbol(name: string) {
+        const qname = this.scope.get(name);
+        if (!qname)
+            return;
+        return this.symbols.get(qname);
+    }
+
     private addSymbol<T extends Sym>(nameNode: SyntaxNode | Nullish, sym: T): T {
         if (!sym.name)
             return sym;
 
         const origin = nameNode ?? sym.origins[0].node;
 
-        const existing = this.lookupSymbol(sym.name);
+        const existing = this.lookupExistingSymbol(sym.name);
         if (!existing) {
             this.scope.add(sym.name, sym.qualifiedName);
             this.symbols.set(sym.qualifiedName, sym);
