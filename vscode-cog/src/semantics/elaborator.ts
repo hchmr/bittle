@@ -3,6 +3,7 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode, Tree } from '../syntax';
 import {
+    ErrorNodeType,
     ExprNodeType,
     ExprNodeTypes,
     isExprNode,
@@ -10,6 +11,8 @@ import {
     isTopLevelNode,
     LiteralNodeType,
     LiteralNodeTypes,
+    NodeTypes,
+    StmtNodeType,
     StmtNodeTypes,
     TopLevelNodeType,
     TopLevelNodeTypes,
@@ -229,7 +232,7 @@ export class Elaborator {
             return mkErrorType();
 
         return this.trackTyping(typeNode, () => {
-            const nodeType = typeNode.type as TypeNodeType;
+            const nodeType = typeNode.type as TypeNodeType | ErrorNodeType;
             switch (nodeType) {
                 case TypeNodeTypes.GroupedType: {
                     const nestedTypeNode = typeNode.childForFieldName('type');
@@ -286,6 +289,8 @@ export class Elaborator {
 
                     return mkArrayType(elemType, size);
                 }
+                case NodeTypes.Error:
+                    return mkErrorType();
                 default: {
                     const unreachable: never = nodeType;
                     throw new Error(`Unexpected node type: ${unreachable}`);
@@ -394,7 +399,7 @@ export class Elaborator {
     }
 
     private elabTopLevelDecl(node: SyntaxNode) {
-        const nodeType = node.type as TopLevelNodeType;
+        const nodeType = node.type as TopLevelNodeType | ErrorNodeType;
         switch (nodeType) {
             case TopLevelNodeTypes.Include:
                 this.elabInclude(node);
@@ -413,6 +418,8 @@ export class Elaborator {
                 break;
             case TopLevelNodeTypes.Enum:
                 this.elabEnum(node);
+                break;
+            case NodeTypes.Error:
                 break;
             default: {
                 const unreachable: never = nodeType;
@@ -636,7 +643,8 @@ export class Elaborator {
         if (!node)
             return;
 
-        switch (node.type) {
+        const nodeType = node.type as StmtNodeType | ErrorNodeType;
+        switch (nodeType) {
             case StmtNodeTypes.BlockStmt:
                 this.elabBlockStmt(node);
                 break;
@@ -658,8 +666,11 @@ export class Elaborator {
             case StmtNodeTypes.ExprStmt:
                 this.elabExprStmt(node);
                 break;
+            case NodeTypes.Error:
+                break;
             default:
-                throw new Error(`Unexpected node type: ${node.type}`);
+                const unreachable: never = nodeType;
+                throw new Error(`Unexpected node type: ${unreachable}`);
         }
     }
 
@@ -787,7 +798,7 @@ export class Elaborator {
             return mkErrorType();
 
         return this.trackTyping(node, () => {
-            const nodeType = node.type as ExprNodeType;
+            const nodeType = node.type as ExprNodeType | ErrorNodeType;
             switch (nodeType) {
                 case ExprNodeTypes.GroupedExpr:
                     return this.elabGroupedExpr(node);
@@ -811,6 +822,8 @@ export class Elaborator {
                     return this.elabFieldExpr(node);
                 case ExprNodeTypes.CastExpr:
                     return this.elabCastExpr(node);
+                case NodeTypes.Error:
+                    return mkErrorType();
                 default: {
                     const unreachable: never = nodeType;
                     throw new Error(`Unexpected node type: ${unreachable} `);

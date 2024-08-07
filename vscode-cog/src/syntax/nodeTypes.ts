@@ -8,6 +8,7 @@ export type TypeNodeType = ValuesOf<typeof TypeNodeTypes>;
 export type StmtNodeType = ValuesOf<typeof StmtNodeTypes>;
 export type ExprNodeType = ValuesOf<typeof ExprNodeTypes>;
 export type LiteralNodeType = ValuesOf<typeof LiteralNodeTypes>;
+export type ErrorNodeType = typeof NodeTypes.Error;
 export type TokenNodeType = ValuesOf<typeof TokenNodeTypes>;
 export type CompositeNodeType = ValuesOf<typeof CompositeNodeTypes>;
 export type NodeType = ValuesOf<typeof NodeTypes>;
