@@ -5,7 +5,7 @@
     "version": "0.0.1",
     "publisher": "anon",
     "scripts": {
-        "vscode:prepublish": "npm run compile",
+        "vscode:prepublish": "npm run build",
         "build": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "test": "vitest",
