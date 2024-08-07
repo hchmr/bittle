@@ -119,7 +119,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
     private *listFilesInWorkspaceFolder(folder: string): Iterable<string> {
         for (const entry of fs.readdirSync(folder, { withFileTypes: true, recursive: true })) {
             if (entry.isFile() && isCogFile(entry.name)) {
-                yield path.join(folder, entry.name);
+                yield path.join(entry.parentPath, entry.name);
             }
         }
     }
