@@ -180,8 +180,9 @@ export class Lexer {
         }
         if (this.isEof) {
             this.addError(this.pos, 'Unterminated string literal');
+        } else {
+            this.bump();
         }
-        this.bump();
         return this.makeToken('string_literal');
     }
 
