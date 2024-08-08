@@ -846,7 +846,7 @@ export class Elaborator {
 
         switch (sym.kind) {
             case SymKind.Const:
-                return mkIntType(64);
+                return mkIntType(32);
             case SymKind.Global:
             case SymKind.Local:
             case SymKind.FuncParam:
