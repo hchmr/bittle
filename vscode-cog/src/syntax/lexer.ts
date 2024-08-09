@@ -86,7 +86,7 @@ export class Lexer {
         while (!token) {
             this.startPos = this.pos;
             this.startIndex = this.index;
-            
+
             if (this.isEof) {
                 return this.makeToken('<eof>', '');
             }

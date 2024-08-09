@@ -668,9 +668,10 @@ export class Elaborator {
                 break;
             case NodeTypes.Error:
                 break;
-            default:
+            default: {
                 const unreachable: never = nodeType;
                 throw new Error(`Unexpected node type: ${unreachable}`);
+            }
         }
     }
 
