@@ -39,6 +39,10 @@ func mk_struct_type(name: *Char): *Type {
     return type;
 }
 
+func mk_never_type(): *Type {
+    return mk_type(Type_Never);
+}
+
 func type_align(type: *Type): Int {
     if (type.kind == Type_Void)
         return 1;
@@ -52,6 +56,8 @@ func type_align(type: *Type): Int {
         return type_align(type.base);
     if (type.kind == Type_Struct)
         return 8; // Maximum possible alignment.
+    if (type.kind == Type_Never)
+        return 1;
     assert(false, "type_align: Unreachable.");
 }
 
@@ -68,6 +74,8 @@ func type_size(type: *Type): Int {
         return type.len * align_up(type_size(type.base), type_align(type.base));
     if (type.kind == Type_Struct)
         return type.field_count == 0 ? -1 : align_up(type.unpadded_size, type_align(type));
+    if (type.kind == Type_Never)
+        return -1;
     assert(false, "type_size: Unreachable.");
 }
 
@@ -90,6 +98,8 @@ func is_scalar(type: *Type): Bool {
 }
 
 func type_le(t1: *Type, t2: *Type): Bool {
+    if (t1.kind == Type_Never)
+        return true;
     if (is_scalar(t1) && t2.kind == Type_Bool)
         return true;
     if (t1.kind == Type_Int && t2.kind == Type_Int)
@@ -154,6 +164,8 @@ func print_type(file: *File, type: *Type) {
         fprintf(file, "; %d]", type.len);
     } else if (type.kind == Type_Struct) {
         fprintf(file, "%s", type.name);
+    } else if (type.kind == Type_Never) {
+        fprintf(file, "!");
     } else {
         assert(false, "print_type: Unreachable.");
     }

@@ -30,6 +30,7 @@ enum {
     Type_Ptr,
     Type_Arr,
     Type_Struct,
+    Type_Never,
 }
 
 struct Type {
@@ -50,6 +51,7 @@ struct Type {
 
 func mk_type(kind: Int): *Type;
 func mk_void_type(): *Type;
+func mk_never_type(): *Type;
 func mk_bool_type(): *Type;
 func mk_int_type(size: Int): *Type;
 func mk_ptr_type(base: *Type): *Type;

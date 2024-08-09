@@ -172,7 +172,7 @@ func emit_expr(ctx: *CodegenCtx, e: *Expr, t0: Int) {
             emit_pop(ctx, i);
         }
         printf("  bl %s\n", e.sym.name);
-        if (e.type.kind != Type_Void) {
+        if (e.type.kind != Type_Void && e.type.kind != Type_Never) {
             emit_sign_extend(ctx, e.type, t0, 0);
         }
     } else if (str_eq(e.kind, "&_")) {
@@ -265,8 +265,12 @@ func emit_expr(ctx: *CodegenCtx, e: *Expr, t0: Int) {
     } else if (str_eq(e.kind, "<cast>")) {
         var target = e.type;
         var source = e.children[0].type;
-        assert(is_scalar(target) && is_scalar(source), "emit_expr: <cast> should have scalar types.");
         emit_expr(ctx, e.children[0], t0);
+        if (source.kind == Type_Never) {
+            printf("  // cast of !\n", t0);
+            return;
+        }
+        assert(is_scalar(target) && is_scalar(source), "emit_expr: <cast> should have scalar types.");
         if (target.kind == Type_Bool) {
             printf("  cmp x%d, #0\n", t0);
             printf("  cset w%d, ne\n", t0);

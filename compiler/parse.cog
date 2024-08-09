@@ -100,6 +100,8 @@ func p_type(self: *Parser): *Type {
         return mk_int_type(8);
     } else if (eat("*", self)) {
         return mk_ptr_type(p_type(self));
+    } else if (eat("!", self)) {
+        return mk_never_type();
     } else if (eat("[", self)) {
         var type = p_type(self);
         expect(";", self);
@@ -120,6 +122,8 @@ func p_type(self: *Parser): *Type {
         }
         next_tok(self);
         return sym.type;
+    } else if (eat("!", self)) {
+        return mk_never_type();
     } else {
         error_at(&self.tok_pos);
         fprintf(stderr, "Type expected.\n");
