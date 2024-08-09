@@ -1,0 +1,377 @@
+include "libc.cogs";
+
+//==============================================================================
+//== misc.cog
+
+struct Pos {
+    file: *Char,
+    row: Int32,
+    col: Int32,
+}
+
+struct List {
+    elems: *(*Void),
+    len: Int,
+    cap: Int,
+}
+
+func error_at(pos: *Pos);
+func die(msg: *Char): !;
+func die_at(pos: *Pos, msg: *Char): !;
+
+func list_new(): *List;
+func list_push(self: *List, elem: *Void);
+
+func str_eq(a: *Char, b: *Char): Bool;
+
+func read_file(file: *File): *Char;
+
+//==============================================================================
+//== tok.cog
+
+// NOTE: When updating this declaration, remember to also update `pretty_tok_kind` and `lookup_keyword`.
+enum {
+    Tok_Eof = 1,
+    // Identifier
+    Tok_Ident,
+    // Literals
+    Tok_Int,
+    Tok_String,
+    Tok_Char,
+    // Keywords
+    Tok_As,
+    Tok_Break,
+    Tok_Const,
+    Tok_Continue,
+    Tok_Else,
+    Tok_Enum,
+    Tok_Extern,
+    Tok_Func,
+    Tok_If,
+    Tok_Include,
+    Tok_Return,
+    Tok_Sizeof,
+    Tok_Struct,
+    Tok_Var,
+    Tok_While,
+    // Symbols
+    Tok_LParen,
+    Tok_RParen,
+    Tok_LBrace,
+    Tok_RBrace,
+    Tok_LBracket,
+    Tok_RBracket,
+    Tok_Comma,
+    Tok_Semicolon,
+    Tok_Dot,
+    Tok_DotDot,
+    Tok_DotDotDot,
+    Tok_Colon,
+    Tok_ColonColon,
+    Tok_Arrow,
+    Tok_Plus,
+    Tok_PlusEq,
+    Tok_Minus,
+    Tok_MinusEq,
+    Tok_Star,
+    Tok_StarEq,
+    Tok_Slash,
+    Tok_SlashEq,
+    Tok_Percent,
+    Tok_PercentEq,
+    Tok_Amp,
+    Tok_AmpEq,
+    Tok_AmpAmp,
+    Tok_Bar,
+    Tok_BarEq,
+    Tok_BarBar,
+    Tok_Caret,
+    Tok_CaretEq,
+    Tok_Bang,
+    Tok_Tilde,
+    Tok_Question,
+    Tok_Lt,
+    Tok_LtLtEq,
+    Tok_LtLt,
+    Tok_LtEq,
+    Tok_Gt,
+    Tok_GtEq,
+    Tok_GtGt,
+    Tok_GtGtEq,
+    Tok_Eq,
+    Tok_EqEq,
+    Tok_BangEq,
+}
+
+struct Tok {
+    kind: Int32,
+    pos: Pos,
+    lexeme: *Char,
+}
+
+func pretty_tok_kind(kind: Int32): *Char;
+
+//==============================================================================
+//== ast.cog
+
+struct Expr;
+
+// Type
+
+struct TypeExpr;
+
+enum {
+    TypeExpr_Named,
+    TypeExpr_Ptr,
+    TypeExpr_Array,
+    TypeExpr_Never,
+}
+
+struct PtrTypeExpr {
+    pointee: *TypeExpr,
+}
+
+struct ArrTypeExpr {
+    elem: *TypeExpr,
+    size: *Expr,
+}
+
+struct TypeExpr {
+    kind: Int32,
+    as_named: *Char,
+    as_ptr: PtrTypeExpr,
+    as_array: ArrTypeExpr,
+}
+
+// Literal
+
+struct Literal;
+
+enum {
+    Literal_Int,
+    Literal_Char,
+    Literal_String,
+}
+
+struct Literal {
+    kind: Int32,
+    text: *Char,
+}
+
+// Expr
+
+enum {
+    Expr_Ident,
+    Expr_Literal,
+    Expr_Call,
+    Expr_Index,
+    Expr_Member,
+    Expr_Sizeof,
+    Expr_Unary,
+    Expr_Binary,
+    Expr_Ternary,
+    Expr_Cast,
+}
+
+struct IdentExpr {
+    name: *Char,
+}
+
+struct CallExpr {
+    callee: *Expr,
+    args: *List, // List<Expr>
+}
+
+struct IndexExpr {
+    indexee: *Expr,
+    index: *Expr,
+}
+
+struct MemberExpr {
+    left: *Expr,
+    name: *Char,
+}
+
+struct SizeofExpr {
+    type: *TypeExpr,
+}
+
+struct UnaryExpr {
+    op: Int32,
+    right: *Expr,
+}
+
+struct BinaryExpr {
+    op: Int32,
+    left: *Expr,
+    right: *Expr,
+}
+
+struct TernaryExpr {
+    cond: *Expr,
+    then_expr: *Expr,
+    else_expr: *Expr,
+}
+
+struct CastExpr {
+    expr: *Expr,
+    type: *TypeExpr,
+}
+
+struct Expr {
+    kind: Int32,
+    pos: Pos,
+    as_ident: IdentExpr,
+    as_literal: *Literal,
+    as_call: CallExpr,
+    as_index: IndexExpr,
+    as_member: MemberExpr,
+    as_sizeof: SizeofExpr,
+    as_unary: UnaryExpr,
+    as_binary: BinaryExpr,
+    as_ternary: TernaryExpr,
+    as_cast: CastExpr,
+}
+
+// Stmt
+
+struct Stmt;
+
+enum {
+    Stmt_Block,
+    Stmt_Local,
+    Stmt_If,
+    Stmt_While,
+    Stmt_Return,
+    Stmt_Break,
+    Stmt_Continue,
+    Stmt_Expr,
+}
+
+struct BlockStmt {
+    stmts: *List, // List<Stmt>
+}
+
+struct LocalStmt {
+    name: *Char,
+    type: *TypeExpr,
+    init: *Expr,
+}
+
+struct IfStmt {
+    cond: *Expr,
+    then_stmt: *Stmt,
+    else_stmt: *Stmt,
+}
+
+struct WhileStmt {
+    cond: *Expr,
+    body: *Stmt,
+}
+
+struct ReturnStmt {
+    expr: *Expr,
+}
+
+struct ExprStmt {
+    expr: *Expr,
+}
+
+struct Stmt {
+    kind: Int32,
+    pos: Pos,
+    as_block: BlockStmt,
+    as_local: LocalStmt,
+    as_if: IfStmt,
+    as_while: WhileStmt,
+    as_return: ReturnStmt,
+    as_expr: ExprStmt,
+}
+
+// Decl
+
+enum {
+    Decl_Include,
+    Decl_Struct,
+    Decl_Func,
+    Decl_Enum,
+    Decl_Const,
+    Decl_Global,
+}
+
+struct IncludeDecl {
+    file_name: *Char,
+}
+
+struct StructField {
+    name: *Char,
+    type: *TypeExpr,
+}
+
+struct StructDecl {
+    name: *Char,
+    fields: *List, // List<StructField>
+}
+
+struct FuncParam {
+    name: *Char,
+    type: *TypeExpr,
+}
+
+struct FuncDecl {
+    name: *Char,
+    params: *List, // List<FuncParam>
+    return_type: *TypeExpr,
+    body: *Stmt,
+}
+
+struct EnumMember {
+    name: *Char,
+    value: *Expr,
+}
+
+struct EnumDecl {
+    members: *List, // List<EnumMember>
+}
+
+struct ConstDecl {
+    name: *Char,
+    value: *Expr,
+}
+
+struct GlobalDecl {
+    name: *Char,
+    type: *TypeExpr,
+    value: *Expr,
+}
+
+struct Decl {
+    kind: Int32,
+    pos: Pos,
+    as_include: IncludeDecl,
+    as_struct: StructDecl,
+    as_func: FuncDecl,
+    as_enum: EnumDecl,
+    as_const: ConstDecl,
+    as_global: GlobalDecl,
+}
+
+struct Ast {
+    decls: *List, // List<Decl>
+}
+
+//==============================================================================
+//== lexer.cog
+
+struct Lexer;
+
+func lexer_new(file_name: *Char, input: *Char): *Lexer;
+func lexer_next(self: *Lexer, out: *Tok);
+
+//==============================================================================
+//== parser.cog
+
+struct Parser;
+
+func parser_new(lexer: *Lexer): *Parser;
+func parser_run(self: *Parser): *Ast;

@@ -1,0 +1,724 @@
+include "cog.cogs";
+
+//==============================================================================
+//== Parser core
+
+struct Parser {
+    lexer: *Lexer,
+    tok: Tok,
+}
+
+func advance(self: *Parser) {
+    lexer_next(self.lexer, &self.tok);
+}
+
+func parser_new(lexer: *Lexer): *Parser {
+    var self: *Parser = calloc(1, sizeof(Parser));
+    self.lexer = lexer;
+    advance(self);
+    return self;
+}
+
+func at_eof(self: *Parser): Bool {
+    return self.tok.kind == Tok_Eof;
+}
+
+func at(self: *Parser, kind: Int32): Bool {
+    return self.tok.kind == kind;
+}
+
+func eat(self: *Parser, kind: Int32): Bool {
+    if (at(self, kind)) {
+        advance(self);
+        return true;
+    }
+    return false;
+}
+
+func expect(self: *Parser, kind: Int32) {
+    if (!eat(self, kind)) {
+        error_at(&self.tok.pos);
+        fprintf(
+            stderr,
+            "Expected %s, but got %s.\n",
+            pretty_tok_kind(kind),
+            pretty_tok_kind(self.tok.kind),
+        );
+        exit(1);
+    }
+}
+
+func expect_with_lexeme(self: *Parser, kind: Int32): *Char {
+    var tok = self.tok;
+    expect(self, kind);
+    return tok.lexeme;
+}
+
+func p_ident(self: *Parser): *Char {
+    return expect_with_lexeme(self, Tok_Ident);
+}
+
+//==============================================================================
+//== Types
+
+func p_expr(self: *Parser, max_prec: Int32): *Expr;
+
+func p_type(self: *Parser): *TypeExpr;
+
+func mk_type(self: *Parser, kind: Int32): *TypeExpr {
+    var result: *TypeExpr = calloc(1, sizeof(TypeExpr));
+    result.kind = kind;
+    return result;
+}
+
+func p_named_type(self: *Parser): *TypeExpr {
+    var name = p_ident(self);
+    var result = mk_type(self, TypeExpr_Named);
+    result.as_named = name;
+    return result;
+}
+
+func p_grouped_type(self: *Parser): *TypeExpr {
+    expect(self, Tok_LParen);
+    var result = p_type(self);
+    expect(self, Tok_RParen);
+    return result;
+}
+
+func p_ptr_type(self: *Parser): *TypeExpr {
+    expect(self, Tok_Star);
+    var pointee = p_type(self);
+
+    var result = mk_type(self, TypeExpr_Ptr);
+    result.as_ptr.pointee = pointee;
+    return result;
+}
+
+func p_arr_type(self: *Parser): *TypeExpr {
+    expect(self, Tok_LBracket);
+    var elem = p_type(self);
+    expect(self, Tok_Semicolon);
+    var size = p_expr(self, 0);
+    expect(self, Tok_RBracket);
+    
+    var result = mk_type(self, TypeExpr_Array);
+    result.as_array.elem = elem;
+    result.as_array.size = size;
+    return result;
+}
+
+func p_never_type(self: *Parser): *TypeExpr {
+    expect(self, Tok_Bang);
+    return mk_type(self, TypeExpr_Never);
+}
+
+func p_type(self: *Parser): *TypeExpr {
+    if (at(self, Tok_Ident)) {
+        return p_named_type(self);
+    } else if (at(self, Tok_LParen)) {
+        return p_grouped_type(self);
+    } else if (at(self, Tok_Star)) {
+        return p_ptr_type(self);
+    } else if (at(self, Tok_LBracket)) {
+        return p_arr_type(self);
+    } else if (at(self, Tok_Bang)) {
+        return p_never_type(self);
+    } else {
+        die_at(&self.tok.pos, "Unexpected start of type.");
+    }
+}
+
+//==============================================================================
+//== Literals
+
+func mk_literal(self: *Parser, kind: Int32): *Literal {
+    var result: *Literal = calloc(1, sizeof(Literal));
+    result.kind = kind;
+    return result;
+}
+
+func p_litral_as(self: *Parser, kind: Int32): *Literal {
+    var text = expect_with_lexeme(self, kind);
+    var result = mk_literal(self, kind);
+    result.text = text;
+    return result;
+}
+
+func p_literal(self: *Parser): *Literal {
+    if (at(self, Tok_Int)) {
+        return p_litral_as(self, Tok_Int);
+    } else if (at(self, Tok_Char)) {
+        return p_litral_as(self, Tok_Char);
+    } else if (at(self, Tok_String)) {
+        return p_litral_as(self, Tok_String);
+    } else {
+        die_at(&self.tok.pos, "Unexpected start of literal.");
+    }
+}
+
+//==============================================================================
+//== Expressions
+
+enum {
+    Prec_Assign,
+    Prec_Cond,
+    Prec_Or,
+    Prec_And,
+    Prec_BitOr,
+    Prec_BitXor,
+    Prec_BitAnd,
+    Prec_Cmp,
+    Prec_Shift,
+    Prec_Add,
+    Prec_Mul,
+    Prec_Cast,
+    Prec_Unary,
+    Prec_Postfix,
+    Prec_Primary,
+}
+
+func p_expr(self: *Parser, max_prec: Int32): *Expr;
+
+func mk_expr(self: *Parser, kind: Int32): *Expr {
+    var result: *Expr = calloc(1, sizeof(Expr));
+    result.kind = kind;
+    return result;
+}  
+
+func p_grouped_expr(self: *Parser): *Expr {
+    expect(self, Tok_LParen);
+    var expr = p_expr(self, 0);
+    expect(self, Tok_RParen);
+    return expr;
+}
+
+func p_name_expr(self: *Parser): *Expr {
+    var name = p_ident(self);
+
+    var result = mk_expr(self, Expr_Ident);
+    result.as_ident.name = name;
+    return result;
+}
+
+func p_literal_expr(self: *Parser): *Expr {
+    var literal = p_literal(self);
+
+    var result = mk_expr(self, Expr_Literal);
+    result.as_literal = literal;
+    return result;
+}
+
+func p_sizeof_expr(self: *Parser): *Expr {
+    expect(self, Tok_Sizeof);
+    expect(self, Tok_LParen);
+    var type = p_type(self);
+    expect(self, Tok_RParen);
+
+    var result = mk_expr(self, Expr_Sizeof);
+    result.as_sizeof.type = type;
+    return result;
+}
+
+func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
+    expect(self, Tok_LBracket);
+    var index = p_expr(self, 0);
+    expect(self, Tok_RBracket);
+
+    var result = mk_expr(self, Expr_Index);
+    result.as_index.indexee = indexee;
+    result.as_index.index = index;
+    return result;
+}
+
+func p_call_expr(self: *Parser, callee: *Expr): *Expr {
+    expect(self, Tok_LParen);
+    var args: *List = list_new();
+    while (!at_eof(self) && !eat(self, Tok_RParen)) {
+        var arg = p_expr(self, 0);
+        list_push(args, arg);
+        if (!at(self, Tok_RParen)) {
+            expect(self, Tok_Comma);
+        }
+    }
+
+    var result = mk_expr(self, Expr_Call);
+    result.as_call.callee = callee;
+    result.as_call.args = args;
+    return result;
+}
+
+func p_member_expr(self: *Parser, left: *Expr): *Expr {
+    expect(self, Tok_Dot);
+    var name = p_ident(self);
+
+    var result = mk_expr(self, Expr_Member);
+    result.as_member.left = left;
+    result.as_member.name = name;
+    return result;
+}
+
+func p_unary_expr(self: *Parser, op: Int32): *Expr {
+    var right = p_expr(self, Prec_Unary);
+    
+    var result = mk_expr(self, Expr_Unary);
+    result.as_unary.op = op;
+    result.as_unary.right = right;
+    return result;
+}
+
+func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
+    var type = p_type(self);
+
+    var result = mk_expr(self, Expr_Cast);
+    result.as_cast.type = type;
+    result.as_cast.expr = expr;
+    return result;
+}
+
+func p_binary_expr(self: *Parser, lhs: *Expr, op: Int32, prec: Int32): *Expr {
+    var rhs = p_expr(self, prec);
+
+    var result = mk_expr(self, Expr_Binary);
+    result.as_binary.op = op;
+    result.as_binary.left = lhs;
+    result.as_binary.right = rhs;
+    return result;
+}
+
+func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
+    expect(self, Tok_Question);
+    var then_expr = p_expr(self, Prec_Cond);
+    expect(self, Tok_Colon);
+    var else_expr = p_expr(self, Prec_Cond);
+    
+    var result = mk_expr(self, Expr_Ternary);
+    result.as_ternary.cond = cond;
+    result.as_ternary.then_expr = then_expr;
+    result.as_ternary.else_expr = else_expr;
+    return result;
+}
+
+func p_expr(self: *Parser, max_prec: Int32): *Expr {
+    var lhs: *Expr;
+
+    if (at(self, Tok_LParen)) {
+        lhs = p_grouped_expr(self);
+    } else if (at(self, Tok_Ident)) {
+        lhs = p_name_expr(self);
+    } else if (at(self, Tok_Int) || at(self, Tok_Char) || at(self, Tok_String)) {
+        lhs = p_literal_expr(self);
+    } else if (at(self, Tok_Sizeof)) {
+        lhs = p_sizeof_expr(self);
+    } else if (max_prec <= Prec_Unary && eat(self, Tok_Minus)) {
+        lhs = p_unary_expr(self, Tok_Minus);
+    } else if (max_prec <= Prec_Unary && eat(self, Tok_Bang)) {
+        lhs = p_unary_expr(self, Tok_Bang);
+    } else if (max_prec <= Prec_Unary && eat(self, Tok_Star)) {
+        lhs = p_unary_expr(self, Tok_Star);
+    } else if (max_prec <= Prec_Unary && eat(self, Tok_Amp)) {
+        lhs = p_unary_expr(self, Tok_Amp);
+    } else {
+        die_at(&self.tok.pos, "Unexpected start of expression.");
+    }
+
+    while (true) {
+        if (max_prec <= Prec_Assign && eat(self, Tok_Eq)) {
+            lhs = p_binary_expr(self, lhs, Tok_Eq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_PlusEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_PlusEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_MinusEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_MinusEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_StarEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_StarEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_SlashEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_SlashEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_PercentEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_PercentEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_AmpEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_AmpEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_BarEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_BarEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_CaretEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_CaretEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_LtLtEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_LtLtEq, Prec_Assign);
+        } else if (max_prec <= Prec_Assign && eat(self, Tok_GtGtEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_GtGtEq, Prec_Assign);
+        } else if (max_prec <= Prec_Cond && at(self, Tok_Question)) {
+            lhs = p_ternary_expr(self, lhs);
+        } else if (max_prec <= Prec_Or && eat(self, Tok_BarBar)) {
+            lhs = p_binary_expr(self, lhs, Tok_BarBar, Prec_Or + 1);
+        } else if (max_prec <= Prec_And && eat(self, Tok_AmpAmp)) {
+            lhs = p_binary_expr(self, lhs, Tok_AmpAmp, Prec_And + 1);
+        } else if (max_prec <= Prec_BitOr && eat(self, Tok_Bar)) {
+            lhs = p_binary_expr(self, lhs, Tok_Bar, Prec_BitOr + 1);
+        } else if (max_prec <= Prec_BitXor && eat(self, Tok_Caret)) {
+            lhs = p_binary_expr(self, lhs, Tok_Caret, Prec_BitXor + 1);
+        } else if (max_prec <= Prec_BitAnd && eat(self, Tok_Amp)) {
+            lhs = p_binary_expr(self, lhs, Tok_Amp, Prec_BitAnd + 1);
+        } else if (max_prec <= Prec_Cmp && eat(self, Tok_Gt)) {
+            lhs = p_binary_expr(self, lhs, Tok_Gt, Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(self, Tok_GtEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_GtEq, Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(self, Tok_Lt)) {
+            lhs = p_binary_expr(self, lhs, Tok_Lt, Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(self, Tok_LtEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_LtEq, Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(self, Tok_BangEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_BangEq, Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Cmp && eat(self, Tok_EqEq)) {
+            lhs = p_binary_expr(self, lhs, Tok_EqEq, Prec_Cmp + 1);
+        } else if (max_prec <= Prec_Shift && eat(self, Tok_GtGt)) {
+            lhs = p_binary_expr(self, lhs, Tok_GtGt, Prec_Shift + 1);
+        } else if (max_prec <= Prec_Shift && eat(self, Tok_LtLt)) {
+            lhs = p_binary_expr(self, lhs, Tok_LtLt, Prec_Shift + 1);
+        } else if (max_prec <= Prec_Add && eat(self, Tok_Minus)) {
+            lhs = p_binary_expr(self, lhs, Tok_Minus, Prec_Add + 1);
+        } else if (max_prec <= Prec_Add && eat(self, Tok_Plus)) {
+            lhs = p_binary_expr(self, lhs, Tok_Plus, Prec_Add + 1);
+        } else if (max_prec <= Prec_Mul && eat(self, Tok_Percent)) {
+            lhs = p_binary_expr(self, lhs, Tok_Percent, Prec_Mul + 1);
+        } else if (max_prec <= Prec_Mul && eat(self, Tok_Slash)) {
+            lhs = p_binary_expr(self, lhs, Tok_Slash, Prec_Mul + 1);
+        } else if (max_prec <= Prec_Mul && eat(self, Tok_Star)) {
+            lhs = p_binary_expr(self, lhs, Tok_Star, Prec_Mul + 1);
+        } else if (max_prec <= Prec_Cast && eat(self, Tok_As)) {
+            lhs = p_cast_expr(self, lhs); 
+        } else if (max_prec <= Prec_Postfix && at(self, Tok_LBracket)) {
+            lhs = p_index_expr(self, lhs);
+        } else if (max_prec <= Prec_Postfix && at(self, Tok_LParen)) {
+            lhs = p_call_expr(self, lhs);
+        } else if (max_prec <= Prec_Postfix && at(self, Tok_Dot)) {
+            lhs = p_member_expr(self, lhs);
+        } else {
+            break;
+        }
+    }
+    return lhs;
+}
+
+//==============================================================================
+//== Statements
+
+func mk_stmt(self: *Parser, kind: Int32): *Stmt {
+    var result: *Stmt = calloc(1, sizeof(Stmt));
+    result.kind = kind;
+    return result;
+}
+
+func p_stmt(self: *Parser): *Stmt;
+
+func p_block(self: *Parser): *Stmt {
+    expect(self, Tok_LBrace);
+    var stmts: *List = list_new();
+    while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+        var stmt = p_stmt(self);
+        list_push(stmts, stmt);
+    }
+    var result = mk_stmt(self, Stmt_Block);
+    result.as_block.stmts = stmts;
+    return result;
+}
+
+func p_local(self: *Parser): *Stmt {
+    expect(self, Tok_Var);
+    var name = p_ident(self);
+    var type: *TypeExpr = null;
+    if (eat(self, Tok_Colon)) {
+        type = p_type(self);
+    }
+    var init: *Expr = null;
+    if (eat(self, Tok_Eq)) {
+        init = p_expr(self, 0);
+    }
+    expect(self, Tok_Semicolon);
+
+    var result = mk_stmt(self, Stmt_Local);
+    result.as_local.name = name;
+    result.as_local.type = type;
+    result.as_local.init = init;
+    return result;
+}
+
+func p_if_stmt(self: *Parser): *Stmt {
+    expect(self, Tok_If);
+    expect(self, Tok_LParen);
+    var cond = p_expr(self, 0);
+    expect(self, Tok_RParen);
+    var then_stmt = p_stmt(self);
+    var else_stmt: *Stmt = null;
+    if (eat(self, Tok_Else)) {
+        else_stmt = p_stmt(self);
+    }
+
+    var result = mk_stmt(self, Stmt_If);
+    result.as_if.cond = cond;
+    result.as_if.then_stmt = then_stmt;
+    result.as_if.else_stmt = else_stmt;
+    return result;
+}
+
+func p_while_stmt(self: *Parser): *Stmt {
+    expect(self, Tok_While);
+    expect(self, Tok_LParen);
+    var cond = p_expr(self, 0);
+    expect(self, Tok_RParen);
+    var body = p_stmt(self);
+
+    var result = mk_stmt(self, Stmt_While);
+    result.as_while.cond = cond;
+    result.as_while.body = body;
+    return result;
+}
+
+func p_return_stmt(self: *Parser): *Stmt {
+    expect(self, Tok_Return);
+    var expr: *Expr = null;
+    if (!eat(self, Tok_Semicolon)) {
+        expr = p_expr(self, 0);
+        expect(self, Tok_Semicolon);
+    }
+
+    var result = mk_stmt(self, Stmt_Return);
+    result.as_return.expr = expr;
+    return result;
+}
+
+func p_break_stmt(self: *Parser): *Stmt {
+    expect(self, Tok_Break);
+    expect(self, Tok_Semicolon);
+
+    var result = mk_stmt(self, Stmt_Break);
+    return result;
+}
+
+func p_continue_stmt(self: *Parser): *Stmt {
+    expect(self, Tok_Continue);
+    expect(self, Tok_Semicolon);
+
+    var result = mk_stmt(self, Stmt_Continue);
+    return result;
+}
+
+func p_expr_stmt(self: *Parser): *Stmt {
+    var expr = p_expr(self, 0);
+    expect(self, Tok_Semicolon);
+
+    var result = mk_stmt(self, Stmt_Expr);
+    result.as_expr.expr = expr;
+    return result;
+}
+
+func p_stmt(self: *Parser): *Stmt {
+    if (at(self, Tok_LBrace)) {
+        return p_block(self);
+    } else if (at(self, Tok_Var)) {
+        return p_local(self);
+    } else if (at(self, Tok_If)) {
+        return p_if_stmt(self);
+    } else if (at(self, Tok_While)) {
+        return p_while_stmt(self);
+    } else if (at(self, Tok_Return)) {
+        return p_return_stmt(self);
+    } else if (at(self, Tok_Break)) {
+        return p_break_stmt(self);
+    } else if (at(self, Tok_Continue)) {
+        return p_continue_stmt(self);
+    } else {
+        return p_expr_stmt(self);
+    }
+}
+
+//==============================================================================
+//== Declarations
+
+func mk_decl(self: *Parser, kind: Int32): *Decl {
+    var result: *Decl = calloc(1, sizeof(Decl));
+    result.kind = kind;
+    return result;
+}
+
+func p_include_decl(self: *Parser): *Decl {
+    expect(self, Tok_Include);
+    var file_name = expect_with_lexeme(self, Tok_String);
+    expect(self, Tok_Semicolon);
+
+    var result = mk_decl(self, Decl_Include);
+    result.as_include.file_name = file_name;
+    return result;
+}
+
+func p_struct_field(self: *Parser): *StructField {
+    var name = p_ident(self);
+    expect(self, Tok_Colon);
+    var type = p_type(self);
+
+    var result: *StructField = calloc(1, sizeof(StructField));
+    result.name = name;
+    result.type = type;
+    return result;
+}
+
+func p_struct_decl(self: *Parser): *Decl {
+    expect(self, Tok_Struct);
+    var name = p_ident(self);
+    var body: *List;
+    if (eat(self, Tok_LBrace)) {
+        body = list_new();
+        while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+            var field = p_struct_field(self);
+            list_push(body, field);
+            if (!at(self, Tok_RBrace)) {
+                expect(self, Tok_Comma);
+            }
+        }
+    } else {
+        body = null;
+        expect(self, Tok_Semicolon);
+    }
+
+    var result = mk_decl(self, Decl_Struct);
+    result.as_struct.name = name;
+    result.as_struct.fields = body;
+    return result;
+}
+
+func p_param(self: *Parser): *FuncParam {
+    var name = p_ident(self);
+    expect(self, Tok_Colon);
+    var type = p_type(self);
+
+    var result: *FuncParam = calloc(1, sizeof(FuncParam));
+    result.name = name;
+    result.type = type;
+    return result;
+}
+
+func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
+    expect(self, Tok_Func);
+    var name = p_ident(self);
+    var params: *List = list_new();
+    expect(self, Tok_LParen);
+    while (!at_eof(self) && !eat(self, Tok_RParen)) {
+        var param = p_param(self);
+        list_push(params, param);
+        if (!at(self, Tok_RParen)) {
+            expect(self, Tok_Comma);
+        }
+    }
+    var return_type: *TypeExpr = null;
+    if (eat(self, Tok_Colon)) {
+        return_type = p_type(self);
+    }
+    var body: *Stmt = null;
+    if (at(self, Tok_LBrace)) {
+        body = p_stmt(self);
+    } else {
+        expect(self, Tok_Semicolon);
+    }
+    
+    var result = mk_decl(self, Decl_Func);
+    result.as_func.name = name;
+    result.as_func.params = params;
+    result.as_func.return_type = return_type;
+    result.as_func.body = body;
+    return result;
+}
+
+func p_enum_member(self: *Parser): *EnumMember {
+    var name = p_ident(self);
+    var value: *Expr = null;
+    if (eat(self, Tok_Eq)) {
+        value = p_expr(self, 0);
+    }
+
+    var result: *EnumMember = calloc(1, sizeof(EnumMember));
+    result.name = name;
+    result.value = value;
+    return result;
+}
+
+func p_enum_decl(self: *Parser): *Decl {
+    expect(self, Tok_Enum);
+    expect(self, Tok_LBrace);
+    var members = list_new();
+    while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+        var member = p_enum_member(self);
+        list_push(members, member);
+        if (!at(self, Tok_RBrace)) {
+            expect(self, Tok_Comma);
+        }
+    }
+
+    var result = mk_decl(self, Decl_Enum);
+    result.as_enum.members = members;
+    return result;
+}
+
+func p_const_decl(self: *Parser): *Decl {
+    var name = p_ident(self);
+    expect(self, Tok_Eq);
+    var value = p_expr(self, 0);
+    expect(self, Tok_Semicolon);
+
+    var result = mk_decl(self, Decl_Const);
+    result.as_const.name = name;
+    result.as_const.value = value;
+    return result;
+}
+
+func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
+    expect(self, Tok_Var);
+    var name = p_ident(self);
+    expect(self, Tok_Colon);
+    var type = p_type(self);
+    var value = p_expr(self, 0);
+    expect(self, Tok_Semicolon);
+
+    var result = mk_decl(self, Decl_Global);
+    result.as_global.name = name;
+    result.as_global.type = type;
+    result.as_global.value = value;
+    return result;
+}
+
+func p_decl_decl(self: *Parser): *Decl {
+    if (at(self, Tok_Include)) {
+        return p_include_decl(self);
+    } else if (at(self, Tok_Struct)) {
+        return p_struct_decl(self);
+    } else if (at(self, Tok_Func)) {
+        return p_func_decl(self, false);
+    } else if (at(self, Tok_Enum)) {
+        return p_enum_decl(self);
+    } else if (at(self, Tok_Const)) {
+        return p_const_decl(self);
+    } else if (at(self, Tok_Var)) {
+        return p_global_decl(self, false);
+    } else if (eat(self, Tok_Extern)) {
+        if (at(self, Tok_Func)) {
+            return p_func_decl(self, true);
+        } else if (at(self, Tok_Var)) {
+            return p_global_decl(self, true);
+        } else {
+            die_at(&self.tok.pos, "Expected extern function or variable declaration.");
+        }
+    } else {
+        die_at(&self.tok.pos, "Unexpected token.");
+    }
+}
+
+//==============================================================================
+//== Top-level
+
+func parser_run(self: *Parser): *Ast {
+    var decls: *List = list_new();
+    while (!at_eof(self)) {
+        var decl = p_decl_decl(self);
+        list_push(decls, decl);
+    }
+    
+    var result: *Ast = calloc(1, sizeof(Ast));
+    result.decls = decls;
+    return result;
+}

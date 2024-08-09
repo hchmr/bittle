@@ -1,0 +1,39 @@
+// stdio.h
+
+enum {
+    SEEK_SET = 0,
+    SEEK_CUR = 1,
+    SEEK_END = 2,
+}
+
+struct File;
+extern var stdin: *File;
+extern var stdout: *File;
+extern var stderr: *File;
+extern func fopen(file_name: *Char, mode: *Char): *File;
+extern func fclose(file: *File): Int32;
+extern func fgetc(file: *File): Int32;
+extern func fprintf(file: *File, format: *Char, ...): Int32;
+extern func printf(format: *Char, ...): Int32;
+extern func fseek(file: *File, offset: Int, origin: Int): Int32;
+extern func ftell(file: *File): Int;
+extern func fread(buffer: *Void, size: Int, count: Int, stream: *File): Int;
+
+// stdlib.h
+
+extern func exit(status: Int32): !;
+extern func calloc(count: Int, size: Int): *Void;
+extern func malloc(size: Int): *Void;
+extern func realloc(ptr: *Void, size: Int): *Void;
+extern func free(ptr: *Void): Void;
+
+// errno.h
+
+extern var errno: Int32;
+extern func perror(message: *Char): Void;
+
+// string.h
+
+extern func memcpy(dest: *Void, src: *Void, n: Int): *Void;
+extern func strlen(s: *Char): Int;
+extern func strcmp(a: *Char, b: *Char): Int32;

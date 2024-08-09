@@ -1,0 +1,70 @@
+include "cog.cogs";
+
+func error_at(pos: *Pos) {
+    fprintf(stderr, "%s:%d:%d: Error: ", pos.file, pos.row, pos.col);
+}
+
+func die(msg: *Char): ! {
+    fprintf(stderr, "%s\n", msg);
+    exit(1);
+}
+
+func die_at(pos: *Pos, msg: *Char): ! {
+    error_at(pos);
+    fprintf(stderr, "%s\n", msg);
+    exit(1);
+}
+
+func list_new(): *List {
+    return calloc(1, sizeof(List));
+}
+
+func list_ensure_cap(self: *List, cap: Int) {
+    if (self.cap >= cap) {
+        return;
+    }
+    var new_cap = 1;
+    while (new_cap < cap) {
+        new_cap = new_cap * 2;
+    }
+    self.elems = realloc(self.elems, new_cap * sizeof(*Void));
+    self.cap = new_cap;
+}
+
+func list_push(self: *List, elem: *Void) {
+    list_ensure_cap(self, self.len + 1);
+    self.elems[self.len] = elem;
+    self.len += 1;
+}
+
+func str_eq(a: *Char, b: *Char): Bool {
+    return strcmp(a, b) == 0;
+}
+
+func read_file(file: *File): *Char {
+    if (fseek(file, 0, SEEK_END) != 0) {
+        perror("fseek");
+        return null;
+    }
+    var size = ftell(file);
+    if (size == -1) {
+        perror("ftell");
+        return null;
+    }
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        perror("fseek");
+        return null;
+    }
+    var buffer: *Char = malloc(size + 1);
+    if (!buffer) {
+        perror("malloc");
+        return null;
+    }
+    if (fread(buffer, 1, size, file) != size) {
+        perror("fread");
+        free(buffer);
+        return null;
+    }
+    buffer[size] = '\0';
+    return buffer;
+}
