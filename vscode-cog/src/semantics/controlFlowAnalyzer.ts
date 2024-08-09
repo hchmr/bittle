@@ -1,5 +1,17 @@
 import { SyntaxNode, Tree } from '../syntax';
-import { ErrorNodeType, isStmtNode, isTopLevelNode, NodeTypes, StmtNodeType, StmtNodeTypes, TopLevelNodeType, TopLevelNodeTypes } from '../syntax/nodeTypes';
+import {
+    ErrorNodeType,
+    ExprNodeType,
+    ExprNodeTypes,
+    isExprNode,
+    isStmtNode,
+    isTopLevelNode,
+    NodeTypes,
+    StmtNodeType,
+    StmtNodeTypes,
+    TopLevelNodeType,
+    TopLevelNodeTypes,
+} from '../syntax/nodeTypes';
 import { Nullish } from '../utils';
 import { stream } from '../utils/stream';
 import { ElaborationError, ElaboratorResult } from './elaborator';
@@ -9,9 +21,15 @@ export function analyzeControlFlow(path: string, tree: Tree, elaboratorResult: E
     return new ControlFlowAnalyzer(path, elaboratorResult).analyze(tree);
 }
 
+enum ExitLevel {
+    None,
+    Loop,
+    Function,
+    Program,
+}
+
 type ExecutionState = {
-    didReturn: boolean;
-    didExitLoop: boolean;
+    exitLevel: ExitLevel;
 };
 
 class ControlFlowAnalyzer {
@@ -51,13 +69,12 @@ class ControlFlowAnalyzer {
         const returnType: Type = returnTypeNode ? this.nodeTypeMap.get(returnTypeNode)! : mkVoidType();
 
         const initialState: ExecutionState = {
-            didReturn: false,
-            didExitLoop: false,
+            exitLevel: 0,
         };
 
         const state = this.analyzeBlockStmt(bodyNode, initialState);
 
-        if (!state.didReturn && isNonVoidType(returnType)) {
+        if (state.exitLevel < ExitLevel.Function && isNonVoidType(returnType)) {
             this.reportError(returnTypeNode!, 'Function lacks ending return statement');
         }
     }
@@ -95,7 +112,7 @@ class ControlFlowAnalyzer {
     private analyzeBlockStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
         const unreachableStatements = [];
         for (const stmtNode of node.namedChildren.filter(n => isStmtNode(n))) {
-            if (state.didReturn || state.didExitLoop) {
+            if (state.exitLevel !== ExitLevel.None) {
                 unreachableStatements.push(stmtNode);
             } else {
                 state = this.analyzeStmt(stmtNode, state);
@@ -108,6 +125,10 @@ class ControlFlowAnalyzer {
     }
 
     private analyzeLocalDecl(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const valueNode = node.childForFieldName('value');
+        if (valueNode) {
+            state = this.analyzeExpr(valueNode, state);
+        }
         return state;
     }
 
@@ -116,6 +137,7 @@ class ControlFlowAnalyzer {
         const thenNode = node.childForFieldName('then');
         const elseNode = node.childForFieldName('else');
 
+        state = this.analyzeExpr(condNode, state);
         if (isTriviallyTrue(condNode)) {
             elseNode && this.reportUnreachableCode(elseNode);
             return this.analyzeStmt(thenNode, state);
@@ -125,10 +147,7 @@ class ControlFlowAnalyzer {
         } else {
             const thenState = this.analyzeStmt(thenNode, state);
             const elseState = this.analyzeStmt(elseNode, state);
-            return {
-                didReturn: thenState.didReturn && elseState.didReturn,
-                didExitLoop: thenState.didExitLoop && elseState.didExitLoop,
-            };
+            return executionStateUnion(thenState, elseState);
         }
     }
 
@@ -136,8 +155,11 @@ class ControlFlowAnalyzer {
         const condNode = node.childForFieldName('cond');
         const bodyNode = node.childForFieldName('body');
 
+        state = this.analyzeExpr(condNode, state);
+
         const outerLoop = this.currentLoop;
         this.currentLoop = node;
+
         if (isTriviallyFalse(condNode)) {
             bodyNode && this.reportUnreachableCode(bodyNode);
         } else if (isTriviallyTrue(condNode)) {
@@ -145,14 +167,18 @@ class ControlFlowAnalyzer {
         } else {
             this.analyzeStmt(bodyNode, state);
         }
+
         this.currentLoop = outerLoop;
         return state;
     }
 
     private analyzeReturnStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const valueNode = node.childForFieldName('value');
+        if (valueNode) {
+            state = this.analyzeExpr(valueNode, state);
+        }
         return {
-            ...state,
-            didReturn: true,
+            exitLevel: ExitLevel.Function,
         };
     }
 
@@ -162,13 +188,135 @@ class ControlFlowAnalyzer {
             this.reportError(node, `${keyword} statement outside of loop`);
         }
         return {
-            ...state,
-            didExitLoop: true,
+            exitLevel: ExitLevel.Loop,
         };
     }
 
     private analyzeExprStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const exprNode = node.childForFieldName('expr');
+        return this.analyzeExpr(exprNode, state);
+    }
+
+    analyzeExpr(node: SyntaxNode | Nullish, state: ExecutionState): ExecutionState {
+        if (!node) {
+            return state;
+        }
+        const nodeType = node.type as ExprNodeType | ErrorNodeType;
+        switch (nodeType) {
+            case ExprNodeTypes.GroupedExpr:
+                return this.analyzeGroupedExpr(node, state);
+            case ExprNodeTypes.NameExpr:
+                return this.analyzeNameExpr(node, state);
+            case ExprNodeTypes.SizeofExpr:
+                return this.analyzeSizeofExpr(node, state);
+            case ExprNodeTypes.LiteralExpr:
+                return this.analyzeLiteralExpr(node, state);
+            case ExprNodeTypes.BinaryExpr:
+                return this.analyzeBinaryExpr(node, state);
+            case ExprNodeTypes.TernaryExpr:
+                return this.analyzeTernaryExpr(node, state);
+            case ExprNodeTypes.UnaryExpr:
+                return this.analyzeUnaryExpr(node, state);
+            case ExprNodeTypes.CallExpr:
+                return this.analyzeCallExpr(node, state);
+            case ExprNodeTypes.IndexExpr:
+                return this.analyzeIndexExpr(node, state);
+            case ExprNodeTypes.FieldExpr:
+                return this.analyzeFieldExpr(node, state);
+            case ExprNodeTypes.CastExpr:
+                return this.analyzeCastExpr(node, state);
+            case NodeTypes.Error:
+                return state;
+            default: {
+                const unreachable: never = nodeType;
+                throw new Error(`Unexpected node type: ${unreachable}`);
+            }
+        }
+    }
+
+    private analyzeGroupedExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        return this.analyzeExpr(node.childForFieldName('expr'), state);
+    }
+
+    private analyzeNameExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
         return state;
+    }
+
+    private analyzeSizeofExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        return state;
+    }
+
+    private analyzeLiteralExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        return state;
+    }
+
+    private analyzeBinaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const leftNode = node.childForFieldName('left');
+        const rightNode = node.childForFieldName('right');
+        state = this.analyzeExpr(leftNode, state);
+        state = this.analyzeExpr(rightNode, state);
+        return state;
+    }
+
+    private analyzeTernaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const condNode = node.childForFieldName('cond');
+        const thenNode = node.childForFieldName('then');
+        const elseNode = node.childForFieldName('else');
+
+        state = this.analyzeExpr(node.childForFieldName('cond'), state);
+        if (isTriviallyTrue(condNode)) {
+            elseNode && this.reportUnreachableCode(elseNode);
+            return this.analyzeExpr(thenNode, state);
+        } else if (isTriviallyFalse(condNode)) {
+            thenNode && this.reportUnreachableCode(thenNode);
+            return this.analyzeExpr(elseNode, state);
+        } else {
+            const thenState = this.analyzeExpr(thenNode, state);
+            const elseState = this.analyzeExpr(elseNode, state);
+            return executionStateUnion(thenState, elseState);
+        }
+    }
+
+    private analyzeUnaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const operandNode = node.childForFieldName('operand');
+        return this.analyzeExpr(operandNode, state);
+    }
+
+    private analyzeCallExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const calleeNode = node.childForFieldName('callee');
+        const argsNodes = node.childrenForFieldName('args');
+        if (!argsNodes || !calleeNode) {
+            return state;
+        }
+        state = this.analyzeExpr(calleeNode, state);
+        for (const argNode of argsNodes.filter(x => isExprNode(x))) {
+            state = this.analyzeExpr(argNode, state);
+        }
+        const returnType = this.nodeTypeMap.get(node)!;
+        if (returnType.kind === TypeKind.Never) {
+            return {
+                exitLevel: ExitLevel.Function,
+            };
+        }
+        return state;
+    }
+
+    private analyzeIndexExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const indexeeNode = node.childForFieldName('indexee');
+        const indexNode = node.childForFieldName('index');
+        state = this.analyzeExpr(indexeeNode, state);
+        state = this.analyzeExpr(indexNode, state);
+        return state;
+    }
+
+    private analyzeFieldExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const leftNode = node.childForFieldName('left');
+        return this.analyzeExpr(leftNode, state);
+    }
+
+    private analyzeCastExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const exprNode = node.childForFieldName('expr');
+        return this.analyzeExpr(exprNode, state);
     }
 
     //=========================================================================
@@ -195,4 +343,10 @@ function isTriviallyFalse(node: SyntaxNode | Nullish): boolean {
 
 function isNonVoidType(type: Type): boolean {
     return type.kind !== TypeKind.Err && type.kind !== TypeKind.Void;
+}
+
+function executionStateUnion(a: ExecutionState, b: ExecutionState): ExecutionState {
+    return {
+        exitLevel: Math.min(a.exitLevel, b.exitLevel),
+    };
 }

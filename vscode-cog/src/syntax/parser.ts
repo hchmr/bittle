@@ -783,6 +783,8 @@ export class Parser extends ParserBase {
             this.pointerType();
         } else if (this.match('[')) {
             this.arrayType();
+        } else if (this.match('!')) {
+            this.neverType();
         } else {
             this.addErrorAndTryBump(`Unexpected start of type: '${this.tok.kind}'.`);
         }
@@ -825,6 +827,12 @@ export class Parser extends ParserBase {
         this.finishField('size');
         this.expect(']');
         this.finishNode(CompositeNodeTypes.ArrayType);
+    }
+
+    neverType() {
+        this.beginNode(CompositeNodeTypes.NeverType);
+        this.bump('!');
+        this.finishNode(CompositeNodeTypes.NeverType);
     }
 
     //=========================================================================

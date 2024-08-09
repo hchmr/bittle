@@ -48,6 +48,7 @@ export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout | und
                     { size: 0, align: 0 },
                 );
         }
+        case TypeKind.Never:
         case TypeKind.Err: {
             return undefined;
         }

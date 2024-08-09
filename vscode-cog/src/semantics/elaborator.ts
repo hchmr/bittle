@@ -42,6 +42,7 @@ import {
     mkBoolType,
     mkErrorType,
     mkIntType,
+    mkNeverType,
     mkPointerType,
     mkStructType,
     mkVoidType,
@@ -289,6 +290,8 @@ export class Elaborator {
 
                     return mkArrayType(elemType, size);
                 }
+                case TypeNodeTypes.NeverType:
+                    return mkNeverType();
                 case NodeTypes.Error:
                     return mkErrorType();
                 default: {

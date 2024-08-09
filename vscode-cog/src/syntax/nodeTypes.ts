@@ -27,6 +27,7 @@ export const TypeNodeTypes = {
     NameType: 'name_type',
     PointerType: 'pointer_type',
     ArrayType: 'array_type',
+    NeverType: 'never_type',
 } as const;
 
 export const StmtNodeTypes = {

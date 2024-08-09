@@ -5,6 +5,7 @@ export type Type =
     | PointerType
     | ArrayType
     | StructType
+    | NeverType
     | ErrorType;
 
 export enum TypeKind {
@@ -14,6 +15,7 @@ export enum TypeKind {
     Ptr = 'Ptr',
     Arr = 'Arr',
     Struct = 'Struct',
+    Never = 'Never',
     Err = 'Err',
 }
 
@@ -47,6 +49,10 @@ export type StructType = Readonly<{
     qualifiedName: string;
 }>;
 
+export type NeverType = Readonly<{
+    kind: TypeKind.Never;
+}>;
+
 export type ErrorType = Readonly<{
     kind: TypeKind.Err;
 }>;
@@ -66,6 +72,8 @@ const INT32_TYPE: IntType = { kind: TypeKind.Int, size: 32 };
 const INT64_TYPE: IntType = { kind: TypeKind.Int, size: 64 };
 
 const INT_UNKNOWN_TYPE: IntType = { kind: TypeKind.Int, size: undefined };
+
+const NEVER_TYPE: NeverType = { kind: TypeKind.Never };
 
 const ERROR_TYPE: ErrorType = { kind: TypeKind.Err };
 
@@ -100,6 +108,10 @@ export function mkPointerType(pointeeType: Type): Type {
 
 export function mkArrayType(elemType: Type, size: number | undefined): Type {
     return { kind: TypeKind.Arr, elemType, size };
+}
+
+export function mkNeverType(): Type {
+    return NEVER_TYPE;
 }
 
 export function mkStructType(name: string, qualifiedName: string): Type {
@@ -190,12 +202,14 @@ export function isScalarType(type: Type): boolean {
 
 export function isValidReturnType(type: Type): boolean {
     return type.kind === TypeKind.Void
+        || type.kind === TypeKind.Never
         || isScalarType(type);
 }
 
 export function typeLe(t1: Type, t2: Type): boolean {
     return typeEquals(t1, t2)
         || (t1.kind === TypeKind.Err)
+        || (t1.kind === TypeKind.Never)
         || (isScalarType(t1) && t2.kind === TypeKind.Bool)
         || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Int && t1.size! <= t2.size!)
         || (t1.kind === TypeKind.Ptr && t2.kind === TypeKind.Ptr && t1.pointeeType.kind === TypeKind.Void);
@@ -209,6 +223,7 @@ export function prettyType(t: Type): string {
         case TypeKind.Ptr: return '*' + prettyType(t.pointeeType);
         case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
         case TypeKind.Struct: return t.name;
+        case TypeKind.Never: return '!';
         case TypeKind.Err: return '{unknown}';
     }
 }
