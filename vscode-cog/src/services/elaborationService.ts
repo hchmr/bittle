@@ -1,3 +1,4 @@
+import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
 import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { mkErrorType, Type } from '../semantics/type';
@@ -16,7 +17,13 @@ export class ElaborationService {
     ) { }
 
     getErrors(path: string): ElaborationError[] {
-        return this.elaborateFile(path).errors;
+        const elaborationErrors = this.elaborateFile(path).errors;
+        const flowAnalysisErrors = analyzeControlFlow(
+            path,
+            this.parsingService.parse(path),
+            this.elaborateFile(path),
+        );
+        return [...elaborationErrors, ...flowAnalysisErrors];
     }
 
     getSymbolsAtNode(path: string, node: SyntaxNode): Stream<Sym> {
