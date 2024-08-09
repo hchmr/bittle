@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { SyntaxNode } from '../syntax';
 import { stream } from '../utils/stream';
-import { mkIntType, mkStructType, prettyType, tryUnifyTypes, Type, TypeKind } from './type';
+import { mkErrorType, mkIntType, mkStructType, prettyType, Type, typeEq, TypeKind } from './type';
 
 export enum SymKind {
     Struct = 'Struct',
@@ -189,7 +189,7 @@ export function tryMergeStructFieldSym(field1: StructFieldSym, field2: StructFie
         name: field1.name,
         qualifiedName: field1.qualifiedName,
         origins: mergeOrigins(field1.origins, field2.origins),
-        type: tryUnifyTypes(field1.type, field2.type, onError),
+        type: tryMergeTypes(field1.type, field2.type, onError),
     };
 }
 
@@ -200,7 +200,7 @@ export function tryMergeFuncSym(existing: FuncSym, sym: FuncSym, onError: ErrorS
         qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
         params: tryMergeFuncParams(existing.params, sym.params, onError),
-        returnType: tryUnifyTypes(existing.returnType, sym.returnType, onError),
+        returnType: tryMergeTypes(existing.returnType, sym.returnType, onError),
         isVariadic: tryMergeIsVariadic(),
         isDefined: tryMergeIsDefined(),
     };
@@ -235,7 +235,7 @@ export function tryMergeFuncParamSym(param1: FuncParamSym, param2: FuncParamSym,
         name: param1.name === param2.name ? param1.name : '{unknown}',
         qualifiedName: param1.qualifiedName,
         origins: mergeOrigins(param1.origins, param2.origins),
-        type: tryUnifyTypes(param1.type, param2.type, onError),
+        type: tryMergeTypes(param1.type, param2.type, onError),
     };
 }
 
@@ -248,7 +248,7 @@ export function tryMergeGlobalSym(existing: GlobalSym, sym: GlobalSym, onError: 
         name: existing.name,
         qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
-        type: tryUnifyTypes(existing.type, sym.type, onError),
+        type: tryMergeTypes(existing.type, sym.type, onError),
         isDefined: existing.isDefined || sym.isDefined,
     };
 }
@@ -279,8 +279,21 @@ export function tryMergeLocalSym(existing: LocalSym, sym: LocalSym, onError: Err
         name: existing.name,
         qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
-        type: tryUnifyTypes(existing.type, sym.type, onError),
+        type: tryMergeTypes(existing.type, sym.type, onError),
     };
+}
+
+function tryMergeTypes(t1: Type, t2: Type, onError: ErrorSignal): Type {
+    if (t1.kind === TypeKind.Err) {
+        return t2;
+    } else if (t2.kind === TypeKind.Err) {
+        return t1;
+    }
+    if (!typeEq(t1, t2)) {
+        onError();
+        return mkErrorType();
+    }
+    return t1;
 }
 
 // Should be good enough for now. It's only structs that add the same symbol twice.

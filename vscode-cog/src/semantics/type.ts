@@ -170,7 +170,7 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
     }
 }
 
-function typeEquals(t1: Type, t2: Type): boolean {
+export function typeEq(t1: Type, t2: Type): boolean {
     if (t1 === t2) {
         return true;
     }
@@ -182,10 +182,10 @@ function typeEquals(t1: Type, t2: Type): boolean {
         return t1.size === t2.size;
     } else if (t1.kind === TypeKind.Ptr) {
         t2 = t2 as PointerType;
-        return typeEquals(t1.pointeeType, t2.pointeeType);
+        return typeEq(t1.pointeeType, t2.pointeeType);
     } else if (t1.kind === TypeKind.Arr) {
         t2 = t2 as ArrayType;
-        return typeEquals(t1.elemType, t2.elemType) && t1.size === t2.size;
+        return typeEq(t1.elemType, t2.elemType) && t1.size === t2.size;
     } else if (t1.kind === TypeKind.Struct) {
         t2 = t2 as StructType;
         return t1.name === t2.name;
@@ -207,7 +207,7 @@ export function isValidReturnType(type: Type): boolean {
 }
 
 export function typeLe(t1: Type, t2: Type): boolean {
-    return typeEquals(t1, t2)
+    return typeEq(t1, t2)
         || (t1.kind === TypeKind.Err)
         || (t1.kind === TypeKind.Never)
         || (isScalarType(t1) && t2.kind === TypeKind.Bool)
