@@ -334,11 +334,17 @@ class ControlFlowAnalyzer {
 }
 
 function isTriviallyTrue(node: SyntaxNode | Nullish): boolean {
-    return node?.type === NodeTypes.BoolLiteral && node.text === 'true';
+    return isBoolLiteral('true', node);
 }
 
 function isTriviallyFalse(node: SyntaxNode | Nullish): boolean {
-    return node?.type === NodeTypes.BoolLiteral && node.text === 'false';
+    return isBoolLiteral('false', node);
+}
+
+function isBoolLiteral(value: string, node: SyntaxNode | Nullish): boolean {
+    return node?.type === NodeTypes.LiteralExpr
+        && node.firstChild?.type === NodeTypes.BoolLiteral
+        && node.firstChild.text === value;
 }
 
 function isNonVoidType(type: Type): boolean {
