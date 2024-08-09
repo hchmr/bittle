@@ -11,7 +11,7 @@ extern func fgetc(file: *File): Int32;
 extern func fopen(filename: *Char, mode: *Char): *File;
 
 // stdlib
-extern func exit(status: Int32);
+extern func exit(status: Int32): !;
 extern func calloc(count: Int, size: Int): *Void;
 extern func malloc(size: Int): *Void;
 extern func realloc(ptr: *Void, size: Int): *Void;

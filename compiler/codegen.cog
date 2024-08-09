@@ -22,7 +22,7 @@ func strx(type: *Type): *Char {
         return "str w";
     if (type_size(type) == 8)
         return "str x";
-    assert(false, "strx: Unreachable.");
+    unreachable("strx");
 }
 
 func ldrx(type: *Type): *Char {
@@ -36,7 +36,7 @@ func ldrx(type: *Type): *Char {
         return "ldrsw x";
     if (type_size(type) == 8)
         return "ldr x";
-    assert(false, "ldrx: Unreachable.");
+    unreachable("ldrx");
 }
 
 func emit_push(ctx: *CodegenCtx, reg: Int) {
@@ -124,7 +124,7 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *Expr, t0: Int) {
         var elem_size = type_size(e.children[0].type.base);
         printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
     } else {
-        assert(false, "emit_expr_lvalue: Unreachable.");
+        unreachable("emit_expr_lvalue");
     }
 }
 
@@ -254,7 +254,7 @@ func emit_expr(ctx: *CodegenCtx, e: *Expr, t0: Int) {
             } else if (str_eq(e.kind, "_-=_")) {
                 printf("  sub x1, x2, x1\n");
             } else {
-                assert(false, "emit_expr: Unreachable.");
+                unreachable("emit_expr");
             }
         }
         printf("  %s1, [x0]\n", strx(lhs.type));
@@ -309,7 +309,7 @@ func emit_expr(ctx: *CodegenCtx, e: *Expr, t0: Int) {
         }
         printf("  b .L.%s.ret\n", ctx.current_func.name);
     } else {
-        assert(false, "emit_expr: Unreachable.");
+        unreachable("emit_expr");
     }
 }
 

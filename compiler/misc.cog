@@ -20,6 +20,11 @@ func assert(cond: Bool, because: *Char) {
     }
 }
 
+func unreachable(name: *Char): ! {
+    fprintf(stderr, "%s: Unreachable code path reached.\n", name);
+    exit(1);
+}
+
 func ilog2(n: Int): Int {
     var i = 0;
     while (n > 1) {

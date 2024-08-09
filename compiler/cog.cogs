@@ -12,6 +12,7 @@ func error_at(pos: *Pos);
 func str_eq(a: *Char, b: *Char): Bool;
 func align_up(size: Int , align: Int): Int;
 func assert(cond: Bool, because: *Char);
+func unreachable(name: *Char): !;
 func ilog2(n: Int): Int;
 func int_min(a: Int, b: Int): Int;
 func sb_push(buf_p: *(*Char), c: Char): Void;

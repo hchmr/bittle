@@ -58,7 +58,7 @@ func type_align(type: *Type): Int {
         return 8; // Maximum possible alignment.
     if (type.kind == Type_Never)
         return 1;
-    assert(false, "type_align: Unreachable.");
+    unreachable("type_align");
 }
 
 func type_size(type: *Type): Int {
@@ -76,7 +76,7 @@ func type_size(type: *Type): Int {
         return type.field_count == 0 ? -1 : align_up(type.unpadded_size, type_align(type));
     if (type.kind == Type_Never)
         return -1;
-    assert(false, "type_size: Unreachable.");
+    unreachable("type_size");
 }
 
 func type_eq(t1: *Type, t2: *Type): Bool {
@@ -167,6 +167,6 @@ func print_type(file: *File, type: *Type) {
     } else if (type.kind == Type_Never) {
         fprintf(file, "!");
     } else {
-        assert(false, "print_type: Unreachable.");
+        unreachable("print_type");
     }
 }
