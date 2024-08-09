@@ -64,9 +64,11 @@ verify() {
 
     make -C compiler "BUILD_DIR=$build_dir/verify" "COGC=$(realpath "$build_dir/$prev_stage/cogc")"
 
-    echo "Comparing assembly output"
+    echo "Comparing executables"
 
-    diff "$build_dir/verify/cogc.s" "$build_dir/$prev_stage/cogc.s" && echo "No difference"
+    objdump -dr -j .rodata -j .text "$build_dir/$prev_stage/cogc" | tail -n +3 >"$build_dir/verify/cogc.objdump"
+    objdump -dr -j .rodata -j .text "$build_dir/verify/cogc" | tail -n +3 >"$build_dir/verify/cogc.verify.objdump"
+    diff "$build_dir/verify/cogc.objdump" "$build_dir/verify/cogc.verify.objdump" && echo "No difference" || echo "^^^ Difference found"
 }
 
 rm -rf "$bootstrap_dir"
@@ -81,7 +83,9 @@ stage 1 "Replace bootstrap compiler with self-host compiler"
 
 stage 2 "feat: Add support for include files"
 
-stage 3 "feat: Add support for include files"
+stage 3 "feat(compiler): Add never type"
+
+stage 4 "feat(compiler): Add never type"
 
 verify
 
