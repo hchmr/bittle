@@ -628,7 +628,7 @@ struct JumpHirExpr {
 }
 
 struct AssignHirExpr {
-    dest: *HirExpr,
+    dst: *HirExpr,
     src: *HirExpr,
 }
 

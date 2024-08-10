@@ -116,7 +116,7 @@ func mk_jump_hir_expr(is_break: Bool, pos: *Pos): *HirExpr {
 
 func mk_assign_hir_expr(dest: *HirExpr, src: *HirExpr): *HirExpr {
     var result = mk_hir_expr(HirExpr_Assign, dest.type, &dest.pos);
-    result.as_assign.dest = dest;
+    result.as_assign.dst = dest;
     result.as_assign.src = src;
     return result;
 }
@@ -131,17 +131,17 @@ func mk_binary_op_hir_expr(op: Int32, left: *HirExpr, right: *HirExpr): *HirExpr
 
 func mk_neg_hir_expr(expr: *HirExpr): *HirExpr {
     var zero = mk_int_hir_expr(0, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(Tok_Minus, zero, expr);
+    return mk_binary_op_hir_expr(HirOp_Sub, zero, expr);
 }
 
 func mk_not_hir_expr(expr: *HirExpr): *HirExpr {
     var one = mk_int_hir_expr(1, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(Tok_Caret, expr, one);
+    return mk_binary_op_hir_expr(HirOp_Xor, expr, one);
 }
 
 func mk_bit_not_hir_expr(expr: *HirExpr): *HirExpr {
     var minus_one = mk_int_hir_expr(-1, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(Tok_Caret, expr, minus_one);
+    return mk_binary_op_hir_expr(HirOp_Xor, expr, minus_one);
 }
 
 func mk_call_hir_expr(callee: *Sym, args: *List, pos: *Pos): *HirExpr {
@@ -151,8 +151,8 @@ func mk_call_hir_expr(callee: *Sym, args: *List, pos: *Pos): *HirExpr {
     return result;
 }
 
-func mk_member_hir_expr(left: *HirExpr, name: *Char, field_index: Int): *HirExpr {
-    var result = mk_hir_expr(HirExpr_Member, left.type, &left.pos);
+func mk_member_hir_expr(left: *HirExpr, name: *Char, field_index: Int, field_type: *Type): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Member, field_type, &left.pos);
     result.as_member.left = left;
     result.as_member.name = name;
     result.as_member.field_index = field_index;
@@ -160,14 +160,25 @@ func mk_member_hir_expr(left: *HirExpr, name: *Char, field_index: Int): *HirExpr
 }
 
 func mk_index_hir_expr(indexee: *HirExpr, index: *HirExpr): *HirExpr {
-    var result = mk_hir_expr(HirExpr_Index, indexee.type, &indexee.pos);
+    assert(
+        indexee.type.kind == Type_Ptr || indexee.type.kind == Type_Arr,
+        "mk_index_hir_expr: indexee should have a pointer or array type"
+    );
+    var result_type = indexee.type.kind == Type_Ptr
+        ? indexee.type.as_ptr.pointee
+        : indexee.type.as_arr.elem;
+
+    var result = mk_hir_expr(HirExpr_Index, result_type, &indexee.pos);
     result.as_index.indexee = indexee;
     result.as_index.index = index;
     return result;
 }
 
 func mk_deref_hir_expr(expr: *HirExpr, pos: *Pos): *HirExpr {
-    var result = mk_hir_expr(HirExpr_Deref, expr.type, pos);
+    assert(expr.type.kind == Type_Ptr, "mk_deref_hir_expr: expr should have a pointer type");
+    var deref_type = expr.type.as_ptr.pointee;
+
+    var result = mk_hir_expr(HirExpr_Deref, deref_type, pos);
     result.as_deref.expr = expr;
     return result;
 }
@@ -206,9 +217,15 @@ func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
 
 func lower_ident_expr(ctx: *Context, expr: *Expr): *HirExpr {
-    var result = mk_hir_expr(HirExpr_Var, expr.type, &expr.pos);
-    result.as_var = expr.as_ident.sym;
-    return result;
+    var sym = expr.as_ident.sym;
+    if (sym.kind == Sym_Global || sym.kind == Sym_Local) {
+        return mk_var_hir_expr(sym, expr.type, &expr.pos);
+    } else if (sym.kind == Sym_Const) {
+        var value = sym.as_const.value;
+        return mk_int_hir_expr(value, expr.type, &expr.pos);
+    } else {
+        unreachable("elab_ident_expr");
+    }
 }
 
 func lower_literal_expr(ctx: *Context, expr: *Expr): *HirExpr {
@@ -264,8 +281,11 @@ func lower_member_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var field_index = expr.as_member.resolved_field;
 
     var hir_left = lower_expr(ctx, ast_left);
+    if (hir_left.type.kind == Type_Ptr) {
+        hir_left = mk_deref_hir_expr(hir_left, &expr.pos);
+    }
 
-    return mk_member_hir_expr(hir_left, name, field_index);
+    return mk_member_hir_expr(hir_left, name, field_index, expr.type);
 }
 
 func lower_sizeof_expr(ctx: *Context, expr: *Expr): *HirExpr {
@@ -353,10 +373,11 @@ func lower_ternary_expr(ctx: *Context, expr: *Expr): *HirExpr {
 
 func lower_cast_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var ast_expr = expr.as_cast.expr;
+    var target_type = expr.type;
 
     var hir_expr = lower_expr(ctx, ast_expr);
 
-    return mk_cast_hir_expr(hir_expr, expr.type);
+    return mk_cast_hir_expr(hir_expr, target_type);
 }
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
