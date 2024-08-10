@@ -85,7 +85,9 @@ stage 2 "feat: Add support for include files"
 
 stage 3 "feat(compiler): Add never type"
 
-stage 4 "feat(compiler): Add never type"
+stage 4 "Merge branch 'compiler-rewrite'"
+
+stage 5 "Merge branch 'compiler-rewrite'"
 
 verify
 
