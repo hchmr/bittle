@@ -1,19 +1,239 @@
 include "cog.cogs";
 
-func copy_expr(expr: *Expr): *Expr {
-    var copy = mk_expr(expr.kind, expr.type, &expr.pos);
-    *copy = *expr;
-    return copy;
+//==============================================================================
+//== Scope
+
+struct ScopeEntry {
+    name: *Char,
+    sym_index: Int,
 }
+
+struct Scope {
+    entries: *List, // List<ScopeEntry>
+    parent: *Scope,
+}
+
+func scope_new(parent: *Scope): *Scope {
+    var scope: *Scope = calloc(1, sizeof(Scope));
+    scope.entries = list_new();
+    scope.parent = parent;
+    return scope;
+}
+
+func scope_drop(scope: *Scope) {
+    free(scope.entries);
+    free(scope);
+}
+
+func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
+    if (scope == null || max_depth == 0) {
+        return -1;
+    }
+    var i = 0;
+    while (i < scope.entries.len) {
+        var entry: *ScopeEntry = list_get(scope.entries, i);
+        if (str_eq(entry.name, name)) {
+            return entry.sym_index;
+        }
+        i += 1;
+    }
+    return scope_lookup(scope.parent, name, max_depth - 1);
+}
+
+//==============================================================================
+//== Context
+
+struct ElabCtx {
+    syms: *List, // List<Sym>
+    scope: *Scope,
+    current_func: *Sym,
+    loop_depth: Int,
+}
+
+func enter_scope(ctx: *ElabCtx) {
+    ctx.scope = scope_new(ctx.scope);
+}
+
+func exit_scope(ctx: *ElabCtx) {
+    var scope = ctx.scope;
+    ctx.scope = scope.parent;
+    scope_drop(scope);
+}
+
+//==============================================================================
+//== Symbol declaration & lookup
+
+func lookup(ctx: *ElabCtx, name: *Char): *Sym {
+    var sym_index = scope_lookup(ctx.scope, name, -1);
+    if (sym_index == -1) {
+        return null;
+    }
+    return list_get(ctx.syms, sym_index);
+}
+
+func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
+    var sym_index = scope_lookup(ctx.scope, name, 1);
+    if (sym_index == -1) {
+        return null;
+    }
+    return list_get(ctx.syms, sym_index);
+}
+
+func add_sym(ctx: *ElabCtx, sym: *Sym) {
+    var entry: *ScopeEntry = calloc(1, sizeof(ScopeEntry));
+    entry.name = sym.name;
+    entry.sym_index = ctx.syms.len;
+    list_push(ctx.syms, sym);
+    list_push(ctx.scope.entries, entry);
+}
+
+func declare_struct(
+    ctx: *ElabCtx,
+    pos: *Pos,
+    name: *Char,
+    is_definition: Bool
+): *Sym {
+    var sym = try_get_existing(ctx, name);
+    if (sym) {
+        if (sym.kind != Sym_Struct) {
+            die_at(pos, "redeclared as different kind of symbol");
+        }
+        if (sym_is_defined(sym) && is_definition) {
+            die_at(pos, "redefinition of existing symbol");
+        }
+    } else {
+        sym = mk_sym(Sym_Struct, name);
+        add_sym(ctx, sym);
+    }
+    return sym;
+}
+
+func params_eq(xs: *List, ys: *List): Bool {
+    if (xs.len != ys.len) {
+        return false;
+    }
+    var i = 0;
+    while (i < xs.len) {
+        var param1: *FuncParam = list_get(xs, i);
+        var param2: *FuncParam = list_get(ys, i);
+        if (!type_eq(param1.type, param2.type)) {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}
+
+func declare_func(
+    ctx: *ElabCtx,
+    pos: *Pos,
+    name: *Char,
+    params: *List,
+    return_type: *Type,
+    is_variadic: Bool,
+    is_definition: Bool
+): *Sym {
+    var sym = try_get_existing(ctx, name);
+    if (sym) {
+        if (sym.kind != Sym_Func) {
+            die_at(pos, "Another symbol with the same name already exists");
+        }
+        if (!params_eq(sym.as_func.params, params)) {
+            die_at(pos, "Symbol redeclared with different parameters");
+        }
+        if (!type_eq(sym.as_func.return_type, return_type)) {
+            die_at(pos, "Symbol redeclared with different return type");
+        }
+        if (sym.as_func.is_variadic != is_variadic) {
+            die_at(pos, "Symbol redeclared with different variadicity");
+        }
+        if (sym_is_defined(sym) && is_definition) {
+            die_at(pos, "Symbol is already defined");
+        }
+    } else {
+        sym = mk_sym(Sym_Func, name);
+        sym.as_func.params = params;
+        sym.as_func.return_type = return_type;
+        sym.as_func.is_variadic = is_variadic;
+        sym.as_func.locals = list_new();
+        add_sym(ctx, sym);
+    }
+    return sym;
+}
+
+func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, value: Int32) {
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        die_at(pos, "Symbol is already defined");
+    }
+
+    var sym = mk_sym(Sym_Const, name);
+    sym.as_const.value = value;
+    add_sym(ctx, sym);
+}
+
+func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_definition: Bool): *Sym {
+    var sym = try_get_existing(ctx, name);
+    if (sym) {
+        if (sym.kind != Sym_Global) {
+            die_at(pos, "Another symbol with the same name already exists");
+        }
+        if (!type_eq(sym.as_global.type, type)) {
+            die_at(pos, "Symbol redeclared with different type");
+        }
+        if (sym_is_defined(sym) && is_definition) {
+            die_at(pos, "Symbol is already defined");
+        }
+    } else {
+        sym = mk_sym(Sym_Global, name);
+        sym.as_global.type = type;
+        add_sym(ctx, sym);
+    }
+    return sym;
+}
+
+func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *Sym {
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        die_at(pos, "Symbol is already defined");
+    }
+
+    var sym = mk_sym(Sym_Local, name);
+    sym.as_local.type = type;
+    add_sym(ctx, sym);
+
+    list_push(ctx.current_func.as_func.locals, sym);
+
+    return sym;
+}
+
+func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
+    var i = 0;
+    while (i < list_len(params)) {
+        var param_decl: *FuncParamDecl = list_get(param_decls, i);
+        var param: *FuncParam = list_get(params, i);
+        define_local(ctx, &param_decl.pos, param.name, param.type);
+        i += 1;
+    }
+}
+
+//==============================================================================
+//== Type checking
 
 func try_coerce(expr: *Expr, target: *Type) {
     if (type_eq(expr.type, target))
         return;
     if (type_le(expr.type, target)) {
-        *expr = *mk_cast_expr(copy_expr(expr), target);
-    } else if (str_eq(expr.kind, "<int>") && target.kind == Type_Int) {
-        var size = ilog2(expr.int_val) + 1;
-        if (size < target.size) {
+        var subexpr: *Expr = calloc(1, sizeof(Expr));
+        *subexpr = *expr;
+        expr.kind = Expr_Cast;
+        expr.type = target;
+        expr.as_cast.expr = subexpr;
+        expr.as_cast.type = null;
+    } else if (expr.kind == Expr_Literal && expr.as_literal.kind == Literal_Int && target.kind == Type_Int) {
+        var integer_value = expr.as_literal.as_int;
+        var size = ilog2(integer_value) + 1;
+        if (size < target.as_int.size) {
             expr.type = target;
         }
     }
@@ -21,14 +241,15 @@ func try_coerce(expr: *Expr, target: *Type) {
 
 func check_type(e: *Expr, expected: *Type) {
     try_coerce(e, expected);
-    if (expected.kind == Type_Ptr && expected.base.kind == Type_Void && e.type.kind == Type_Ptr)
+    if (expected.kind == Type_Ptr && expected.as_ptr.pointee.kind == Type_Void && e.type.kind == Type_Ptr) {
         return;
+    }
     if (!type_eq(e.type, expected)) {
         error_at(&e.pos);
         fprintf(stderr, "Type mismatch: ");
-        print_type(stderr, e.type);
+        pretty_type(stderr, e.type);
         fprintf(stderr, " != ");
-        print_type(stderr, expected);
+        pretty_type(stderr, expected);
         fprintf(stderr, ".\n");
         exit(1);
     }
@@ -36,9 +257,7 @@ func check_type(e: *Expr, expected: *Type) {
 
 func check_type_int(e: *Expr) {
     if (e.type.kind != Type_Int) {
-        error_at(&e.pos);
-        fprintf(stderr, "Integer type expected.\n");
-        exit(1);
+        die_at(&e.pos, "Integer expression expected");
     }
 }
 
@@ -50,4 +269,721 @@ func unify_types(e1: *Expr, e2: *Expr) {
     try_coerce(e2, e1.type);
     try_coerce(e1, e2.type);
     check_type(e2, e1.type);
+}
+
+//==============================================================================
+//== Types
+
+func const_eval(ctx: *ElabCtx, expr: *Expr): Int32;
+
+func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
+    if (type_expr.kind == TypeExpr_Named) {
+        var name: *Char = type_expr.as_named;
+        if (str_eq(name, "Void")) {
+            return mk_void_type();
+        } else if (str_eq(name, "Bool")) {
+            return mk_bool_type();
+        } else if (str_eq(name, "Char") || str_eq(name, "Int8")) {
+            return mk_int_type(1);
+        } else if (str_eq(name, "Int16")) {
+            return mk_int_type(2);
+        } else if (str_eq(name, "Int32")) {
+            return mk_int_type(4);
+        } else if (str_eq(name, "Int") || str_eq(name, "Int64")) {
+            return mk_int_type(8);
+        } else {
+            var sym = lookup(ctx, name);
+            if (!sym) {
+                die_at(&type_expr.pos, "Unknown type");
+            }
+            if (sym.kind != Sym_Struct) {
+                die_at(&type_expr.pos, "Expected a struct type");
+            }
+            return mk_struct_type(sym);
+        }
+    } else if (type_expr.kind == TypeExpr_Ptr) {
+        var pointee = eval_type(ctx, type_expr.as_ptr.pointee);
+        return mk_ptr_type(pointee);
+    } else if (type_expr.kind == TypeExpr_Arr) {
+        var elem = eval_type(ctx, type_expr.as_array.elem);
+        var size = const_eval(ctx, type_expr.as_array.size);
+        return mk_array_type(elem, size);
+    } else if (type_expr.kind == TypeExpr_Never) {
+        return mk_never_type();
+    } else {
+        unreachable("eval_type");
+    }
+}
+
+//==============================================================================
+//== Constants
+
+func invalid_const_expr(ctx: *ElabCtx, expr: *Expr): ! {
+    die_at(&expr.pos, "Invalid constant expression");
+}
+
+func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
+    if (expr.kind == Expr_Literal && expr.as_literal.kind == Literal_Int) {
+        return expr.as_literal.as_int as Int32;
+    } else if (expr.kind == Expr_Unary) {
+        var op = expr.as_unary.op;
+        var right_expr = expr.as_unary.right;
+        if (op == Tok_Minus) {
+            return -const_eval(ctx, right_expr);
+        } else {
+            invalid_const_expr(ctx, expr);
+        }
+    } else if (expr.kind == Expr_Binary) {
+        var op = expr.as_binary.op;
+        var left_expr = expr.as_binary.left;
+        var right_expr = expr.as_binary.right;
+        var left = const_eval(ctx, left_expr);
+        var right = const_eval(ctx, right_expr);
+        if (op == Tok_Plus) {
+            return left + right;
+        } else if (op == Tok_Minus) {
+            return left - right;
+        } else if (op == Tok_Star) {
+            return left * right;
+        } else if (op == Tok_Slash) {
+            return left / right;
+        } else if (op == Tok_Percent) {
+            return left % right;
+        } else {
+            invalid_const_expr(ctx, expr);
+        }
+    } else if (expr.kind == Expr_Sizeof) {
+        var type = eval_type(ctx, expr.as_sizeof.type);
+        return type_size(type) as Int32;
+    } else if (expr.kind == Expr_Ident) {
+        var sym = lookup(ctx, expr.as_ident.name);
+        if (sym.kind == Sym_Const) {
+            return sym.as_const.value;
+        } else {
+            invalid_const_expr(ctx, expr);
+        }
+    } else {
+        invalid_const_expr(ctx, expr);
+    }
+}
+
+//==============================================================================
+//== Expressions
+
+func elab_expr_infer(ctx: *ElabCtx, expr: *Expr);
+
+func elab_expr_expect(ctx: *ElabCtx, expr: *Expr, expected: *Type) {
+    elab_expr_infer(ctx, expr);
+    check_type(expr, expected);
+}
+
+func elab_expr_bool(ctx: *ElabCtx, expr: *Expr) {
+    elab_expr_expect(ctx, expr, mk_bool_type());
+}
+
+func elab_expr_int(ctx: *ElabCtx, expr: *Expr) {
+    elab_expr_infer(ctx, expr);
+    check_type_int(expr);
+}
+
+func elab_ident_expr(ctx: *ElabCtx, expr: *Expr) {
+    var name = expr.as_ident.name;
+
+    var sym = lookup(ctx, name);
+    if (!sym) {
+        die_at(&expr.pos, "Unknown symbol");
+    }
+
+    var type: *Type;
+    if (sym.kind == Sym_Local) {
+        type = sym.as_local.type;
+    } else if (sym.kind == Sym_Global) {
+        type = sym.as_global.type;
+    } else if (sym.kind == Sym_Const) {
+        type = mk_int_type(4);
+    } else {
+        die_at(&expr.pos, "Expected a variable or constant");
+    }
+
+    expr.as_ident.sym = sym;
+    expr.type = type;
+}
+
+func elab_literal_expr(ctx: *ElabCtx, expr: *Expr) {
+    var literal = expr.as_literal;
+
+    if (literal.kind == Literal_Null) {
+        expr.type = mk_ptr_type(mk_void_type());
+    } else if (literal.kind == Literal_Bool) {
+        expr.type = mk_bool_type();
+    } else if (literal.kind == Literal_Int) {
+        expr.type = mk_int_type(8);
+    } else if (literal.kind == Literal_Char) {
+        expr.type = mk_int_type(1);
+    } else if (literal.kind == Literal_String) {
+        expr.type = mk_ptr_type(mk_int_type(1));
+    } else {
+        unreachable("elab_literal_expr");
+    }
+}
+
+func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
+    var callee = expr.as_call.callee;
+
+    if (callee.kind != Expr_Ident) {
+        die_at(&callee.pos, "Expected function name");
+    }
+    var sym = lookup(ctx, callee.as_ident.name);
+    if (!sym) {
+        die_at(&callee.pos, "Unknown function");
+    }
+    if (sym.kind != Sym_Func) {
+        die_at(&callee.pos, "Expected a function");
+    }
+    expr.as_call.resolved_callee = sym;
+
+    var params = sym.as_func.params;
+    var param_count = list_len(params);
+    var is_variadic = sym.as_func.is_variadic;
+    var args = expr.as_call.args;
+    var arg_count = list_len(args);
+
+    if (arg_count > MAX_PARAMS) {
+        die_at(&expr.pos, "Too many arguments");
+    }
+    if (arg_count < param_count) {
+        error_at(&expr.pos);
+        fprintf(stderr, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
+        exit(1);
+    }
+    if (!is_variadic && arg_count > param_count) {
+        error_at(&expr.pos);
+        fprintf(stderr, "Too many arguments provided (%d > %d).\n", arg_count, param_count);
+        exit(1);
+    }
+    var i = 0;
+    while (i < param_count) {
+        var param: *FuncParam = list_get(params, i);
+        var arg: *Expr = list_get(args, i);
+        elab_expr_expect(ctx, arg, param.type);
+        i += 1;
+    }
+    while (i < arg_count) {
+        var arg: *Expr = list_get(args, i);
+        elab_expr_infer(ctx, arg);
+        if (!is_scalar(arg.type)) {
+            die_at(&expr.pos, "Variadic argument must be scalar.");
+        }
+        i += 1;
+    }
+    expr.type = sym.as_func.return_type;
+}
+
+func elab_index_expr(ctx: *ElabCtx, expr: *Expr) {
+    var indexee = expr.as_index.indexee;
+    var index = expr.as_index.index;
+
+    elab_expr_infer(ctx, indexee);
+    elab_expr_infer(ctx, index);
+
+    var indexee_type = indexee.type;
+    if (indexee_type.kind != Type_Arr && indexee_type.kind != Type_Ptr) {
+        die_at(&indexee.pos, "Expression is not indexable");
+    }
+
+    var elem_type = indexee_type.kind == Type_Arr
+        ? indexee_type.as_arr.elem
+        : indexee_type.as_ptr.pointee;
+
+    check_type_int(index);
+    expr.type = elem_type;
+}
+
+func elab_member_expr(ctx: *ElabCtx, expr: *Expr) {
+    var left = expr.as_member.left;
+    var field_name = expr.as_member.name;
+
+    elab_expr_infer(ctx, left);
+
+    var struc_type = left.type;
+    // TODO: implicit dereference
+    if (struc_type.kind == Type_Ptr) {
+        struc_type = struc_type.as_ptr.pointee;
+    }
+    if (struc_type.kind != Type_Struct) {
+        die_at(&left.pos, "Expected a struct");
+    }
+
+    var struct_sym = struc_type.as_struct.sym;
+    var field_index = find_struct_field(struct_sym, field_name);
+    if (field_index == -1) {
+        die_at(&expr.pos, "Unknown field");
+    }
+
+    var field: *StructField = list_get(struct_sym.as_struct.fields, field_index);
+    expr.as_member.resolved_field = field_index;
+    expr.type = field.type;
+}
+
+func elab_sizeof_expr(ctx: *ElabCtx, expr: *Expr) {
+    var type = eval_type(ctx, expr.as_sizeof.type);
+    var size = type_size(type);
+    expr.as_sizeof.size = size;
+    expr.type = mk_int_type(8);
+}
+
+func elab_unary_expr(ctx: *ElabCtx, expr: *Expr) {
+    var op = expr.as_unary.op;
+    var right = expr.as_unary.right;
+
+    elab_expr_infer(ctx, right);
+
+    if (op == Tok_Minus || op == Tok_Tilde) {
+        check_type_int(right);
+        expr.type = right.type;
+    } else if (op == Tok_Bang) {
+        check_type_bool(right);
+        expr.type = mk_bool_type();
+    } else if (op == Tok_Star) {
+        var pointee_type = right.type;
+        if (pointee_type.kind != Type_Ptr) {
+            die_at(&right.pos, "Expected a pointer");
+        }
+        expr.type = pointee_type.as_ptr.pointee;
+    } else if (op == Tok_Amp) {
+        if (!is_lvalue(right)) {
+            die_at(&right.pos, "Expected an lvalue");
+        }
+        expr.type = mk_ptr_type(right.type);
+    } else {
+        unreachable("elab_unary_expr");
+    }
+}
+
+func elab_binary_expr(ctx: *ElabCtx, expr: *Expr) {
+    var op = expr.as_binary.op;
+    var left = expr.as_binary.left;
+    var right = expr.as_binary.right;
+
+    if (op == Tok_Eq || op == Tok_AmpEq || op == Tok_BarEq || op == Tok_CaretEq || op == Tok_LtLtEq || op == Tok_GtGtEq || op == Tok_PlusEq || op == Tok_MinusEq || op == Tok_StarEq || op == Tok_SlashEq || op == Tok_PercentEq) {
+        if (!is_lvalue(left)) {
+            die_at(&left.pos, "L-value expected");
+        }
+        if (op != Tok_Eq) {
+            elab_expr_int(ctx, left);
+        } else {
+            elab_expr_infer(ctx, left);
+        }
+        elab_expr_expect(ctx, right, left.type);
+        if (!is_sized(left.type)) {
+            die_at(&left.pos, "Cannot assign to an unsized type");
+        }
+        expr.type = mk_void_type();
+    } else if (op == Tok_AmpAmp || op == Tok_BarBar) {
+        elab_expr_bool(ctx, left);
+        elab_expr_bool(ctx, right);
+        expr.type = mk_bool_type();
+    } else if (op == Tok_EqEq || op == Tok_BangEq || op == Tok_Lt || op == Tok_LtEq || op == Tok_Gt || op == Tok_GtEq) {
+        elab_expr_infer(ctx, left);
+        elab_expr_infer(ctx, right);
+        unify_types(left, right);
+        if (!is_scalar(left.type)) {
+            die_at(&left.pos, "Operands type is not comparable");
+        }
+        expr.type = mk_bool_type();
+    } else if (op == Tok_Amp || op == Tok_Bar || op == Tok_Caret || op == Tok_LtLt || op == Tok_GtGt || op == Tok_Plus || op == Tok_Minus || op == Tok_Star || op == Tok_Slash || op == Tok_Percent) {
+        elab_expr_int(ctx, left);
+        elab_expr_int(ctx, right);
+        unify_types(left, right);
+        expr.type = left.type;
+    } else {
+        unreachable("elab_binary_expr");
+    }
+}
+
+func elab_ternary_expr(ctx: *ElabCtx, expr: *Expr) {
+    var cond = expr.as_ternary.cond;
+    var then_expr = expr.as_ternary.then_expr;
+    var else_expr = expr.as_ternary.else_expr;
+
+    elab_expr_bool(ctx, cond);
+    elab_expr_infer(ctx, then_expr);
+    elab_expr_infer(ctx, else_expr);
+
+    unify_types(then_expr, else_expr);
+    expr.type = then_expr.type;
+}
+
+func elab_cast_expr(ctx: *ElabCtx, expr: *Expr) {
+    var type = eval_type(ctx, expr.as_cast.type);
+    var subexpr = expr.as_cast.expr;
+
+    elab_expr_infer(ctx, subexpr);
+    if (!is_scalar(subexpr.type)) {
+        die_at(&subexpr.pos, "Cannot cast non-scalar type");
+    }
+    expr.type = type;
+}
+
+func elab_expr_infer2(ctx: *ElabCtx, expr: *Expr) {
+    if (expr.kind == Expr_Ident) {
+        elab_ident_expr(ctx, expr);
+    } else if (expr.kind == Expr_Literal) {
+        elab_literal_expr(ctx, expr);
+    } else if (expr.kind == Expr_Call) {
+        elab_call_expr(ctx, expr);
+    } else if (expr.kind == Expr_Index) {
+        elab_index_expr(ctx, expr);
+    } else if (expr.kind == Expr_Member) {
+        elab_member_expr(ctx, expr);
+    } else if (expr.kind == Expr_Sizeof) {
+        elab_sizeof_expr(ctx, expr);
+    } else if (expr.kind == Expr_Unary) {
+        elab_unary_expr(ctx, expr);
+    } else if (expr.kind == Expr_Binary) {
+        elab_binary_expr(ctx, expr);
+    } else if (expr.kind == Expr_Ternary) {
+        elab_ternary_expr(ctx, expr);
+    } else if (expr.kind == Expr_Cast) {
+        elab_cast_expr(ctx, expr);
+    } else {
+        unreachable("elab_expr_infer");
+    }
+}
+
+func elab_expr_infer(ctx: *ElabCtx, expr: *Expr) {
+    elab_expr_infer2(ctx, expr);
+    assert(expr.type, "elab_expr_infer");
+}
+
+//==============================================================================
+//== Statements
+
+func elab_stmt(ctx: *ElabCtx, stmt: *Stmt);
+
+func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
+    enter_scope(ctx);
+    elab_stmt(ctx, stmt);
+    exit_scope(ctx);
+}
+
+func elab_block_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    enter_scope(ctx);
+    var i = 0;
+    while (i < stmt.as_block.stmts.len) {
+        var stmt = list_get(stmt.as_block.stmts, i);
+        elab_stmt(ctx, stmt);
+        i += 1;
+    }
+    exit_scope(ctx);
+}
+
+func elab_local_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    var name = stmt.as_local.name;
+    var typeExpr = stmt.as_local.type;
+    var init = stmt.as_local.init;
+
+    var type: *Type = typeExpr ? eval_type(ctx, typeExpr) : null;
+    if (init) {
+        if (!type) {
+            elab_expr_infer(ctx, init);
+            type = init.type;
+        } else {
+            elab_expr_expect(ctx, init, type);
+        }
+    } else {
+        if (!type) {
+            die_at(&stmt.pos, "Type required when no initializer is provided");
+        }
+    }
+
+    if (!is_sized(type)) {
+        die_at(&stmt.pos, "Variable must have a size.");
+    }
+
+    var sym = define_local(ctx, &stmt.pos, name, type);
+    stmt.as_local.sym = sym;
+}
+
+func elab_if_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    var cond = stmt.as_if.cond;
+    var then_stmt = stmt.as_if.then_stmt;
+    var else_stmt = stmt.as_if.else_stmt;
+
+    elab_expr_bool(ctx, cond);
+    elab_stmt_with_scope(ctx, then_stmt);
+    if (else_stmt) {
+        elab_stmt_with_scope(ctx, else_stmt);
+    }
+}
+
+func elab_while_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    var cond = stmt.as_while.cond;
+    var body = stmt.as_while.body;
+
+    elab_expr_bool(ctx, cond);
+    ctx.loop_depth += 1;
+    elab_stmt_with_scope(ctx, body);
+    ctx.loop_depth -= 1;
+}
+
+func elab_return_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    var return_expr = stmt.as_return.expr;
+
+    var return_type = ctx.current_func.as_func.return_type;
+    if (return_expr) {
+        elab_expr_expect(ctx, return_expr, return_type);
+    } else if (return_type.kind != Type_Void) {
+        die_at(&stmt.pos, "Missing return value");
+    }
+}
+
+func elab_break_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    if (!ctx.loop_depth) {
+        die_at(&stmt.pos, "Break statement outside of loop");
+    }
+}
+
+func elab_continue_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    if (!ctx.loop_depth) {
+        die_at(&stmt.pos, "Continue statement outside of loop");
+    }
+}
+
+func elab_expr_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    var expr = stmt.as_expr.expr;
+    elab_expr_infer(ctx, expr);
+}
+
+func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    if (stmt.kind == Stmt_Block) {
+        elab_block_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Local) {
+        elab_local_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_If) {
+        elab_if_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_While) {
+        elab_while_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Return) {
+        elab_return_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Break) {
+        elab_break_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Continue) {
+        elab_continue_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Expr) {
+        elab_expr_stmt(ctx, stmt);
+    } else {
+        unreachable("elab_stmt");
+    }
+}
+
+//==============================================================================
+//== Top-level declarations
+
+func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
+    var field_name = field_decl.name;
+
+    var existing_index = find_struct_field(sym, field_name);
+    if (existing_index != -1) {
+        die_at(&field_decl.pos, "Duplicate field");
+    }
+
+    var field_type = eval_type(ctx, field_decl.type);
+    var field_size = type_size(field_type);
+    var field_align = type_align(field_type);
+    if (!is_sized(field_type)) {
+        die_at(&field_decl.pos, "Field has unsized type");
+    }
+    var struct_size = sym.as_struct.unpadded_size;
+    var field_offset = align_up(struct_size, field_align);
+
+    var field: *StructField = calloc(1, sizeof(StructField));
+    field.name = field_name;
+    field.type = field_type;
+    field.offset = field_offset;
+
+    list_push(sym.as_struct.fields, field);
+    sym.as_struct.unpadded_size = field_offset + field_size;
+}
+
+func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
+    var name = decl.as_struct.name;
+    var field_decls = decl.as_struct.fields;
+
+    var is_definition = field_decls != null;
+
+    var sym = declare_struct(ctx, &decl.pos, name, is_definition);
+
+    if (field_decls) {
+        if (list_len(field_decls) == 0) {
+            die_at(&decl.pos, "Empty struct");
+        }
+        sym.as_struct.fields = list_new();
+        var fields = sym.as_struct.fields;
+
+        var i = 0;
+        while (i < list_len(field_decls)) {
+            var field_decl: *StructFieldDecl = list_get(field_decls, i);
+            add_struct_field(ctx, sym, field_decl);
+            i += 1;
+        }
+
+        sym.as_struct.is_defined = true;
+    }
+}
+
+func string_list_contains(list: *List, value: *Char): Bool {
+    var i = 0;
+    while (i < list_len(list)) {
+        var item: *Char = list_get(list, i);
+        if (str_eq(item, value)) {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+func ensure_unique_params(ctx: *ElabCtx, params_decls: *List) {
+    var seen = list_new();
+    var i = 0;
+    while (i < list_len(params_decls)) {
+        var param_decl: *FuncParamDecl = list_get(params_decls, i);
+        var name = param_decl.name;
+        if (string_list_contains(seen, name)) {
+            die_at(&param_decl.pos, "Duplicate parameter name");
+        }
+        list_push(seen, name);
+        i += 1;
+    }
+}
+
+func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
+    var name = param_decl.name;
+    var type = eval_type(ctx, param_decl.type);
+
+    if (!is_scalar(type)) {
+        die_at(&param_decl.pos, "Parameter must be of scalar type.");
+    }
+
+    var result: *FuncParam = calloc(1, sizeof(FuncParam));
+    result.name = name;
+    result.type = type;
+    return result;
+}
+
+func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
+    var name = decl.as_func.name;
+
+    var param_decls = decl.as_func.params;
+
+    if (list_len(param_decls) > MAX_PARAMS) {
+        die_at(&decl.pos, "Too many parameters");
+    }
+
+    var params = list_new();
+    var i = 0;
+    while (i < list_len(param_decls)) {
+        var param_decl = list_get(param_decls, i);
+        var param = elab_param(ctx, param_decl);
+        list_push(params, param);
+        i += 1;
+    }
+
+    var return_type = decl.as_func.return_type
+        ? eval_type(ctx, decl.as_func.return_type)
+        : mk_void_type();
+
+    var is_variadic = decl.as_func.is_variadic;
+
+    var is_definition = decl.as_func.body != null;
+
+    var sym = declare_func(ctx, &decl.pos, name, params, return_type, is_variadic, is_definition);
+
+    if (decl.as_func.body) {
+        enter_scope(ctx);
+        ctx.current_func = sym;
+
+        define_params(ctx, param_decls, params);
+        elab_stmt(ctx, decl.as_func.body);
+
+        ctx.current_func = null;
+        exit_scope(ctx);
+
+        sym.as_func.body = decl.as_func.body;
+        sym.as_func.is_defined = true;
+    } else {
+        ensure_unique_params(ctx, param_decls);
+    }
+}
+
+func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, next_value: Int32): Int32 {
+    var name = member_decl.name;
+    var value = member_decl.value
+        ? const_eval(ctx, member_decl.value)
+        : next_value;
+
+    define_const(ctx, &member_decl.pos, name, value);
+    return value;
+}
+
+func elab_enum_decl(ctx: *ElabCtx, decl: *Decl) {
+    var member_decls = decl.as_enum.members;
+
+    var next_value: Int32 = 0;
+    var i = 0;
+    while (i < list_len(member_decls)) {
+        var member_decl: *EnumMember = list_get(member_decls, i);
+        var value = elab_enum_member(ctx, member_decl, next_value);
+        next_value = value + 1;
+        i += 1;
+    }
+}
+
+func elab_const_decl(ctx: *ElabCtx, decl: *Decl) {
+    var name = decl.as_const.name;
+    var value_expr = decl.as_const.value;
+
+    var value = const_eval(ctx, value_expr);
+    define_const(ctx, &decl.pos, name, value);
+}
+
+func elab_global_decl(ctx: *ElabCtx, decl: *Decl) {
+    var is_extern = decl.as_global.is_extern;
+    var name = decl.as_global.name;
+    var type = eval_type(ctx, decl.as_global.type);
+
+    var sym = declare_global(ctx, &decl.pos, name, type, !is_extern);
+    sym.as_global.is_defined = !is_extern;
+}
+
+func elab_decl(ctx: *ElabCtx, decl: *Decl) {
+    if (decl.kind == Decl_Struct) {
+        elab_struct_decl(ctx, decl);
+    } else if (decl.kind == Decl_Func) {
+        elab_func_decl(ctx, decl);
+    } else if (decl.kind == Decl_Enum) {
+        elab_enum_decl(ctx, decl);
+    } else if (decl.kind == Decl_Const) {
+        elab_const_decl(ctx, decl);
+    } else if (decl.kind == Decl_Global) {
+        elab_global_decl(ctx, decl);
+    } else {
+        unreachable("elab_decl");
+    }
+}
+
+func elab(ast: *Ast): *List { // *List<*Sym>
+    var ctx: *ElabCtx = calloc(1, sizeof(ElabCtx));
+    ctx.scope = scope_new(null);
+    ctx.syms = list_new();
+
+    var i = 0;
+    while (i < ast.decls.len) {
+        var decl = list_get(ast.decls, i);
+        elab_decl(ctx, decl);
+        i += 1;
+    }
+
+    return ctx.syms;
 }

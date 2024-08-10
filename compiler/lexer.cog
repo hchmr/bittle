@@ -1,0 +1,390 @@
+include "cog.cogs";
+
+//==============================================================================
+//== Helper functions
+
+func try_keyword(lexeme: *Char, keyword: *Char, out: *Int32, kind: Int32): Bool {
+    if (str_eq(lexeme, keyword)) {
+        *out = kind;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+func lookup_keyword(lexeme: *Char, out: *Int32): Bool {
+    return try_keyword(lexeme, "as", out, Tok_As)
+        || try_keyword(lexeme, "break", out, Tok_Break)
+        || try_keyword(lexeme, "const", out, Tok_Const)
+        || try_keyword(lexeme, "continue", out, Tok_Continue)
+        || try_keyword(lexeme, "else", out, Tok_Else)
+        || try_keyword(lexeme, "enum", out, Tok_Enum)
+        || try_keyword(lexeme, "extern", out, Tok_Extern)
+        || try_keyword(lexeme, "false", out, Tok_False)
+        || try_keyword(lexeme, "func", out, Tok_Func)
+        || try_keyword(lexeme, "if", out, Tok_If)
+        || try_keyword(lexeme, "include", out, Tok_Include)
+        || try_keyword(lexeme, "null", out, Tok_Null)
+        || try_keyword(lexeme, "return", out, Tok_Return)
+        || try_keyword(lexeme, "sizeof", out, Tok_Sizeof)
+        || try_keyword(lexeme, "struct", out, Tok_Struct)
+        || try_keyword(lexeme, "true", out, Tok_True)
+        || try_keyword(lexeme, "var", out, Tok_Var)
+        || try_keyword(lexeme, "while", out, Tok_While);
+}
+
+//==============================================================================
+//== Lexer core
+
+struct Lexer {
+    input: *Char,
+    index: Int,
+    pos: Pos,
+    tok_kind: Int32,
+    tok_index: Int,
+    tok_pos: Pos,
+    tok_lexeme: *Char,
+}
+
+func lexer_new(file_name: *Char, input: *Char): *Lexer {
+    var self: *Lexer = calloc(1, sizeof(Lexer));
+
+    self.input = input;
+    self.index = 0;
+
+    self.pos.file = file_name;
+    self.pos.row = 1;
+    self.pos.col = 1;
+
+    self.tok_kind = Tok_Eof;
+    self.tok_index = 0;
+    self.tok_pos = self.pos;
+    self.tok_lexeme = "";
+    return self;
+}
+
+func make_lexeme(self: *Lexer): *Char {
+    var len = self.index - self.tok_index;
+    var lexeme: *Char = malloc(len + 1);
+    memcpy(lexeme, &self.input[self.index - len], len);
+    lexeme[len] = '\0';
+    return lexeme;
+}
+
+func begin_token(self: *Lexer) {
+    self.tok_index = self.index;
+    self.tok_pos = self.pos;
+}
+
+func finish_token(self: *Lexer, tok_kind: Int32, lexeme: *Char) {
+    self.tok_kind = tok_kind;
+    self.tok_lexeme = lexeme;
+}
+
+func curr_char(self: *Lexer): Int32 {
+    return self.input[self.index];
+}
+
+func next_char(self: *Lexer) {
+    var c = curr_char(self);
+    if (c == '\n') {
+        self.pos.row += 1;
+        self.pos.col = 1;
+    } else {
+        self.pos.col += 1;
+    }
+    self.index += 1;
+}
+
+//==============================================================================
+//== Character matching
+
+func at_end(self: *Lexer): Bool {
+    return curr_char(self) == '\0';
+}
+
+func at_whitespace(self: *Lexer): Bool {
+    return is_whitespace(curr_char(self));
+}
+
+func at_word_start(self: *Lexer): Bool {
+    return is_word_start(curr_char(self));
+}
+
+func at_word_part(self: *Lexer): Bool {
+    return is_word_part(curr_char(self));
+}
+
+func at_digit(self: *Lexer): Bool {
+    return is_digit(curr_char(self));
+}
+
+func at_printable(self: *Lexer): Bool {
+    return is_print(curr_char(self));
+}
+
+func at_char(self: *Lexer, c: Int32): Bool {
+    return curr_char(self) == c;
+}
+
+func eat_char(self: *Lexer, c: Int32): Bool {
+    if (at_char(self, c)) {
+        next_char(self);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+//==============================================================================
+//== Scanning routines
+
+func skip_whitespace(self: *Lexer) {
+    while (is_whitespace(curr_char(self))) {
+        next_char(self);
+    }
+}
+
+func skip_line_comment(self: *Lexer) {
+    while (!at_end(self) && !eat_char(self, '\n')) {
+        next_char(self);
+    }
+}
+
+func skip_block_comment(self: *Lexer) {
+    while (true) {
+        if (at_end(self)) {
+            die_at(&self.pos, "Unterminated block comment.");
+        } else if (eat_char(self, '*') && eat_char(self, '/')) {
+            break;
+        } else {
+            next_char(self);
+        }
+    }
+}
+
+func scan_word(self: *Lexer) {
+    next_char(self);
+    while (is_word_part(curr_char(self))) {
+        next_char(self);
+    }
+    var lexeme = make_lexeme(self);
+    var tok_kind = Tok_Ident;
+    lookup_keyword(lexeme, &tok_kind);
+    finish_token(self, tok_kind, lexeme);
+}
+
+func scan_number(self: *Lexer) {
+    next_char(self);
+    while (is_digit(curr_char(self))) {
+        next_char(self);
+    }
+    var lexeme = make_lexeme(self);
+    finish_token(self, Tok_Int, lexeme);
+}
+
+func scan_char_part(self: *Lexer) {
+    if (eat_char(self, '\\')) {
+        if (eat_char(self, '\'')) {
+        } else if (eat_char(self, '\"')) {
+        } else if (eat_char(self, '0')) {
+        } else if (eat_char(self, '\\')) {
+        } else if (eat_char(self, 'n')) {
+        } else if (eat_char(self, 'r')) {
+        } else if (eat_char(self, 't')) {
+        } else {
+            die_at(&self.pos, "Invalid escape sequence.");
+        }
+    } else if (at_printable(self)) {
+        next_char(self);
+    } else {
+        die_at(&self.pos, "Illegal character.\n");
+    }
+}
+
+func scan_string(self: *Lexer) {
+    next_char(self);
+    while (!eat_char(self, '\"')) {
+        if (at_end(self)) {
+            die_at(&self.pos, "Unterminated string literal.");
+        } else {
+            scan_char_part(self);
+        }
+    }
+    var lexeme = make_lexeme(self);
+    finish_token(self, Tok_String, lexeme);
+}
+
+func scan_char(self: *Lexer) {
+    next_char(self);
+    if (at_char(self, '\'')) {
+        die_at(&self.pos, "Empty character literal.");
+    }
+    scan_char_part(self);
+    if (!eat_char(self, '\'')) {
+        die_at(&self.pos, "Unterminated character literal.");
+    }
+    var lexeme = make_lexeme(self);
+    finish_token(self, Tok_Char, lexeme);
+}
+
+func lexer_next(self: *Lexer, token: *Tok) {
+    while (true) {
+        begin_token(self);
+        if (at_end(self)) {
+            finish_token(self, Tok_Eof, "");
+        } else if (at_whitespace(self)) {
+            skip_whitespace(self);
+            continue;
+        } else if (at_word_start(self)) {
+            scan_word(self);
+        } else if (at_digit(self)) {
+            scan_number(self);
+        } else if (at_char(self, '\"')) {
+            scan_string(self);
+        } else if (at_char(self, '\'')) {
+            scan_char(self);
+        } else if (eat_char(self, '(')) {
+            finish_token(self, Tok_LParen, "(");
+        } else if (eat_char(self, ')')) {
+            finish_token(self, Tok_RParen, ")");
+        } else if (eat_char(self, '[')) {
+            finish_token(self, Tok_LBracket, "[");
+        } else if (eat_char(self, ']')) {
+            finish_token(self, Tok_RBracket, "]");
+        } else if (eat_char(self, '{')) {
+            finish_token(self, Tok_LBrace, "{");
+        } else if (eat_char(self, '}')) {
+            finish_token(self, Tok_RBrace, "}");
+        } else if (eat_char(self, '+')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_PlusEq, "+=");
+            } else {
+                finish_token(self, Tok_Plus, "+");
+            }
+        } else if (eat_char(self, '-')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_MinusEq, "-=");
+            } else if (eat_char(self, '>')) {
+                finish_token(self, Tok_Arrow, "->");
+            } else {
+                finish_token(self, Tok_Minus, "-");
+            }
+        } else if (eat_char(self, '*')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_StarEq, "*=");
+            } else {
+                finish_token(self, Tok_Star, "*");
+            }
+        } else if (eat_char(self, '/')) {
+            if (eat_char(self, '/')) {
+                skip_line_comment(self);
+                continue;
+            } else if (eat_char(self, '*')) {
+                skip_block_comment(self);
+                continue;
+            } else if (eat_char(self, '=')) {
+                finish_token(self, Tok_SlashEq, "/=");
+            } else {
+                finish_token(self, Tok_Slash, "/");
+            }
+        } else if (eat_char(self, '%')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_PercentEq, "%=");
+            } else {
+                finish_token(self, Tok_Percent, "%");
+            }
+        } else if (eat_char(self, '=')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_EqEq, "==");
+            } else {
+                finish_token(self, Tok_Eq, "=");
+            }
+        } else if (eat_char(self, '!')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_BangEq, "!=");
+            } else {
+                finish_token(self, Tok_Bang, "!");
+            }
+        } else if (eat_char(self, '<')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_LtEq, "<=");
+            } else if (eat_char(self, '<')) {
+                if (eat_char(self, '=')) {
+                    finish_token(self, Tok_LtLtEq, "<<=");
+                } else {
+                    finish_token(self, Tok_LtLt, "<<");
+                }
+            } else {
+                finish_token(self, Tok_Lt, "<");
+            }
+        } else if (eat_char(self, '>')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_GtEq, ">=");
+            } else if (eat_char(self, '>')) {
+                if (eat_char(self, '=')) {
+                    finish_token(self, Tok_GtGtEq, ">>=");
+                } else {
+                    finish_token(self, Tok_GtGt, ">>");
+                }
+            } else {
+                finish_token(self, Tok_Gt, ">");
+            }
+        } else if (eat_char(self, '&')) {
+            if (eat_char(self, '&')) {
+                finish_token(self, Tok_AmpAmp, "&&");
+            } else if (eat_char(self, '=')) {
+                finish_token(self, Tok_AmpEq, "&=");
+            } else {
+                finish_token(self, Tok_Amp, "&");
+            }
+        } else if (eat_char(self, '|')) {
+            if (eat_char(self, '|')) {
+                finish_token(self, Tok_BarBar, "||");
+            } else if (eat_char(self, '=')) {
+                finish_token(self, Tok_BarEq, "|=");
+            } else {
+                finish_token(self, Tok_Bar, "|");
+            }
+        } else if (eat_char(self, '^')) {
+            if (eat_char(self, '=')) {
+                finish_token(self, Tok_CaretEq, "^=");
+            } else {
+                finish_token(self, Tok_Caret, "^");
+            }
+        } else if (eat_char(self, '~')) {
+            finish_token(self, Tok_Tilde, "~");
+        } else if (eat_char(self, '?')) {
+            finish_token(self, Tok_Question, "?");
+        } else if (eat_char(self, ',')) {
+            finish_token(self, Tok_Comma, ",");
+        } else if (eat_char(self, ';')) {
+            finish_token(self, Tok_Semicolon, ";");
+        } else if (eat_char(self, ':')) {
+            if (eat_char(self, ':')) {
+                finish_token(self, Tok_ColonColon, "::");
+            } else {
+                finish_token(self, Tok_Colon, ":");
+            }
+        } else if (eat_char(self, '.')) {
+            if (eat_char(self, '.')) {
+                if (eat_char(self, '.')) {
+                    finish_token(self, Tok_DotDotDot, "...");
+                } else {
+                    finish_token(self, Tok_DotDot, "..");
+                }
+            } else {
+                finish_token(self, Tok_Dot, ".");
+            }
+        } else {
+            error_at(&self.pos);
+            fprintf(stderr, "Unexpected character: '%c'.\n", curr_char(self));
+            exit(1);
+        }
+
+        token.kind = self.tok_kind;
+        token.pos = self.tok_pos;
+        token.lexeme = self.tok_lexeme;
+        return;
+    }
+}

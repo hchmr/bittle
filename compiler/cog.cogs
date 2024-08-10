@@ -1,28 +1,72 @@
 include "libc.cogs";
 
-//= misc.cog
+//==============================================================================
+//== misc.cog
 
 struct Pos {
     file: *Char,
-    line: Int,
-    col: Int,
+    row: Int32,
+    col: Int32,
 }
 
-func error_at(pos: *Pos);
-func str_eq(a: *Char, b: *Char): Bool;
-func align_up(size: Int , align: Int): Int;
+struct List {
+    elems: *(*Void),
+    len: Int,
+    cap: Int,
+}
+
+struct StringBuilder {
+    buf: *Char,
+    len: Int,
+    cap: Int,
+}
+
 func assert(cond: Bool, because: *Char);
-func unreachable(name: *Char): !;
+func unreachable(function: *Char): !;
+
+func error_at(pos: *Pos);
+func die(msg: *Char): !;
+func die_at(pos: *Pos, msg: *Char): !;
+
+func sb_new(): *StringBuilder;
+func sb_len(self: *StringBuilder): Int;
+func sb_get(self: *StringBuilder): *Char;
+func sb_ensure_cap(self: *StringBuilder, cap: Int);
+func sb_push(self: *StringBuilder, c: Char);
+func sb_append(self: *StringBuilder, s: *Char);
+func sb_finish(self: *StringBuilder): *Char;
+
+func list_new(): *List;
+func list_len(self: *List): Int;
+func list_get(self: *List, i: Int): *Void;
+func list_set(self: *List, i: Int, elem: *Void);
+func list_push(self: *List, elem: *Void);
+
+func str_eq(a: *Char, b: *Char): Bool;
+
+func align_up(size: Int , align: Int): Int;
 func ilog2(n: Int): Int;
 func int_min(a: Int, b: Int): Int;
-func sb_push(buf_p: *(*Char), c: Char): Void;
-func get_directory(path: *Char): *Char;
-func is_space(c: Char): Bool;
-func is_print(c: Char): Bool;
-func is_digit(c: Char): Bool;
-func is_alpha(c: Char): Bool;
 
-//= type.cog
+func read_file(file: *File): *Char;
+func get_directory(path: *Char): *Char;
+func join_paths(dir: *Char, file: *Char): *Char;
+
+func is_whitespace(c: Int32): Bool;
+func is_digit(c: Int32): Bool;
+func is_word_start(c: Int32): Bool;
+func is_word_part(c: Int32): Bool;
+func is_print(c: Int32): Bool;
+
+func parse_char(c: *Char): Char;
+func parse_string(s: *Char): *Char;
+
+//==============================================================================
+//== type.cog
+
+const MAX_PARAMS = 8;
+
+struct Sym;
 
 enum {
     Type_Void,
@@ -34,181 +78,655 @@ enum {
     Type_Never,
 }
 
-struct Type {
-    kind: Int,
-    // Int
+struct Type;
+
+struct IntType {
     size: Int,
-    // Ptr, Array
-    base: *Type,
-    // Array
-    len: Int,
-    name: *Char,
-    field_names: *(*Char),
-    field_types: *(*Type),
-    field_offsets: *Int,
-    field_count: Int,
-    unpadded_size: Int,
 }
 
-func mk_type(kind: Int): *Type;
+struct PtrType {
+    pointee: *Type,
+}
+
+struct ArrType {
+    elem: *Type,
+    size: Int,
+}
+
+struct StructType {
+    sym: *Sym,
+}
+
+struct Type {
+    kind: Int32,
+    as_int: IntType,
+    as_ptr: PtrType,
+    as_arr: ArrType,
+    as_struct: StructType,
+}
+
+func mk_type(kind: Int32): *Type;
 func mk_void_type(): *Type;
 func mk_never_type(): *Type;
 func mk_bool_type(): *Type;
 func mk_int_type(size: Int): *Type;
-func mk_ptr_type(base: *Type): *Type;
-func mk_array_type(base: *Type, len: Int): *Type;
-func mk_struct_type(name: *Char): *Type;
-func type_align(type: *Type): Int;
-func type_size(type: *Type): Int;
+func mk_ptr_type(pointee: *Type): *Type;
+func mk_array_type(elem: *Type, size: Int): *Type;
+func mk_struct_type(sym: *Sym): *Type;
+
 func type_eq(t1: *Type, t2: *Type): Bool;
-func is_scalar(type: *Type): Bool;
 func type_le(t1: *Type, t2: *Type): Bool;
-func find_field(type: *Type, name: *Char): Int;
-func add_field(type: *Type, field_name: *Char, field_type: *Type, pos: *Pos);
-func print_type(file: *File, type: *Type);
+func type_size(type: *Type): Int;
+func type_align(type: *Type): Int;
+func is_scalar(type: *Type): Bool;
+func is_sized(type: *Type): Bool;
 
-//= sym.cog
+func pretty_type(file: *File, type: *Type): Void;
 
-const MAX_PARAMS = 8;
+//==============================================================================
+//== sym.cog
+
+struct Sym;
+struct Stmt;
 
 enum {
-    Sym_Type,
-    Sym_Func,
+    Sym_Struct,
     Sym_Global,
-    Sym_Local,
     Sym_Const,
+    Sym_Func,
+    Sym_Local,
 }
 
-struct Expr;
+struct StructField {
+    name: *Char,
+    type: *Type,
+    offset: Int,
+}
+
+struct StructSym {
+    fields: *List, // List<StructField>
+    unpadded_size: Int,
+    is_defined: Bool,
+}
+
+struct GlobalSym {
+    type: *Type,
+    is_defined: Bool,
+}
+
+struct ConstSym {
+    value: Int32,
+}
+
+struct FuncParam {
+    name: *Char,
+    type: *Type,
+}
+
+struct FuncSym {
+    params: *List, // List<FuncParam>
+    return_type: *Type,
+    is_variadic: Bool,
+    is_defined: Bool,
+    locals: *List, // List<Sym>
+    body: *Stmt,
+}
+
+struct LocalSym {
+    type: *Type,
+    frame_offset: Int,
+}
 
 struct Sym {
-    kind: Int,
+    kind: Int32,
     name: *Char,
-    // Type, Function, Global, Local
-    type: *Type,
-    // Local variable
-    offset: Int,
-    // Function, Global, Type
-    is_defined: Bool,
-    // Global
-    value: Int,
-    // Function
-    params: [*Sym; MAX_PARAMS + 1],
-    param_count: Int,
-    is_variadic: Bool,
-    locals_size: Int,
-    body: *Expr,
+    as_struct: StructSym,
+    as_global: GlobalSym,
+    as_const: ConstSym,
+    as_func: FuncSym,
+    as_local: LocalSym,
 }
 
-struct Env {
-    parent: *Env,
-    syms: *(*Sym),
-    sym_count: Int,
-    current_func: *Sym,
-    current_loop: Int,
-}
+func mk_sym(kind: Int32, name: *Char): *Sym;
+func sym_is_defined(sym: *Sym): Bool;
+func find_struct_field(sym: *Sym, name: *Char): Int;
 
-func mk_sym(kind: Int, name: *Char): *Sym;
-func enter_scope(env: *(*Env));
-func leave_scope(env: *(*Env));
-func find_sym_scoped(env: *Env, name: *Char): *Sym;
-func find_sym(env: *Env, name: *Char): *Sym;
-func func_eq(a: *Sym, b: *Sym): Bool;
-func decl_compat(existing: *Sym, new: *Sym): Bool;
-func sym_merge(existing: *Sym, new: *Sym);
-func add_sym(env: *Env, sym: *Sym, pos: *Pos);
-func add_local(env: *Env, name: *Char, type: *Type, pos: *Pos): *Sym;
-func add_global(env: *Env, is_defined: Bool, name: *Char, type: *Type, pos: *Pos);
-func add_const(env: *Env, name: *Char, value: Int, pos: *Pos);
-func declare_struct(env: *Env, name: *Char, pos: *Pos);
-func define_struct(env: *Env, name: *Char, fields: *Type, pos: *Pos);
+//==============================================================================
+//== tok.cog
 
-//= ast.cog
-
-struct Expr {
-    kind: *Char,
-    type: *Type,
-    pos: Pos,
-    // Null, Bool, Int
-    int_val: Int,
-    // Str
-    str_val: *Char,
-    // Var, Call
-    sym: *Sym,
-    // Subexpressions
-    children: *(*Expr),
-    child_count: Int,
-    // Field
-    field_index: Int,
-}
-
-func mk_expr(kind: *Char, type: *Type, pos: *Pos): *Expr;
-func expr_add_child(expr: *Expr, child: *Expr);
-func mk_expr_3(kind: *Char, e1: *Expr, e2: *Expr, e3: *Expr, type: *Type): *Expr;
-func mk_expr_2(kind: *Char, e1: *Expr, e2: *Expr, type: *Type): *Expr;
-func mk_expr_1(kind: *Char, e1: *Expr, type: *Type): *Expr;
-func mk_cast_expr(expr: *Expr, type: *Type): *Expr;
-func is_lvalue(expr: *Expr): Bool;
-func print_expr(file: *File, expr: *Expr);
-
-//= eval.cog
-
-func const_eval(e: *Expr): Int;
-
-//= elab.cog
-
-func copy_expr(expr: *Expr): *Expr;
-func try_coerce(expr: *Expr, target: *Type);
-func check_type(e: *Expr, expected: *Type);
-func check_type_int(e: *Expr);
-func check_type_bool(e: *Expr);
-func unify_types(e1: *Expr, e2: *Expr);
-
-//= lex.cog
-
+// NOTE: When updating this declaration, remember to also update `pretty_tok_kind` and `lookup_keyword`.
 enum {
-    Tok_Eof,
+    Tok_Eof = 1,
+    // Identifier
+    Tok_Ident,
+    // Literals
     Tok_Int,
-    Tok_Chr,
-    Tok_Str,
-    Tok_Wrd,
-    Tok_Sym,
+    Tok_String,
+    Tok_Char,
+    // Keywords
+    Tok_As,
+    Tok_Break,
+    Tok_Const,
+    Tok_Continue,
+    Tok_Else,
+    Tok_Enum,
+    Tok_Extern,
+    Tok_False,
+    Tok_Func,
+    Tok_If,
+    Tok_Include,
+    Tok_Null,
+    Tok_Return,
+    Tok_Sizeof,
+    Tok_Struct,
+    Tok_True,
+    Tok_Var,
+    Tok_While,
+    // Symbols
+    Tok_LParen,
+    Tok_RParen,
+    Tok_LBrace,
+    Tok_RBrace,
+    Tok_LBracket,
+    Tok_RBracket,
+    Tok_Comma,
+    Tok_Semicolon,
+    Tok_Dot,
+    Tok_DotDot,
+    Tok_DotDotDot,
+    Tok_Colon,
+    Tok_ColonColon,
+    Tok_Arrow,
+    Tok_Plus,
+    Tok_PlusEq,
+    Tok_Minus,
+    Tok_MinusEq,
+    Tok_Star,
+    Tok_StarEq,
+    Tok_Slash,
+    Tok_SlashEq,
+    Tok_Percent,
+    Tok_PercentEq,
+    Tok_Amp,
+    Tok_AmpEq,
+    Tok_AmpAmp,
+    Tok_Bar,
+    Tok_BarEq,
+    Tok_BarBar,
+    Tok_Caret,
+    Tok_CaretEq,
+    Tok_Bang,
+    Tok_Tilde,
+    Tok_Question,
+    Tok_Lt,
+    Tok_LtLtEq,
+    Tok_LtLt,
+    Tok_LtEq,
+    Tok_Gt,
+    Tok_GtEq,
+    Tok_GtGt,
+    Tok_GtGtEq,
+    Tok_Eq,
+    Tok_EqEq,
+    Tok_BangEq,
 }
 
 struct Tok {
-    kind: Int,
+    kind: Int32,
     pos: Pos,
     lexeme: *Char,
 }
 
-struct Lexer {
-    file: *File,
+func pretty_tok_kind(kind: Int32): *Char;
+
+//==============================================================================
+//== ast.cog
+
+struct Expr;
+
+// Type
+
+struct TypeExpr;
+
+enum {
+    TypeExpr_Named,
+    TypeExpr_Ptr,
+    TypeExpr_Arr,
+    TypeExpr_Never,
+}
+
+struct PtrTypeExpr {
+    pointee: *TypeExpr,
+}
+
+struct ArrTypeExpr {
+    elem: *TypeExpr,
+    size: *Expr,
+}
+
+struct TypeExpr {
+    kind: Int32,
     pos: Pos,
-    chr: Char,
+    as_named: *Char,
+    as_ptr: PtrTypeExpr,
+    as_array: ArrTypeExpr,
 }
 
-func lexer_init(self: *Lexer, file: *File, file_name: *Char);
-func next_char(self: *Lexer);
-func scan_tok(self: *Lexer, tok: *Tok);
+// Literal
 
-//= codegen.cog
+struct Literal;
 
-const FRAME_SIZE_MAX = 4096;
-const FRAME_TEMP_SIZE = 128;
-const FRAME_ARGS_SIZE = 64;
-const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_ARGS_SIZE - FRAME_TEMP_SIZE;
-
-func emit_program(env: *Env);
-
-//= parse.cog
-
-struct Parser {
-    lexer: *Lexer,
-    tok: Int,
-    tok_pos: Pos,
-    lexeme: *Char,
-    env: *Env,
+enum {
+    Literal_Null,
+    Literal_Bool,
+    Literal_Int,
+    Literal_Char,
+    Literal_String,
 }
 
-func make_parser(file_path: *Char, file: *File, env: *Env): *Parser;
-func p_file(self: *Parser);
+struct Literal {
+    kind: Int32,
+    as_bool: Bool,
+    as_int: Int,
+    as_char: Char,
+    as_string: *Char,
+}
+
+// Expr
+
+enum {
+    Expr_Ident,
+    Expr_Literal,
+    Expr_Call,
+    Expr_Index,
+    Expr_Member,
+    Expr_Sizeof,
+    Expr_Unary,
+    Expr_Binary,
+    Expr_Ternary,
+    Expr_Cast,
+}
+
+struct IdentExpr {
+    name: *Char,
+    sym: *Sym,
+}
+
+struct CallExpr {
+    callee: *Expr,
+    args: *List, // List<Expr>
+    resolved_callee: *Sym,
+}
+
+struct IndexExpr {
+    indexee: *Expr,
+    index: *Expr,
+}
+
+struct MemberExpr {
+    left: *Expr,
+    name: *Char,
+    resolved_field: Int,
+}
+
+struct SizeofExpr {
+    type: *TypeExpr,
+    size: Int,
+}
+
+struct UnaryExpr {
+    op: Int32,
+    right: *Expr,
+}
+
+struct BinaryExpr {
+    op: Int32,
+    left: *Expr,
+    right: *Expr,
+}
+
+struct TernaryExpr {
+    cond: *Expr,
+    then_expr: *Expr,
+    else_expr: *Expr,
+}
+
+struct CastExpr {
+    expr: *Expr,
+    type: *TypeExpr,
+}
+
+struct Expr {
+    kind: Int32,
+    pos: Pos,
+    type: *Type,
+    as_ident: IdentExpr,
+    as_literal: *Literal,
+    as_call: CallExpr,
+    as_index: IndexExpr,
+    as_member: MemberExpr,
+    as_sizeof: SizeofExpr,
+    as_unary: UnaryExpr,
+    as_binary: BinaryExpr,
+    as_ternary: TernaryExpr,
+    as_cast: CastExpr,
+}
+
+// Stmt
+
+struct Stmt;
+
+enum {
+    Stmt_Block,
+    Stmt_Local,
+    Stmt_If,
+    Stmt_While,
+    Stmt_Return,
+    Stmt_Break,
+    Stmt_Continue,
+    Stmt_Expr,
+}
+
+struct BlockStmt {
+    stmts: *List, // List<Stmt>
+}
+
+struct LocalStmt {
+    name: *Char,
+    type: *TypeExpr,
+    init: *Expr,
+    sym: *Sym,
+}
+
+struct IfStmt {
+    cond: *Expr,
+    then_stmt: *Stmt,
+    else_stmt: *Stmt,
+}
+
+struct WhileStmt {
+    cond: *Expr,
+    body: *Stmt,
+}
+
+struct ReturnStmt {
+    expr: *Expr,
+}
+
+struct ExprStmt {
+    expr: *Expr,
+}
+
+struct Stmt {
+    kind: Int32,
+    pos: Pos,
+    as_block: BlockStmt,
+    as_local: LocalStmt,
+    as_if: IfStmt,
+    as_while: WhileStmt,
+    as_return: ReturnStmt,
+    as_expr: ExprStmt,
+}
+
+// Decl
+
+enum {
+    Decl_Struct,
+    Decl_Func,
+    Decl_Enum,
+    Decl_Const,
+    Decl_Global,
+}
+
+struct StructFieldDecl {
+    pos: Pos,
+    name: *Char,
+    type: *TypeExpr,
+}
+
+struct StructDecl {
+    name: *Char,
+    fields: *List, // List<StructFieldDecl>
+}
+
+struct FuncParamDecl {
+    pos: Pos,
+    name: *Char,
+    type: *TypeExpr,
+}
+
+struct FuncDecl {
+    is_extern: Bool,
+    name: *Char,
+    params: *List, // List<FuncParam>
+    is_variadic: Bool,
+    return_type: *TypeExpr,
+    body: *Stmt,
+}
+
+struct EnumMember {
+    pos: Pos,
+    name: *Char,
+    value: *Expr,
+}
+
+struct EnumDecl {
+    members: *List, // List<EnumMember>
+}
+
+struct ConstDecl {
+    name: *Char,
+    value: *Expr,
+}
+
+struct GlobalDecl {
+    is_extern: Bool,
+    name: *Char,
+    type: *TypeExpr,
+}
+
+struct Decl {
+    kind: Int32,
+    pos: Pos,
+    as_struct: StructDecl,
+    as_func: FuncDecl,
+    as_enum: EnumDecl,
+    as_const: ConstDecl,
+    as_global: GlobalDecl,
+}
+
+struct Ast {
+    decls: *List, // List<Decl>
+}
+
+func mk_type_expr(pos: *Pos, kind: Int32): *TypeExpr;
+func mk_literal(kind: Int32): *Literal;
+func mk_expr(pos: *Pos, kind: Int32): *Expr;
+func mk_stmt(pos: *Pos, kind: Int32): *Stmt;
+func mk_decl(pos: *Pos, kind: Int32): *Decl;
+func is_lvalue(expr: *Expr): Bool;
+
+//==============================================================================
+//== hir.cog
+
+struct HirTemp {
+    id: Int,
+    type: *Type,
+    offset: Int,
+}
+
+enum {
+    HirOp_Or,
+    HirOp_Xor,
+    HirOp_And,
+    HirOp_Shl,
+    HirOp_Shr,
+    HirOp_Eq,
+    HirOp_Ne,
+    HirOp_Lt,
+    HirOp_Le,
+    HirOp_Gt,
+    HirOp_Ge,
+    HirOp_Add,
+    HirOp_Sub,
+    HirOp_Mul,
+    HirOp_Div,
+    HirOp_Rem,
+}
+
+struct HirExpr;
+
+enum {
+    // Composition primitives
+    HirExpr_Skip,
+    HirExpr_Seq,
+    HirExpr_Let,
+
+    // Constants
+    HirExpr_Int,
+    HirExpr_Str,
+
+    // Variables
+    HirExpr_Var,
+    HirExpr_Temp,
+
+    // Control flow
+    HirExpr_Cond,
+    HirExpr_Loop,
+    HirExpr_Jump,
+    HirExpr_Return,
+
+    // Expressions
+    HirExpr_BinaryOp,
+    HirExpr_Call,
+    HirExpr_Member,
+    HirExpr_Index,
+    HirExpr_Deref,
+    HirExpr_Addr,
+    HirExpr_Assign,
+    HirExpr_Cast,
+}
+
+struct SeqHirExpr {
+    first: *HirExpr,
+    second: *HirExpr,
+}
+
+struct LetHirExpr {
+    temp: *HirTemp,
+    init: *HirExpr,
+    body: *HirExpr,
+}
+
+struct CondHirExpr {
+    cond: *HirExpr,
+    then_expr: *HirExpr,
+    else_expr: *HirExpr,
+}
+
+struct LoopHirExpr {
+    cond: *HirExpr,
+    body: *HirExpr,
+}
+
+struct ReturnHirExpr {
+    expr: *HirExpr,
+}
+
+struct JumpHirExpr {
+    is_break: Bool,
+}
+
+struct AssignHirExpr {
+    dst: *HirExpr,
+    src: *HirExpr,
+}
+
+struct BinaryOpHirExpr {
+    op: Int32,
+    left: *HirExpr,
+    right: *HirExpr,
+}
+
+struct CallHirExpr {
+    callee: *Sym,
+    args: *List, // List<HirExpr>
+}
+
+struct MemberHirExpr {
+    left: *HirExpr,
+    name: *Char,
+    field_index: Int,
+}
+
+struct IndexHirExpr {
+    indexee: *HirExpr,
+    index: *HirExpr,
+}
+
+struct DerefHirExpr {
+    expr: *HirExpr,
+}
+
+struct AddrHirExpr {
+    expr: *HirExpr,
+}
+
+struct CastHirExpr {
+    expr: *HirExpr,
+}
+
+struct HirExpr {
+    kind: Int32,
+    type: *Type,
+    pos: Pos,
+    as_seq: SeqHirExpr,
+    as_let: LetHirExpr,
+    as_int: Int,
+    as_str: *Char,
+    as_var: *Sym,
+    as_temp: *HirTemp,
+    as_cond: CondHirExpr,
+    as_loop: LoopHirExpr,
+    as_jump: JumpHirExpr,
+    as_return: ReturnHirExpr,
+    as_assign: AssignHirExpr,
+    as_binary_op: BinaryOpHirExpr,
+    as_call: CallHirExpr,
+    as_member: MemberHirExpr,
+    as_index: IndexHirExpr,
+    as_deref: DerefHirExpr,
+    as_addr: AddrHirExpr,
+    as_cast: CastHirExpr,
+}
+
+//==============================================================================
+//== lexer.cog
+
+struct Lexer;
+
+func lexer_new(file_name: *Char, input: *Char): *Lexer;
+func lexer_next(self: *Lexer, out: *Tok);
+
+//==============================================================================
+//== parser.cog
+
+struct Parser;
+
+func parser_new(lexer: *Lexer): *Parser;
+func parser_run(self: *Parser): *Ast;
+
+//==============================================================================
+//== elab.cog
+
+func elab(ast: *Ast): *List; // *List<*Sym>
+
+//==============================================================================
+//== lower.cog
+
+func lower(func_: *Sym, body: *Stmt): *HirExpr;
+
+//==============================================================================
+//== codegen.cog
+
+func emit_program(syms: *List);
