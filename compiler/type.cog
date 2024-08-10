@@ -121,7 +121,7 @@ func pretty_type(file: *File, type: *Type): Void {
     } else if (type.kind == Type_Bool) {
         fprintf(file, "bool");
     } else if (type.kind == Type_Int) {
-        fprintf(file, "Int%d", type.as_int.size / 8);
+        fprintf(file, "Int%d", type.as_int.size * 8);
     } else if (type.kind == Type_Ptr) {
         fprintf(file, "*");
         pretty_type(file, type.as_ptr.pointee);
@@ -130,8 +130,8 @@ func pretty_type(file: *File, type: *Type): Void {
         pretty_type(file, type.as_arr.elem);
         fprintf(file, "; %d]", type.as_arr.size);
     } else if (type.kind == Type_Struct) {
-        var variant = type.as_struct.sym.as_struct;
-        fprintf(file, "%s", variant.name);
+        var sym = type.as_struct.sym;
+        fprintf(file, "%s", sym.name);
     } else if (type.kind == Type_Never) {
         fprintf(file, "!");
     } else {

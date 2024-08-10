@@ -136,7 +136,6 @@ struct StructField {
 }
 
 struct StructSym {
-    name: *Char,
     fields: *List, // List<StructField>
     unpadded_size: Int,
     is_defined: Bool,
