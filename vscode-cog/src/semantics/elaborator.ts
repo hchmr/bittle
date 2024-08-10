@@ -1063,14 +1063,14 @@ export class Elaborator {
         const indexNode = node.childForFieldName('index');
 
         const indexeeType = this.elabExprInfer(indexeeNode);
+        const _indexType = this.elabExprInt(indexNode);
+
         if (indexeeType.kind !== TypeKind.Arr && indexeeType.kind !== TypeKind.Ptr) {
             if (indexeeType.kind !== TypeKind.Err) {
                 this.reportError(indexeeNode ?? node, `Expression is not indexable.`);
             }
             return mkErrorType();
         }
-
-        this.elabExprInt(indexNode);
 
         return indexeeType.kind === TypeKind.Arr
             ? indexeeType.elemType
