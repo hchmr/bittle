@@ -1,0 +1,500 @@
+include "cog.cogs";
+
+func translate_binary_op(tok_kind: Int32): Int32 {
+    return
+        tok_kind == Tok_Amp ? HirOp_And :
+        tok_kind == Tok_Bar ? HirOp_Or :
+        tok_kind == Tok_Caret ? HirOp_Xor :
+        tok_kind == Tok_LtLt ? HirOp_Shl :
+        tok_kind == Tok_GtGt ? HirOp_Shr :
+        tok_kind == Tok_EqEq ? HirOp_Eq :
+        tok_kind == Tok_BangEq ? HirOp_Ne :
+        tok_kind == Tok_Lt ? HirOp_Lt :
+        tok_kind == Tok_LtEq ? HirOp_Le :
+        tok_kind == Tok_Gt ? HirOp_Gt :
+        tok_kind == Tok_GtEq ? HirOp_Ge :
+        tok_kind == Tok_Plus ? HirOp_Add :
+        tok_kind == Tok_Minus ? HirOp_Sub :
+        tok_kind == Tok_Star ? HirOp_Mul :
+        tok_kind == Tok_Slash ? HirOp_Div :
+        tok_kind == Tok_Percent ? HirOp_Rem :
+        unreachable("translate_binary_op");
+}
+
+func translate_assign_op(tok_kind: Int32): Int32 {
+    return
+        tok_kind == Tok_AmpEq ? HirOp_And :
+        tok_kind == Tok_BarEq ? HirOp_Or :
+        tok_kind == Tok_CaretEq ? HirOp_Xor :
+        tok_kind == Tok_LtLtEq ? HirOp_Shl :
+        tok_kind == Tok_GtGtEq ? HirOp_Shr :
+        tok_kind == Tok_PlusEq ? HirOp_Add :
+        tok_kind == Tok_MinusEq ? HirOp_Sub :
+        tok_kind == Tok_StarEq ? HirOp_Mul :
+        tok_kind == Tok_SlashEq ? HirOp_Div :
+        tok_kind == Tok_PercentEq ? HirOp_Rem :
+        unreachable("translate_assign_op");
+}
+
+func mk_hir_expr(kind: Int32, type: *Type, pos: *Pos): *HirExpr {
+    var result: *HirExpr = calloc(1, sizeof(HirExpr));
+    result.kind = kind;
+    result.type = type;
+    result.pos = *pos;
+    return result;
+}
+
+func mk_skip_stmt(pos: *Pos): *HirExpr {
+    return mk_hir_expr(HirExpr_Skip, mk_void_type(), pos);
+}
+
+func mk_seq_hir_expr(first: *HirExpr, second: *HirExpr): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Seq, first.type, &first.pos);
+    result.as_seq.first = first;
+    result.as_seq.second = second;
+    return result;
+}
+
+func mk_let_hir_expr(temp: *HirTemp, init: *HirExpr, body: *HirExpr, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Let, body.type, pos);
+    result.as_let.temp = temp;
+    result.as_let.init = init;
+    result.as_let.body = body;
+    return result;
+}
+
+func mk_int_hir_expr(value: Int, type: *Type, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Int, type, pos);
+    result.as_int = value;
+    return result;
+}
+
+func mk_str_hir_expr(value: *Char, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Str, mk_ptr_type(mk_int_type(8)), pos);
+    result.as_str = value;
+    return result;
+}
+
+func mk_var_hir_expr(sym: *Sym, type: *Type, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Var, type, pos);
+    result.as_var = sym;
+    return result;
+}
+
+func mk_temp_hir_expr(temp: *HirTemp, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Temp, temp.type, pos);
+    result.as_temp = temp;
+    return result;
+}
+
+func mk_cond_hir_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Cond, then_expr.type, pos);
+    result.as_cond.cond = cond;
+    result.as_cond.then_expr = then_expr;
+    result.as_cond.else_expr = else_expr;
+    return result;
+}
+
+func mk_loop_hir_expr(cond: *HirExpr, body: *HirExpr, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Loop, body.type, pos);
+    result.as_loop.cond = cond;
+    result.as_loop.body = body;
+    return result;
+}
+
+func mk_return_hir_expr(expr: *HirExpr, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Return, mk_void_type(), pos);
+    result.as_return.expr = expr;
+    return result;
+}
+
+func mk_jump_hir_expr(is_break: Bool, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Jump, mk_void_type(), pos);
+    result.as_jump.is_break = is_break;
+    return result;
+}
+
+func mk_assign_hir_expr(dest: *HirExpr, src: *HirExpr): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Assign, dest.type, &dest.pos);
+    result.as_assign.dest = dest;
+    result.as_assign.src = src;
+    return result;
+}
+
+func mk_binary_op_hir_expr(op: Int32, left: *HirExpr, right: *HirExpr): *HirExpr {
+    var result = mk_hir_expr(HirExpr_BinaryOp, left.type, &left.pos);
+    result.as_binary_op.op = op;
+    result.as_binary_op.left = left;
+    result.as_binary_op.right = right;
+    return result;
+}
+
+func mk_neg_hir_expr(expr: *HirExpr): *HirExpr {
+    var zero = mk_int_hir_expr(0, expr.type, &expr.pos);
+    return mk_binary_op_hir_expr(Tok_Minus, zero, expr);
+}
+
+func mk_not_hir_expr(expr: *HirExpr): *HirExpr {
+    var one = mk_int_hir_expr(1, expr.type, &expr.pos);
+    return mk_binary_op_hir_expr(Tok_Caret, expr, one);
+}
+
+func mk_bit_not_hir_expr(expr: *HirExpr): *HirExpr {
+    var minus_one = mk_int_hir_expr(-1, expr.type, &expr.pos);
+    return mk_binary_op_hir_expr(Tok_Caret, expr, minus_one);
+}
+
+func mk_call_hir_expr(callee: *Sym, args: *List, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Call, callee.as_func.return_type, pos);
+    result.as_call.callee = callee;
+    result.as_call.args = args;
+    return result;
+}
+
+func mk_member_hir_expr(left: *HirExpr, name: *Char, field_index: Int): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Member, left.type, &left.pos);
+    result.as_member.left = left;
+    result.as_member.name = name;
+    result.as_member.field_index = field_index;
+    return result;
+}
+
+func mk_index_hir_expr(indexee: *HirExpr, index: *HirExpr): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Index, indexee.type, &indexee.pos);
+    result.as_index.indexee = indexee;
+    result.as_index.index = index;
+    return result;
+}
+
+func mk_deref_hir_expr(expr: *HirExpr, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Deref, expr.type, pos);
+    result.as_deref.expr = expr;
+    return result;
+}
+
+func mk_addr_hir_expr(expr: *HirExpr, pos: *Pos): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Addr, expr.type, pos);
+    result.as_addr.expr = expr;
+    return result;
+}
+
+func mk_cast_hir_expr(expr: *HirExpr, type: *Type): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Cast, type, &expr.pos);
+    result.as_cast.expr = expr;
+    return result;
+}
+
+//==============================================================================
+//== Context
+
+struct Context {
+    func_: *Sym,
+    temps: *List, // List<*HirTemp>
+}
+
+func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
+    var temp: *HirTemp = calloc(1, sizeof(HirTemp));
+    temp.id = list_len(ctx.temps);
+    temp.type = type;
+    list_push(ctx.temps, temp);
+    return temp;
+}
+
+//==============================================================================
+//== Expressions
+
+func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
+
+func lower_ident_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var result = mk_hir_expr(HirExpr_Var, expr.type, &expr.pos);
+    result.as_var = expr.as_ident.sym;
+    return result;
+}
+
+func lower_literal_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var literal = expr.as_literal;
+
+    var result: *HirExpr;
+    if (literal.kind == Literal_Null) {
+        result = mk_int_hir_expr(0, expr.type, &expr.pos);
+    } else if (literal.kind == Literal_Bool) {
+        result = mk_int_hir_expr(literal.as_bool as Int, expr.type, &expr.pos);
+    } else if (literal.kind == Literal_Int) {
+        result = mk_int_hir_expr(literal.as_int, expr.type, &expr.pos);
+    } else if (literal.kind == Literal_Char) {
+        result = mk_int_hir_expr(literal.as_char, expr.type, &expr.pos);
+    } else if (literal.kind == Literal_String) {
+        result = mk_hir_expr(HirExpr_Str, expr.type, &expr.pos);
+        result.as_str = literal.as_string;
+    } else {
+        unreachable("elab_literal_expr");
+    }
+    return result;
+}
+
+func lower_call_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var resolved_callee = expr.as_call.resolved_callee;
+    var ast_args = expr.as_call.args;
+
+    var hir_args = list_new();
+    var i = 0;
+    while (i < ast_args.len) {
+        var ast_arg = list_get(ast_args, i);
+        var hir_arg = lower_expr(ctx, ast_arg);
+        list_push(hir_args, hir_arg);
+        i += 1;
+    }
+
+    return mk_call_hir_expr(resolved_callee, hir_args, &expr.pos);
+}
+
+func lower_index_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var ast_indexee = expr.as_index.indexee;
+    var ast_index = expr.as_index.index;
+
+    var hir_indexee = lower_expr(ctx, ast_indexee);
+    var hir_index = lower_expr(ctx, ast_index);
+
+    return mk_index_hir_expr(hir_indexee, hir_index);
+}
+
+func lower_member_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var ast_left = expr.as_member.left;
+    var name = expr.as_member.name;
+    var field_index = expr.as_member.resolved_field;
+
+    var hir_left = lower_expr(ctx, ast_left);
+
+    return mk_member_hir_expr(hir_left, name, field_index);
+}
+
+func lower_sizeof_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var size = expr.as_sizeof.size;
+    return mk_int_hir_expr(size, expr.type, &expr.pos);
+}
+
+func lower_unary_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var op = expr.as_unary.op;
+    var ast_right = expr.as_unary.right;
+
+    var right = lower_expr(ctx, ast_right);
+
+    var result: *HirExpr;
+    if (op == Tok_Minus) {
+        result = mk_neg_hir_expr(right);
+    } else if (op == Tok_Tilde) {
+        result = mk_bit_not_hir_expr(right);
+    } else if (op == Tok_Bang) {
+        result = mk_not_hir_expr(right);
+    } else if (op == Tok_Star) {
+        result = mk_deref_hir_expr(right, &expr.pos);
+    } else if (op == Tok_Amp) {
+        result = mk_addr_hir_expr(right, &expr.pos);
+    } else {
+        unreachable("elab_unary_expr");
+    }
+
+    return result;
+}
+
+func lower_binary_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var ast_op = expr.as_binary.op;
+    var ast_left = expr.as_binary.left;
+    var ast_right = expr.as_binary.right;
+
+    var left = lower_expr(ctx, ast_left);
+    var right = lower_expr(ctx, ast_right);
+
+    var result: *HirExpr;
+    if (ast_op == Tok_Eq) {
+        result = mk_assign_hir_expr(left, right);
+    } else if (ast_op == Tok_AmpEq || ast_op == Tok_BarEq || ast_op == Tok_CaretEq || ast_op == Tok_LtLtEq || ast_op == Tok_GtGtEq || ast_op == Tok_PlusEq || ast_op == Tok_MinusEq || ast_op == Tok_StarEq || ast_op == Tok_SlashEq || ast_op == Tok_PercentEq) {
+        // Desugar
+        //   left op= right
+        // to
+        //   let temp: *typeof(left) = &left;
+        //   in *temp = *temp op right;
+
+        var typeof_addr_left = mk_ptr_type(left.type);
+        var op = translate_assign_op(ast_op);
+        var temp = mk_temp_var(ctx, typeof_addr_left);
+        var temp_expr = mk_temp_hir_expr(temp, &expr.pos);
+        var addr_left_expr = mk_addr_hir_expr(left, &expr.pos);
+        var load_temp_expr = mk_deref_hir_expr(temp_expr, &expr.pos);
+        var computation = mk_binary_op_hir_expr(op, load_temp_expr, right);
+        var assign_temp_expr = mk_assign_hir_expr(load_temp_expr, computation);
+        result = mk_let_hir_expr(temp, addr_left_expr, assign_temp_expr, &expr.pos);
+    } else if (ast_op == Tok_AmpAmp || ast_op == Tok_BarBar) {
+        if (ast_op == Tok_AmpAmp) {
+            result = mk_cond_hir_expr(left, right, mk_int_hir_expr(0, expr.type, &right.pos), &expr.pos);
+        } else {
+            result = mk_cond_hir_expr(left, mk_int_hir_expr(1, expr.type, &right.pos), right, &expr.pos);
+        }
+    } else if (ast_op == Tok_EqEq || ast_op == Tok_BangEq || ast_op == Tok_Lt || ast_op == Tok_LtEq || ast_op == Tok_Gt || ast_op == Tok_GtEq || ast_op == Tok_Amp || ast_op == Tok_Bar || ast_op == Tok_Caret || ast_op == Tok_LtLt || ast_op == Tok_GtGt || ast_op == Tok_Plus || ast_op == Tok_Minus || ast_op == Tok_Star || ast_op == Tok_Slash || ast_op == Tok_Percent) {
+        var op = translate_binary_op(ast_op);
+        result = mk_binary_op_hir_expr(op, left, right);
+    } else {
+        unreachable("elab_binary_expr");
+    }
+    return result;
+}
+
+func lower_ternary_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var ast_cond = expr.as_ternary.cond;
+    var ast_then_expr = expr.as_ternary.then_expr;
+    var ast_else_expr = expr.as_ternary.else_expr;
+
+    var cond = lower_expr(ctx, ast_cond);
+    var then_expr = lower_expr(ctx, ast_then_expr);
+    var else_expr = lower_expr(ctx, ast_else_expr);
+
+    return mk_cond_hir_expr(cond, then_expr, else_expr, &expr.pos);
+}
+
+func lower_cast_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    var ast_expr = expr.as_cast.expr;
+
+    var hir_expr = lower_expr(ctx, ast_expr);
+
+    return mk_cast_hir_expr(hir_expr, expr.type);
+}
+
+func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    if (expr.kind == Expr_Ident) {
+        return lower_ident_expr(ctx, expr);
+    } else if (expr.kind == Expr_Literal) {
+        return lower_literal_expr(ctx, expr);
+    } else if (expr.kind == Expr_Call) {
+        return lower_call_expr(ctx, expr);
+    } else if (expr.kind == Expr_Index) {
+        return lower_index_expr(ctx, expr);
+    } else if (expr.kind == Expr_Member) {
+        return lower_member_expr(ctx, expr);
+    } else if (expr.kind == Expr_Sizeof) {
+        return lower_sizeof_expr(ctx, expr);
+    } else if (expr.kind == Expr_Unary) {
+        return lower_unary_expr(ctx, expr);
+    } else if (expr.kind == Expr_Binary) {
+        return lower_binary_expr(ctx, expr);
+    } else if (expr.kind == Expr_Ternary) {
+        return lower_ternary_expr(ctx, expr);
+    } else if (expr.kind == Expr_Cast) {
+        return lower_cast_expr(ctx, expr);
+    } else {
+        unreachable("lower_expr");
+    }
+}
+
+//==============================================================================
+//== Statements
+
+func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr;
+
+func lower_block_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var current = mk_skip_stmt(&stmt.pos);
+
+    var i = 0;
+    while (i < stmt.as_block.stmts.len) {
+        var ast_stmt = list_get(stmt.as_block.stmts, i);
+        var hir_stmt = lower_stmt(ctx, ast_stmt);
+
+        current = mk_seq_hir_expr(current, hir_stmt);
+
+        i += 1;
+    }
+
+    return current;
+}
+
+func lower_local_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var sym = stmt.as_local.sym;
+    var type = sym.as_local.type;
+    var ast_init = stmt.as_local.init;
+
+    if (!ast_init) {
+        return mk_skip_stmt(&stmt.pos);
+    }
+
+    var var_expr = mk_var_hir_expr(sym, type, &stmt.pos);
+    var init_expr = lower_expr(ctx, ast_init);
+
+    return mk_assign_hir_expr(var_expr, init_expr);
+}
+
+func lower_if_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var ast_cond = stmt.as_if.cond;
+    var ast_then_block = stmt.as_if.then_stmt;
+    var ast_else_block = stmt.as_if.else_stmt;
+
+    var cond = lower_expr(ctx, ast_cond);
+    var then_block = lower_stmt(ctx, ast_then_block);
+    var else_block = ast_else_block
+        ? lower_stmt(ctx, ast_else_block)
+        : mk_skip_stmt(&stmt.pos);
+
+    return mk_cond_hir_expr(cond, then_block, else_block, &stmt.pos);
+}
+
+func lower_while_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var ast_cond = stmt.as_while.cond;
+    var ast_body = stmt.as_while.body;
+
+    var cond = lower_expr(ctx, ast_cond);
+    var body = lower_stmt(ctx, ast_body);
+
+    return mk_loop_hir_expr(cond, body, &stmt.pos);
+}
+
+func lower_return_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var ast_expr = stmt.as_return.expr;
+
+    var expr = ast_expr ? lower_expr(ctx, ast_expr) : null;
+
+    return mk_return_hir_expr(expr, &stmt.pos);
+}
+
+func lower_break_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    return mk_jump_hir_expr(true, &stmt.pos);
+}
+
+func lower_continue_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    return mk_jump_hir_expr(false, &stmt.pos);
+}
+
+func lower_expr_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var ast_expr = stmt.as_expr.expr;
+    return lower_expr(ctx, ast_expr);
+}
+
+func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    if (stmt.kind == Stmt_Block) {
+        return lower_block_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Local) {
+        return lower_local_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_If) {
+        return lower_if_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_While) {
+        return lower_while_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Return) {
+        return lower_return_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Break) {
+        return lower_break_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Continue) {
+        return lower_continue_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_Expr) {
+        return lower_expr_stmt(ctx, stmt);
+    } else {
+        unreachable("lower_stmt");
+    }
+}
+
+//==============================================================================
+//== Top-level declarations
+
+func lower(func_: *Sym, body: *Stmt): *HirExpr {
+    var ctx: *Context = calloc(1, sizeof(Context));
+    ctx.func_ = func_;
+    ctx.temps = list_new();
+
+    return lower_stmt(ctx, body);
+}

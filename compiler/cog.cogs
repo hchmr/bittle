@@ -535,6 +535,159 @@ func mk_decl(pos: *Pos, kind: Int32): *Decl;
 func is_lvalue(expr: *Expr): Bool;
 
 //==============================================================================
+//== hir.cog
+
+struct HirTemp {
+    id: Int,
+    type: *Type,
+}
+
+enum {
+    HirOp_Or,
+    HirOp_Xor,
+    HirOp_And,
+    HirOp_Shl,
+    HirOp_Shr,
+    HirOp_Eq,
+    HirOp_Ne,
+    HirOp_Lt,
+    HirOp_Le,
+    HirOp_Gt,
+    HirOp_Ge,
+    HirOp_Add,
+    HirOp_Sub,
+    HirOp_Mul,
+    HirOp_Div,
+    HirOp_Rem,
+}
+
+struct HirExpr;
+
+enum {
+    // Composition primitives
+    HirExpr_Skip,
+    HirExpr_Seq,
+    HirExpr_Let,
+
+    // Constants
+    HirExpr_Int,
+    HirExpr_Str,
+
+    // Variables
+    HirExpr_Var,
+    HirExpr_Temp,
+
+    // Control flow
+    HirExpr_Cond,
+    HirExpr_Loop,
+    HirExpr_Jump,
+    HirExpr_Return,
+
+    // Expressions
+    HirExpr_BinaryOp,
+    HirExpr_Call,
+    HirExpr_Member,
+    HirExpr_Index,
+    HirExpr_Deref,
+    HirExpr_Addr,
+    HirExpr_Assign,
+    HirExpr_Cast,
+}
+
+struct SeqHirExpr {
+    first: *HirExpr,
+    second: *HirExpr,
+}
+
+struct LetHirExpr {
+    temp: *HirTemp,
+    init: *HirExpr,
+    body: *HirExpr,
+}
+
+struct CondHirExpr {
+    cond: *HirExpr,
+    then_expr: *HirExpr,
+    else_expr: *HirExpr,
+}
+
+struct LoopHirExpr {
+    cond: *HirExpr,
+    body: *HirExpr,
+}
+
+struct ReturnHirExpr {
+    expr: *HirExpr,
+}
+
+struct JumpHirExpr {
+    is_break: Bool,
+}
+
+struct AssignHirExpr {
+    dest: *HirExpr,
+    src: *HirExpr,
+}
+
+struct BinaryOpHirExpr {
+    op: Int32,
+    left: *HirExpr,
+    right: *HirExpr,
+}
+
+struct CallHirExpr {
+    callee: *Sym,
+    args: *List, // List<HirExpr>
+}
+
+struct MemberHirExpr {
+    left: *HirExpr,
+    name: *Char,
+    field_index: Int,
+}
+
+struct IndexHirExpr {
+    indexee: *HirExpr,
+    index: *HirExpr,
+}
+
+struct DerefHirExpr {
+    expr: *HirExpr,
+}
+
+struct AddrHirExpr {
+    expr: *HirExpr,
+}
+
+struct CastHirExpr {
+    expr: *HirExpr,
+}
+
+struct HirExpr {
+    kind: Int32,
+    type: *Type,
+    pos: Pos,
+    as_seq: SeqHirExpr,
+    as_let: LetHirExpr,
+    as_int: Int,
+    as_str: *Char,
+    as_var: *Sym,
+    as_temp: *HirTemp,
+    as_cond: CondHirExpr,
+    as_loop: LoopHirExpr,
+    as_jump: JumpHirExpr,
+    as_return: ReturnHirExpr,
+    as_assign: AssignHirExpr,
+    as_binary_op: BinaryOpHirExpr,
+    as_call: CallHirExpr,
+    as_member: MemberHirExpr,
+    as_index: IndexHirExpr,
+    as_deref: DerefHirExpr,
+    as_addr: AddrHirExpr,
+    as_cast: CastHirExpr,
+}
+
+//==============================================================================
 //== lexer.cog
 
 struct Lexer;
@@ -554,3 +707,8 @@ func parser_run(self: *Parser): *Ast;
 //== elab.cog
 
 func elab(ast: *Ast): *List; // *List<*Sym>
+
+//==============================================================================
+//== lower.cog
+
+func lower(func_: *Sym, body: *Stmt): *HirExpr;
