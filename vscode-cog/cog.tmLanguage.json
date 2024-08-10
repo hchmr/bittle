@@ -35,7 +35,7 @@
         },
         {
             "name": "keyword.control.cog",
-            "match": "(?:break|continue|do|else|if|return|while)\\b"
+            "match": "(?:break|continue|do|else|for|if|return|while)\\b"
         },
         {
             "name": "keyword.cog",

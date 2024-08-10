@@ -519,6 +519,8 @@ export class Parser extends ParserBase {
             this.ifStmt();
         } else if (this.match('while')) {
             this.whileStmt();
+        } else if (this.match('for')) {
+            this.forStmt();
         } else if (this.match('return')) {
             this.returnStmt();
         } else if (this.match('break')) {
@@ -602,6 +604,39 @@ export class Parser extends ParserBase {
         this.stmt();
         this.finishField('body');
         this.finishNode(CompositeNodeTypes.WhileStmt);
+    }
+
+    forStmt() {
+        this.beginNode(CompositeNodeTypes.ForStmt);
+        this.bump('for');
+        this.expect('(');
+        if (!this.match(';')) {
+            this.beginField('init');
+            if (this.match('var')) {
+                this.varStmt();
+            } else {
+                this.exprStmt();
+            }
+            this.finishField('init');
+        } else {
+            this.expect(';');
+        }
+        if (!this.match(';')) {
+            this.beginField('cond');
+            this.expr();
+            this.finishField('cond');
+        }
+        this.expect(';');
+        if (!this.match(')')) {
+            this.beginField('step');
+            this.expr();
+            this.finishField('step');
+        }
+        this.expect(')');
+        this.beginField('body');
+        this.stmt();
+        this.finishField('body');
+        this.finishNode(CompositeNodeTypes.ForStmt);
     }
 
     returnStmt() {

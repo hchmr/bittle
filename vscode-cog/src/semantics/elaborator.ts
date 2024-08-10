@@ -660,6 +660,9 @@ export class Elaborator {
             case StmtNodeTypes.WhileStmt:
                 this.elabWhileStmt(node);
                 break;
+            case StmtNodeTypes.ForStmt:
+                this.elabForStmt(node);
+                break;
             case StmtNodeTypes.ReturnStmt:
                 this.elabReturnStmt(node);
                 break;
@@ -746,6 +749,20 @@ export class Elaborator {
 
         this.elabExprBool(condNode);
         this.elabStmtWithScope(bodyNode);
+    }
+
+    private elabForStmt(node: SyntaxNode) {
+        const initNode = node.childForFieldName('init');
+        const condNode = node.childForFieldName('cond');
+        const stepNode = node.childForFieldName('step');
+        const bodyNode = node.childForFieldName('body');
+
+        this.enterScope(node);
+        this.elabStmt(initNode);
+        this.elabExprBool(condNode);
+        this.elabExprInfer(stepNode);
+        this.elabStmtWithScope(bodyNode);
+        this.exitScope();
     }
 
     private elabReturnStmt(node: SyntaxNode) {

@@ -93,6 +93,8 @@ class ControlFlowAnalyzer {
                 return this.analyzeIfStmt(node, state);
             case StmtNodeTypes.WhileStmt:
                 return this.analyzeWhileStmt(node, state);
+            case StmtNodeTypes.ForStmt:
+                return this.analyzeForStmt(node, state);
             case StmtNodeTypes.ReturnStmt:
                 return this.analyzeReturnStmt(node, state);
             case StmtNodeTypes.BreakStmt:
@@ -167,6 +169,24 @@ class ControlFlowAnalyzer {
         } else {
             this.analyzeStmt(bodyNode, state);
         }
+
+        this.currentLoop = outerLoop;
+        return state;
+    }
+
+    private analyzeForStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        const initNode = node.childForFieldName('init');
+        const condNode = node.childForFieldName('cond');
+        const stepNode = node.childForFieldName('step');
+        const bodyNode = node.childForFieldName('body');
+
+        const outerLoop = this.currentLoop;
+        this.currentLoop = node;
+
+        state = this.analyzeStmt(initNode, state);
+        this.analyzeExpr(condNode, state);
+        this.analyzeStmt(bodyNode, state);
+        this.analyzeExpr(stepNode, state);
 
         this.currentLoop = outerLoop;
         return state;

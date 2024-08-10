@@ -35,6 +35,7 @@ export const StmtNodeTypes = {
     LocalDecl: 'local_decl',
     IfStmt: 'if_stmt',
     WhileStmt: 'while_stmt',
+    ForStmt: 'for_stmt',
     ReturnStmt: 'return_stmt',
     BreakStmt: 'break_stmt',
     ContinueStmt: 'continue_stmt',

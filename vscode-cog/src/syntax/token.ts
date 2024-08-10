@@ -74,6 +74,7 @@ export const keywords = [
     'enum',
     'extern',
     'false',
+    'for',
     'func',
     'if',
     'include',
