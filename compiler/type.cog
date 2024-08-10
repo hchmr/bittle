@@ -45,7 +45,6 @@ func mk_struct_type(sym: *Sym): *Type {
     return type;
 }
 
-
 func type_eq(t1: *Type, t2: *Type): Bool {
     if (t1.kind != t2.kind) {
         return false;
@@ -89,7 +88,7 @@ func type_size(type: *Type): Int {
         return type_size(type.as_arr.elem) * type.as_arr.size;
     } else if (type.kind == Type_Struct) {
         var variant = type.as_struct.sym.as_struct;
-        return variant.fields.len == 0 ? -1 : align_up(variant.unpadded_size, type_align(type)); 
+        return variant.fields.len == 0 ? -1 : align_up(variant.unpadded_size, type_align(type));
     } else if (type.kind == Type_Never) {
         return -1;
     } else {
@@ -106,8 +105,8 @@ func type_align(type: *Type): Int {
 }
 
 func is_scalar(type: *Type): Bool {
-    return type.kind == Type_Bool 
-        || type.kind == Type_Int 
+    return type.kind == Type_Bool
+        || type.kind == Type_Int
         || type.kind == Type_Ptr;
 }
 

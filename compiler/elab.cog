@@ -271,12 +271,10 @@ func unify_types(e1: *Expr, e2: *Expr) {
     check_type(e2, e1.type);
 }
 
-
 //==============================================================================
 //== Types
 
 func const_eval(ctx: *ElabCtx, expr: *Expr): Int32;
-
 
 func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     if (type_expr.kind == TypeExpr_Named) {
@@ -493,8 +491,8 @@ func elab_index_expr(ctx: *ElabCtx, expr: *Expr) {
         die_at(&indexee.pos, "Expression is not indexable");
     }
 
-    var elem_type = indexee_type.kind == Type_Arr 
-        ? indexee_type.as_arr.elem 
+    var elem_type = indexee_type.kind == Type_Arr
+        ? indexee_type.as_arr.elem
         : indexee_type.as_ptr.pointee;
 
     check_type_int(index);
@@ -629,25 +627,25 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *Expr) {
 
 func elab_expr_infer2(ctx: *ElabCtx, expr: *Expr) {
     if (expr.kind == Expr_Ident) {
-        elab_ident_expr(ctx, expr); 
+        elab_ident_expr(ctx, expr);
     } else if (expr.kind == Expr_Literal) {
-        elab_literal_expr(ctx, expr); 
+        elab_literal_expr(ctx, expr);
     } else if (expr.kind == Expr_Call) {
-        elab_call_expr(ctx, expr); 
+        elab_call_expr(ctx, expr);
     } else if (expr.kind == Expr_Index) {
-        elab_index_expr(ctx, expr); 
+        elab_index_expr(ctx, expr);
     } else if (expr.kind == Expr_Member) {
-        elab_member_expr(ctx, expr); 
+        elab_member_expr(ctx, expr);
     } else if (expr.kind == Expr_Sizeof) {
-        elab_sizeof_expr(ctx, expr); 
+        elab_sizeof_expr(ctx, expr);
     } else if (expr.kind == Expr_Unary) {
-        elab_unary_expr(ctx, expr); 
+        elab_unary_expr(ctx, expr);
     } else if (expr.kind == Expr_Binary) {
-        elab_binary_expr(ctx, expr); 
+        elab_binary_expr(ctx, expr);
     } else if (expr.kind == Expr_Ternary) {
-        elab_ternary_expr(ctx, expr); 
+        elab_ternary_expr(ctx, expr);
     } else if (expr.kind == Expr_Cast) {
-        elab_cast_expr(ctx, expr); 
+        elab_cast_expr(ctx, expr);
     } else {
         unreachable("elab_expr_infer");
     }
@@ -867,7 +865,7 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
     if (!is_scalar(type)) {
         die_at(&param_decl.pos, "Parameter must be of scalar type.");
     }
-    
+
     var result: *FuncParam = calloc(1, sizeof(FuncParam));
     result.name = name;
     result.type = type;
@@ -892,8 +890,8 @@ func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
         i += 1;
     }
 
-    var return_type = decl.as_func.return_type 
-        ? eval_type(ctx, decl.as_func.return_type) 
+    var return_type = decl.as_func.return_type
+        ? eval_type(ctx, decl.as_func.return_type)
         : mk_void_type();
 
     var is_variadic = decl.as_func.is_variadic;
@@ -905,10 +903,10 @@ func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
     if (decl.as_func.body) {
         enter_scope(ctx);
         ctx.current_func = sym;
-        
+
         define_params(ctx, param_decls, params);
         elab_stmt(ctx, decl.as_func.body);
-        
+
         ctx.current_func = null;
         exit_scope(ctx);
 
@@ -921,8 +919,8 @@ func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
 
 func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, next_value: Int32): Int32 {
     var name = member_decl.name;
-    var value = member_decl.value 
-        ? const_eval(ctx, member_decl.value) 
+    var value = member_decl.value
+        ? const_eval(ctx, member_decl.value)
         : next_value;
 
     define_const(ctx, &member_decl.pos, name, value);

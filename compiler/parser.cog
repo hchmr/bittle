@@ -97,7 +97,7 @@ func p_arr_type(self: *Parser): *TypeExpr {
     expect(self, Tok_Semicolon);
     var size = p_expr(self, 0);
     expect(self, Tok_RBracket);
-    
+
     var result = mk_type_expr(&pos, TypeExpr_Arr);
     result.as_array.elem = elem;
     result.as_array.size = size;
@@ -178,7 +178,7 @@ enum {
     Prec_Primary,
 }
 
-func p_expr(self: *Parser, max_prec: Int32): *Expr;  
+func p_expr(self: *Parser, max_prec: Int32): *Expr;
 
 func p_grouped_expr(self: *Parser): *Expr {
     expect(self, Tok_LParen);
@@ -261,7 +261,7 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
 func p_unary_expr(self: *Parser, op: Int32): *Expr {
     var pos = self.tok.pos;
     var right = p_expr(self, Prec_Unary);
-    
+
     var result = mk_expr(&pos, Expr_Unary);
     result.as_unary.op = op;
     result.as_unary.right = right;
@@ -295,7 +295,7 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
     var then_expr = p_expr(self, Prec_Cond);
     expect(self, Tok_Colon);
     var else_expr = p_expr(self, Prec_Cond);
-    
+
     var result = mk_expr(&pos, Expr_Ternary);
     result.as_ternary.cond = cond;
     result.as_ternary.then_expr = then_expr;
@@ -388,7 +388,7 @@ func p_expr(self: *Parser, max_prec: Int32): *Expr {
         } else if (max_prec <= Prec_Mul && eat(self, Tok_Star)) {
             lhs = p_binary_expr(self, lhs, Tok_Star, Prec_Mul + 1);
         } else if (max_prec <= Prec_Cast && eat(self, Tok_As)) {
-            lhs = p_cast_expr(self, lhs); 
+            lhs = p_cast_expr(self, lhs);
         } else if (max_prec <= Prec_Postfix && at(self, Tok_LBracket)) {
             lhs = p_index_expr(self, lhs);
         } else if (max_prec <= Prec_Postfix && at(self, Tok_LParen)) {
@@ -618,7 +618,7 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
     } else {
         expect(self, Tok_Semicolon);
     }
-    
+
     var result = mk_decl(&pos, Decl_Func);
     result.as_func.is_extern = is_extern;
     result.as_func.name = name;
