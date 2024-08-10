@@ -1008,11 +1008,11 @@ export class Elaborator {
         const calleeNode = node.childForFieldName('callee');
         const argsNodes = node.childrenForFieldName('args');
         if (!calleeNode) {
-            return mkErrorType();
+            return this.elabCallExprUnknown(node);
         }
         if (calleeNode.type !== ExprNodeTypes.NameExpr) {
             this.reportError(calleeNode, `Function name expected.`);
-            return mkErrorType();
+            return this.elabCallExprUnknown(node);
         }
 
         const funcNameNode = calleeNode.firstChild!;
@@ -1020,11 +1020,11 @@ export class Elaborator {
 
         const funcSym = this.resolveName(funcNameNode);
         if (!funcSym) {
-            return mkErrorType();
+            return this.elabCallExprUnknown(node);
         }
         if (funcSym.kind !== SymKind.Func) {
             this.reportError(calleeNode, `'${funcName}' is not a function.`);
-            return mkErrorType();
+            return this.elabCallExprUnknown(node);
         }
 
         const params = funcSym.params;
@@ -1047,6 +1047,15 @@ export class Elaborator {
         }
 
         return funcSym.returnType;
+    }
+
+    private elabCallExprUnknown(node: SyntaxNode): Type {
+        const argsNodes = node.childrenForFieldName('args');
+
+        for (const argNode of argsNodes.filter(x => isExprNode(x))) {
+            this.elabExprInfer(argNode);
+        }
+        return mkErrorType();
     }
 
     private elabIndexExpr(node: SyntaxNode): Type {
