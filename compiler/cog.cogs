@@ -15,9 +15,26 @@ struct List {
     cap: Int,
 }
 
+struct StringBuilder {
+    buf: *Char,
+    len: Int,
+    cap: Int,
+}
+
+func assert(cond: Bool, because: *Char);
+func unreachable(function: *Char): !;
+
 func error_at(pos: *Pos);
 func die(msg: *Char): !;
 func die_at(pos: *Pos, msg: *Char): !;
+
+func sb_new(): *StringBuilder;
+func sb_len(self: *StringBuilder): Int;
+func sb_get(self: *StringBuilder): *Char;
+func sb_ensure_cap(self: *StringBuilder, cap: Int);
+func sb_push(self: *StringBuilder, c: Char);
+func sb_append(self: *StringBuilder, s: *Char);
+func sb_finish(self: *StringBuilder): *Char;
 
 func list_new(): *List;
 func list_push(self: *List, elem: *Void);
@@ -25,6 +42,11 @@ func list_push(self: *List, elem: *Void);
 func str_eq(a: *Char, b: *Char): Bool;
 
 func read_file(file: *File): *Char;
+func get_directory(path: *Char): *Char;
+func join_paths(dir: *Char, file: *Char): *Char;
+
+func parse_char(c: *Char): Char;
+func parse_string(s: *Char): *Char;
 
 //==============================================================================
 //== tok.cog
@@ -46,12 +68,15 @@ enum {
     Tok_Else,
     Tok_Enum,
     Tok_Extern,
+    Tok_False,
     Tok_Func,
     Tok_If,
     Tok_Include,
+    Tok_Null,
     Tok_Return,
     Tok_Sizeof,
     Tok_Struct,
+    Tok_True,
     Tok_Var,
     Tok_While,
     // Symbols
@@ -123,7 +148,7 @@ struct TypeExpr;
 enum {
     TypeExpr_Named,
     TypeExpr_Ptr,
-    TypeExpr_Array,
+    TypeExpr_Arr,
     TypeExpr_Never,
 }
 
@@ -138,6 +163,7 @@ struct ArrTypeExpr {
 
 struct TypeExpr {
     kind: Int32,
+    pos: Pos,
     as_named: *Char,
     as_ptr: PtrTypeExpr,
     as_array: ArrTypeExpr,
@@ -148,6 +174,8 @@ struct TypeExpr {
 struct Literal;
 
 enum {
+    Literal_Null,
+    Literal_Bool,
     Literal_Int,
     Literal_Char,
     Literal_String,
@@ -155,7 +183,10 @@ enum {
 
 struct Literal {
     kind: Int32,
-    text: *Char,
+    as_bool: Bool,
+    as_int: Int,
+    as_char: Char,
+    as_string: *Char,
 }
 
 // Expr
@@ -221,6 +252,8 @@ struct CastExpr {
 struct Expr {
     kind: Int32,
     pos: Pos,
+    type: *Type,
+    needs_cast: Bool,
     as_ident: IdentExpr,
     as_literal: *Literal,
     as_call: CallExpr,
@@ -291,7 +324,6 @@ struct Stmt {
 // Decl
 
 enum {
-    Decl_Include,
     Decl_Struct,
     Decl_Func,
     Decl_Enum,
@@ -299,33 +331,34 @@ enum {
     Decl_Global,
 }
 
-struct IncludeDecl {
-    file_name: *Char,
-}
-
-struct StructField {
+struct StructFieldDecl {
+    pos: Pos,
     name: *Char,
     type: *TypeExpr,
 }
 
 struct StructDecl {
     name: *Char,
-    fields: *List, // List<StructField>
+    fields: *List, // List<StructFieldDecl>
 }
 
-struct FuncParam {
+struct FuncParamDecl {
+    pos: Pos,
     name: *Char,
     type: *TypeExpr,
 }
 
 struct FuncDecl {
+    is_extern: Bool,
     name: *Char,
     params: *List, // List<FuncParam>
+    is_variadic: Bool,
     return_type: *TypeExpr,
     body: *Stmt,
 }
 
 struct EnumMember {
+    pos: Pos,
     name: *Char,
     value: *Expr,
 }
@@ -340,15 +373,14 @@ struct ConstDecl {
 }
 
 struct GlobalDecl {
+    is_extern: Bool,
     name: *Char,
     type: *TypeExpr,
-    value: *Expr,
 }
 
 struct Decl {
     kind: Int32,
     pos: Pos,
-    as_include: IncludeDecl,
     as_struct: StructDecl,
     as_func: FuncDecl,
     as_enum: EnumDecl,

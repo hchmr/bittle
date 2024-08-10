@@ -40,12 +40,15 @@ func lookup_keyword(lexeme: *Char, out: *Int32): Bool {
         || try_keyword(lexeme, "else", out, Tok_Else)
         || try_keyword(lexeme, "enum", out, Tok_Enum)
         || try_keyword(lexeme, "extern", out, Tok_Extern)
+        || try_keyword(lexeme, "false", out, Tok_False)
         || try_keyword(lexeme, "func", out, Tok_Func)
         || try_keyword(lexeme, "if", out, Tok_If)
         || try_keyword(lexeme, "include", out, Tok_Include)
+        || try_keyword(lexeme, "null", out, Tok_Null)
         || try_keyword(lexeme, "return", out, Tok_Return)
         || try_keyword(lexeme, "sizeof", out, Tok_Sizeof)
         || try_keyword(lexeme, "struct", out, Tok_Struct)
+        || try_keyword(lexeme, "true", out, Tok_True)
         || try_keyword(lexeme, "var", out, Tok_Var)
         || try_keyword(lexeme, "while", out, Tok_While);
 }

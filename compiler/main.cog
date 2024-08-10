@@ -2,11 +2,11 @@ include "cog.cogs";
 
 //==============================================================================
 
-func parse_file(file_name: *Char, input_file: *File) {
+func parse(file_name: *Char, input_file: *File): *Ast {
     var text = read_file(input_file);
     var lexer = lexer_new(file_name, text);
     var parser = parser_new(lexer);
-    var ast = parser_run(parser);
+    return parser_run(parser);
 }
 
 //==============================================================================
@@ -56,7 +56,7 @@ func main(argc: Int32, argv: *(*Char)): Int32 {
         }
     }
 
-    parse_file(file_name, input_file);
-    fprintf(stdout, "Successfully parsed %s\n", file_name);
+    var ast = parse(file_name, input_file);
+    printf("OK\n");
     return 0;
 }

@@ -1,5 +1,17 @@
 include "cog.cogs";
 
+func assert(cond: Bool, because: *Char) {
+    if (!cond) {
+        fprintf(stderr, "\n*** Assertion failed: %s\n", because);
+        exit(1);
+    }
+}
+
+func unreachable(function: *Char): ! {
+    fprintf(stderr, "\n*** Unreachable code reached in %s\n", function);
+    exit(1);
+}
+
 func error_at(pos: *Pos) {
     fprintf(stderr, "%s:%d:%d: Error: ", pos.file, pos.row, pos.col);
 }
@@ -13,6 +25,56 @@ func die_at(pos: *Pos, msg: *Char): ! {
     error_at(pos);
     fprintf(stderr, "%s\n", msg);
     exit(1);
+}
+
+func sb_new(): *StringBuilder {
+    return calloc(1, sizeof(StringBuilder));
+}
+
+func sb_len(self: *StringBuilder): Int {
+    return self.len;
+}
+
+func sb_get(self: *StringBuilder): *Char {
+    return self.buf;
+}
+
+func sb_ensure_cap(self: *StringBuilder, cap: Int) {
+    if (self.cap >= cap) {
+        return;
+    }
+    var new_cap = 1;
+    while (new_cap < cap) {
+        new_cap = new_cap * 2;
+    }
+    self.buf = realloc(self.buf, new_cap);
+    self.cap = new_cap;
+}
+
+func sb_push(self: *StringBuilder, c: Char) {
+    sb_ensure_cap(self, self.len + 1);
+    self.buf[self.len] = c;
+    self.len += 1;
+}
+
+func sb_append(self: *StringBuilder, s: *Char) {
+    var i = 0;
+    while (s[i]) {
+        sb_push(self, s[i]);
+        i += 1;
+    }
+}
+
+func sb_finish(self: *StringBuilder): *Char {
+    sb_push(self, '\0');
+    var string = self.buf;
+    realloc(string, self.len);
+    
+    self.len = -1;
+    self.cap = -1;
+    self.buf = null;
+
+    return string;
 }
 
 func list_new(): *List {
@@ -67,4 +129,73 @@ func read_file(file: *File): *Char {
     }
     buffer[size] = '\0';
     return buffer;
+}
+
+func get_directory(path: *Char): *Char {
+    var i = strlen(path);
+    while (true) {
+        if (i == 0)
+            return ".";
+        i -= 1;
+        if (path[i] == '/') {
+            var dir = malloc(i + 1) as *Char;
+            memcpy(dir, path, i);
+            dir[i] = '\0';
+            return dir;
+        }
+    }
+    unreachable("get_directory");
+}
+
+func join_paths(dir: *Char, file: *Char): *Char {
+    var sb = sb_new();
+    sb_append(sb, dir);
+    sb_push(sb, '/');
+    sb_append(sb, file);
+    return sb_finish(sb);
+}
+
+func parse_char(s: *Char): Char {
+    var string = parse_string(s);
+    assert(strlen(string) <= 1, "parse_char: expected single character");
+    var char = string[0];
+    free(string);
+    return char;
+}
+
+func parse_string(s: *Char): *Char {
+    var sb = sb_new();
+    var i = 0;
+    var quote = s[i];
+    assert(quote == '"' || quote == '\'', "parse_string: expected quote");
+    i += 1;
+    while (s[i] && s[i] != quote) {
+        if (s[i] == '\\') {
+            i += 1;
+            if (s[i] == '0') {
+                sb_push(sb, '\0');
+            } else if (s[i] == '\\') {
+                sb_push(sb, '\\');
+            } else if (s[i] == '\'') {
+                sb_push(sb, '\'');
+            } else if (s[i] == '\"') {
+                sb_push(sb, '\"');
+            } else if (s[i] == 'n') {
+                sb_push(sb, '\n');
+            } else if (s[i] == 'r') {
+                sb_push(sb, '\r');
+            } else if (s[i] == 't') {
+                sb_push(sb, '\t');
+            } else {
+                die("Invalid escape sequence.");
+            }
+            i += 1;
+        } else {
+            sb_push(sb, s[i]);
+            i += 1;
+        }
+    }
+    assert(s[i] == quote, "parse_string: expected quote");
+
+    return sb_finish(sb);
 }
