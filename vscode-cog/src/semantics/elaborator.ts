@@ -1209,7 +1209,8 @@ export class Elaborator {
     }
 
     private isUnsizedType(type: Type): boolean {
-        return this.typeSize(type) === undefined;
+        return type.kind !== TypeKind.Err
+            && this.typeSize(type) === undefined;
     }
 
     private createOrigin(node: SyntaxNode, nameNode: SyntaxNode | Nullish, isForwardDecl: boolean = false): Origin {
