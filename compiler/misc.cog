@@ -45,7 +45,7 @@ func sb_ensure_cap(self: *StringBuilder, cap: Int) {
     }
     var new_cap = 1;
     while (new_cap < cap) {
-        new_cap = new_cap * 2;
+        new_cap *= 2;
     }
     self.buf = realloc(self.buf, new_cap);
     self.cap = new_cap;
@@ -101,7 +101,7 @@ func list_ensure_cap(self: *List, cap: Int) {
     }
     var new_cap = 1;
     while (new_cap < cap) {
-        new_cap = new_cap * 2;
+        new_cap *= 2;
     }
     self.elems = realloc(self.elems, new_cap * sizeof(*Void));
     self.cap = new_cap;
@@ -124,7 +124,7 @@ func align_up(size: Int , align: Int): Int {
 func ilog2(n: Int): Int {
     var i = 0;
     while (n > 1) {
-        n = n / 2;
+        n /= 2;
         i += 1;
     }
     return i;
@@ -145,7 +145,7 @@ func read_file(file: *File): *Char {
         if (n != avail) {
             break;
         }
-        cap = cap * 2;
+        cap *= 2;
         buf = realloc(buf, cap) as *Char;
     }
     buf = realloc(buf, len + 1) as *Char;

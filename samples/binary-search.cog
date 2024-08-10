@@ -25,7 +25,7 @@ func main(): Int {
     var i = 0;
     while (i < 10) {
         xs[i] = i + 1;
-        i = i + 1;
+        i += 1;
     }
 
     var key = 9;

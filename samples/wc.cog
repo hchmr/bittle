@@ -151,13 +151,13 @@ func arg_parse(argc: Int32, argv: *(*Char), args: *Args) {
         var j = 1;
         while (arg[j] != '\0') {
             if (arg[j] == 'l') {
-                options = options | Opt_PrintLines;
+                options |= Opt_PrintLines;
             } else if (arg[j] == 'w') {
-                options = options | Opt_PrintWords;
+                options |= Opt_PrintWords;
             } else if (arg[j] == 'c') {
-                options = options | Opt_PrintBytes;
+                options |= Opt_PrintBytes;
             } else if (arg[j] == 'L') {
-                options = options | Opt_PrintMaxLen;
+                options |= Opt_PrintMaxLen;
             } else {
                 fprintf(stderr, "Unknown option: %c\n", arg[j]);
                 print_usage(argv);
