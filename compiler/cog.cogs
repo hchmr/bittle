@@ -179,6 +179,10 @@ struct Sym {
     as_local: LocalSym,
 }
 
+func mk_sym(kind: Int32, name: *Char): *Sym;
+func sym_is_defined(sym: *Sym): Bool;
+func find_struct_field(sym: *Sym, name: *Char): Int;
+
 //==============================================================================
 //== tok.cog
 

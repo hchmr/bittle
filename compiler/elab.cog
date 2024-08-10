@@ -41,58 +41,7 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
 }
 
 //==============================================================================
-//== Symbols
-
-func mk_sym(kind: Int32, name: *Char): *Sym {
-    var sym: *Sym = calloc(1, sizeof(Sym));
-    sym.kind = kind;
-    sym.name = name;
-    return sym;
-}
-
-func sym_is_defined(sym: *Sym): Bool {
-    if (sym.kind == Sym_Struct) {
-        return sym.as_struct.is_defined;
-    } else if (sym.kind == Sym_Global) {
-        return sym.as_global.is_defined;
-    } else if (sym.kind == Sym_Func) {
-        return sym.as_func.is_defined;
-    } else {
-        return true;
-    }
-}
-
-func find_struct_field(sym: *Sym, name: *Char): Int {
-    var fields = sym.as_struct.fields;
-    if (!fields) {
-        return -1;
-    }
-    var i = 0;
-    while (i < list_len(fields)) {
-        var field: *StructField = list_get(fields, i);
-        if (str_eq(field.name, name)) {
-            return i;
-        }
-        i += 1;
-    }
-    return -1;
-}
-
-func params_eq(xs: *List, ys: *List): Bool {
-    if (xs.len != ys.len) {
-        return false;
-    }
-    var i = 0;
-    while (i < xs.len) {
-        var param1: *FuncParam = list_get(xs, i);
-        var param2: *FuncParam = list_get(ys, i);
-        if (!type_eq(param1.type, param2.type)) {
-            return false;
-        }
-        i += 1;
-    }
-    return true;
-}
+//== Context
 
 struct ElabCtx {
     syms: *List, // List<Sym>
@@ -100,9 +49,6 @@ struct ElabCtx {
     current_func: *Sym,
     loop_depth: Int,
 }
-
-//==============================================================================
-//== Scope management
 
 func enter_scope(ctx: *ElabCtx) {
     ctx.scope = scope_new(ctx.scope);
@@ -160,6 +106,22 @@ func declare_struct(
         add_sym(ctx, sym);
     }
     return sym;
+}
+
+func params_eq(xs: *List, ys: *List): Bool {
+    if (xs.len != ys.len) {
+        return false;
+    }
+    var i = 0;
+    while (i < xs.len) {
+        var param1: *FuncParam = list_get(xs, i);
+        var param2: *FuncParam = list_get(ys, i);
+        if (!type_eq(param1.type, param2.type)) {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
 }
 
 func declare_func(
