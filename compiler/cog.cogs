@@ -46,10 +46,17 @@ func str_eq(a: *Char, b: *Char): Bool;
 
 func align_up(size: Int , align: Int): Int;
 func ilog2(n: Int): Int;
+func int_min(a: Int, b: Int): Int;
 
 func read_file(file: *File): *Char;
 func get_directory(path: *Char): *Char;
 func join_paths(dir: *Char, file: *Char): *Char;
+
+func is_whitespace(c: Int32): Bool;
+func is_digit(c: Int32): Bool;
+func is_word_start(c: Int32): Bool;
+func is_word_part(c: Int32): Bool;
+func is_print(c: Int32): Bool;
 
 func parse_char(c: *Char): Char;
 func parse_string(s: *Char): *Char;
@@ -133,6 +140,7 @@ enum {
 struct StructField {
     name: *Char,
     type: *Type,
+    offset: Int,
 }
 
 struct StructSym {
@@ -166,6 +174,7 @@ struct FuncSym {
 
 struct LocalSym {
     type: *Type,
+    frame_offset: Int,
 }
 
 struct Sym {
@@ -543,6 +552,7 @@ func is_lvalue(expr: *Expr): Bool;
 struct HirTemp {
     id: Int,
     type: *Type,
+    offset: Int,
 }
 
 enum {
@@ -715,3 +725,8 @@ func elab(ast: *Ast): *List; // *List<*Sym>
 //== lower.cog
 
 func lower(func_: *Sym, body: *Stmt): *HirExpr;
+
+//==============================================================================
+//== codegen.cog
+
+func emit_program(syms: *List);
