@@ -964,7 +964,7 @@ const nudTable: Record<TokenKind, Nud> = (function () {
 
 const ledTable: Record<TokenKind, Led> = (function () {
     return createTable(
-        ...(['=', '+=', '-='] as const).map(op => mkBinaryOp(op, Prec.Assign, Assoc.Right)),
+        ...(['=', '|=', '&=', '^=', '<<=', '>>=', '+=', '-=', '*=', '/=', '%='] as const).map(op => mkBinaryOp(op, Prec.Assign, Assoc.Right)),
         mkRow('?', Prec.Cond, Assoc.Right, (parser, led, checkpoint) => parser.ternaryExpr(led.rbp, checkpoint)),
         mkBinaryOp('||', Prec.CondOr, Assoc.Left),
         mkBinaryOp('&&', Prec.CondAnd, Assoc.Left),

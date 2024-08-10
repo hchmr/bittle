@@ -929,8 +929,16 @@ export class Elaborator {
         const op = node.childForFieldName('operator')!.text;
         switch (op) {
             case '=':
+            case '|=':
+            case '&=':
+            case '^=':
+            case '<<=':
+            case '>>=':
             case '+=':
             case '-=':
+            case '*=':
+            case '/=':
+            case '%=':
             {
                 const leftNode = node.childForFieldName('left');
                 const rightNode = node.childForFieldName('right');
