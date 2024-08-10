@@ -19,6 +19,7 @@ extern func sprintf(buf: *Char, fmt: *Char, ...): Int32;
 extern func fseek(file: *File, offset: Int, origin: Int): Int32;
 extern func ftell(file: *File): Int;
 extern func fread(buffer: *Void, size: Int, count: Int, stream: *File): Int;
+extern func ferror(stream: *File): Int32;
 
 // stdlib.h
 

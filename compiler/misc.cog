@@ -69,7 +69,7 @@ func sb_finish(self: *StringBuilder): *Char {
     sb_push(self, '\0');
     var string = self.buf;
     realloc(string, self.len);
-    
+
     self.len = -1;
     self.cap = -1;
     self.buf = null;
@@ -131,31 +131,22 @@ func ilog2(n: Int): Int {
 }
 
 func read_file(file: *File): *Char {
-    if (fseek(file, 0, SEEK_END) != 0) {
-        perror("fseek");
-        return null;
+    var len = 0;
+    var cap = 4096;
+    var buf = malloc(cap) as *Char;
+    while (true) {
+        var avail = cap - len;
+        var n = fread(&buf[len], 1, avail, file);
+        len += n;
+        if (n != avail) {
+            break;
+        }
+        cap = cap * 2;
+        buf = realloc(buf, cap) as *Char;
     }
-    var size = ftell(file);
-    if (size == -1) {
-        perror("ftell");
-        return null;
-    }
-    if (fseek(file, 0, SEEK_SET) != 0) {
-        perror("fseek");
-        return null;
-    }
-    var buffer: *Char = malloc(size + 1);
-    if (!buffer) {
-        perror("malloc");
-        return null;
-    }
-    if (fread(buffer, 1, size, file) != size) {
-        perror("fread");
-        free(buffer);
-        return null;
-    }
-    buffer[size] = '\0';
-    return buffer;
+    buf = realloc(buf, len + 1) as *Char;
+    buf[len] = '\0';
+    return buf;
 }
 
 func get_directory(path: *Char): *Char {
