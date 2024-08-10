@@ -193,6 +193,7 @@ func declare_func(
         sym.as_func.params = params;
         sym.as_func.return_type = return_type;
         sym.as_func.is_variadic = is_variadic;
+        sym.as_func.locals = list_new();
         add_sym(ctx, sym);
     }
     return sym;
@@ -229,7 +230,7 @@ func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_defin
     return sym;
 }
 
-func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type) {
+func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *Sym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         die_at(pos, "Symbol is already defined");
@@ -238,11 +239,15 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type) {
     var sym = mk_sym(Sym_Local, name);
     sym.as_local.type = type;
     add_sym(ctx, sym);
+
+    list_push(ctx.current_func.as_func.locals, sym);
+
+    return sym;
 }
 
-func declare_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
+func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
     var i = 0;
-    while (i < params.len) {
+    while (i < list_len(params)) {
         var param_decl: *FuncParamDecl = list_get(param_decls, i);
         var param: *FuncParam = list_get(params, i);
         define_local(ctx, &param_decl.pos, param.name, param.type);
@@ -429,15 +434,19 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *Expr) {
         die_at(&expr.pos, "Unknown symbol");
     }
 
+    var type: *Type;
     if (sym.kind == Sym_Local) {
-        expr.type = sym.as_local.type;
+        type = sym.as_local.type;
     } else if (sym.kind == Sym_Global) {
-        expr.type = sym.as_global.type;
+        type = sym.as_global.type;
     } else if (sym.kind == Sym_Const) {
-        expr.type = mk_int_type(4);
+        type = mk_int_type(4);
     } else {
         die_at(&expr.pos, "Expected a variable or constant");
     }
+
+    expr.as_ident.sym = sym;
+    expr.type = type;
 }
 
 func elab_literal_expr(ctx: *ElabCtx, expr: *Expr) {
@@ -471,7 +480,8 @@ func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
     if (sym.kind != Sym_Func) {
         die_at(&callee.pos, "Expected a function");
     }
-    
+    expr.as_call.resolved_callee = sym;
+
     var params = sym.as_func.params;
     var param_count = list_len(params);
     var is_variadic = sym.as_func.is_variadic;
@@ -551,11 +561,14 @@ func elab_member_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 
     var field: *StructField = list_get(struct_sym.as_struct.fields, field_index);
+    expr.as_member.resolved_field = field_index;
     expr.type = field.type;
 }
 
 func elab_sizeof_expr(ctx: *ElabCtx, expr: *Expr) {
     var type = eval_type(ctx, expr.as_sizeof.type);
+    var size = type_size(type);
+    expr.as_sizeof.size = size;
     expr.type = mk_int_type(4);
 }
 
@@ -565,7 +578,7 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *Expr) {
 
     elab_expr_infer(ctx, right);
 
-    if (op == Tok_Minus) {
+    if (op == Tok_Minus || op == Tok_Tilde) {
         check_type_int(right);
         expr.type = right.type;
     } else if (op == Tok_Bang) {
@@ -728,7 +741,8 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *Stmt) {
         die_at(&stmt.pos, "Variable must have a size.");
     }
 
-    define_local(ctx, &stmt.pos, name, type);
+    var sym = define_local(ctx, &stmt.pos, name, type);
+    stmt.as_local.sym = sym;
 }
 
 func elab_if_stmt(ctx: *ElabCtx, stmt: *Stmt) {
@@ -847,6 +861,32 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 }
 
+func string_list_contains(list: *List, value: *Char): Bool {
+    var i = 0;
+    while (i < list_len(list)) {
+        var item: *Char = list_get(list, i);
+        if (str_eq(item, value)) {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+func ensure_unique_params(ctx: *ElabCtx, params_decls: *List) {
+    var seen = list_new();
+    var i = 0;
+    while (i < list_len(params_decls)) {
+        var param_decl: *FuncParamDecl = list_get(params_decls, i);
+        var name = param_decl.name;
+        if (string_list_contains(seen, name)) {
+            die_at(&param_decl.pos, "Duplicate parameter name");
+        }
+        list_push(seen, name);
+        i += 1;
+    }
+}
+
 func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
     var name = param_decl.name;
     var type = eval_type(ctx, param_decl.type);
@@ -889,15 +929,21 @@ func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
 
     var sym = declare_func(ctx, &decl.pos, name, params, return_type, is_variadic, is_definition);
 
-    enter_scope(ctx);
-    declare_params(ctx, param_decls, params);
     if (decl.as_func.body) {
+        enter_scope(ctx);
         ctx.current_func = sym;
+        
+        define_params(ctx, param_decls, params);
         elab_stmt(ctx, decl.as_func.body);
+        
         ctx.current_func = null;
+        exit_scope(ctx);
+
+        sym.as_func.body = decl.as_func.body;
         sym.as_func.is_defined = true;
+    } else {
+        ensure_unique_params(ctx, param_decls);
     }
-    exit_scope(ctx);
 }
 
 func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, next_value: Int32): Int32 {
@@ -956,7 +1002,7 @@ func elab_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 }
 
-func elab(ast: *Ast) {
+func elab(ast: *Ast): *List { // *List<*Sym>
     var ctx: *ElabCtx = calloc(1, sizeof(ElabCtx));
     ctx.scope = scope_new(null);
     ctx.syms = list_new();
@@ -968,5 +1014,5 @@ func elab(ast: *Ast) {
         i += 1;
     }
 
-    free(ctx);
+    return ctx.syms;
 }

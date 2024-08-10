@@ -120,6 +120,7 @@ func pretty_type(file: *File, type: *Type): Void;
 //== sym.cog
 
 struct Sym;
+struct Stmt;
 
 enum {
     Sym_Struct,
@@ -160,6 +161,8 @@ struct FuncSym {
     return_type: *Type,
     is_variadic: Bool,
     is_defined: Bool,
+    locals: *List, // List<Sym>
+    body: *Stmt,
 }
 
 struct LocalSym {
@@ -334,11 +337,13 @@ enum {
 
 struct IdentExpr {
     name: *Char,
+    sym: *Sym,
 }
 
 struct CallExpr {
     callee: *Expr,
     args: *List, // List<Expr>
+    resolved_callee: *Sym,
 }
 
 struct IndexExpr {
@@ -349,10 +354,12 @@ struct IndexExpr {
 struct MemberExpr {
     left: *Expr,
     name: *Char,
+    resolved_field: Int,
 }
 
 struct SizeofExpr {
     type: *TypeExpr,
+    size: Int,
 }
 
 struct UnaryExpr {
@@ -416,6 +423,7 @@ struct LocalStmt {
     name: *Char,
     type: *TypeExpr,
     init: *Expr,
+    sym: *Sym,
 }
 
 struct IfStmt {
@@ -545,4 +553,4 @@ func parser_run(self: *Parser): *Ast;
 //==============================================================================
 //== elab.cog
 
-func elab(ast: *Ast);
+func elab(ast: *Ast): *List; // *List<*Sym>
