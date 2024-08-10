@@ -1,0 +1,140 @@
+include "cog.cogs";
+
+struct Type;
+
+func mk_type(kind: Int32): *Type {
+    var type: *Type = calloc(1, sizeof(Type));
+    type.kind = kind;
+    return type;
+}
+
+func mk_void_type(): *Type {
+    return mk_type(Type_Void);
+}
+
+func mk_never_type(): *Type {
+    return mk_type(Type_Never);
+}
+
+func mk_bool_type(): *Type {
+    return mk_type(Type_Bool);
+}
+
+func mk_int_type(size: Int): *Type {
+    var type: *Type = mk_type(Type_Int);
+    type.as_int.size = size;
+    return type;
+}
+
+func mk_ptr_type(pointee: *Type): *Type {
+    var type: *Type = mk_type(Type_Ptr);
+    type.as_ptr.pointee = pointee;
+    return type;
+}
+
+func mk_array_type(elem: *Type, size: Int): *Type {
+    var type: *Type = mk_type(Type_Arr);
+    type.as_arr.elem = elem;
+    type.as_arr.size = size;
+    return type;
+}
+
+func mk_struct_type(sym: *Sym): *Type {
+    var type: *Type = mk_type(Type_Struct);
+    type.as_struct.sym = sym;
+    return type;
+}
+
+
+func type_eq(t1: *Type, t2: *Type): Bool {
+    if (t1.kind != t2.kind) {
+        return false;
+    }
+    if (t1.kind == Type_Int) {
+        return t1.as_int.size == t2.as_int.size;
+    } else if (t1.kind == Type_Ptr) {
+        return type_eq(t1.as_ptr.pointee, t2.as_ptr.pointee);
+    } else if (t1.kind == Type_Arr) {
+        return type_eq(t1.as_arr.elem, t2.as_arr.elem) && t1.as_arr.size == t2.as_arr.size;
+    } else if (t1.kind == Type_Struct) {
+        return t1.as_struct.sym == t2.as_struct.sym;
+    }
+    return true;
+}
+
+func type_le(t1: *Type, t2: *Type): Bool {
+    if (t1.kind == Type_Never) {
+        return true;
+    } else if (is_scalar(t1) && t2.kind == Type_Bool) {
+        return true;
+    } else if (t1.kind == Type_Int && t2.kind == Type_Int) {
+        return t1.as_int.size <= t2.as_int.size;
+    } else if (t1.kind == Type_Ptr && t2.kind == Type_Ptr) {
+        return t1.as_ptr.pointee.kind == Type_Void;
+    } else {
+        return type_eq(t1, t2);
+    }
+}
+
+func type_size(type: *Type): Int {
+    if (type.kind == Type_Void) {
+        return -1;
+    } else if (type.kind == Type_Bool) {
+        return 1;
+    } else if (type.kind == Type_Int) {
+        return type.as_int.size;
+    } else if (type.kind == Type_Ptr) {
+        return 8;
+    } else if (type.kind == Type_Arr) {
+        return type_size(type.as_arr.elem) * type.as_arr.size;
+    } else if (type.kind == Type_Struct) {
+        var variant = type.as_struct.sym.as_struct;
+        return variant.fields.len == 0 ? -1 : align_up(variant.unpadded_size, type_align(type)); 
+    } else if (type.kind == Type_Never) {
+        return -1;
+    } else {
+        unreachable("type_size");
+    }
+}
+
+func type_align(type: *Type): Int {
+    if (type.kind == Type_Struct) {
+        return 8; // Maximum possible alignment
+    } else {
+        return type_size(type);
+    }
+}
+
+func is_scalar(type: *Type): Bool {
+    return type.kind == Type_Bool 
+        || type.kind == Type_Int 
+        || type.kind == Type_Ptr;
+}
+
+func is_sized(type: *Type): Bool {
+    return type_size(type) != -1;
+}
+
+func pretty_type(file: *File, type: *Type): Void {
+    if (type.kind == Type_Void) {
+        fprintf(file, "void");
+    } else if (type.kind == Type_Bool) {
+        fprintf(file, "bool");
+    } else if (type.kind == Type_Int) {
+        fprintf(file, "Int%d", type.as_int.size / 8);
+    } else if (type.kind == Type_Ptr) {
+        fprintf(file, "*");
+        pretty_type(file, type.as_ptr.pointee);
+    } else if (type.kind == Type_Arr) {
+        fprintf(file, "[");
+        pretty_type(file, type.as_arr.elem);
+        fprintf(file, "; %d]", type.as_arr.size);
+    } else if (type.kind == Type_Struct) {
+        var variant = type.as_struct.sym.as_struct;
+        fprintf(file, "%s", variant.name);
+    } else if (type.kind == Type_Never) {
+        fprintf(file, "!");
+    } else {
+        unreachable("pretty_type");
+    }
+}

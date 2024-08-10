@@ -57,6 +57,7 @@ func main(argc: Int32, argv: *(*Char)): Int32 {
     }
 
     var ast = parse(file_name, input_file);
+    elab(ast);
     printf("OK\n");
     return 0;
 }

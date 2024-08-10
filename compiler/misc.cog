@@ -81,6 +81,20 @@ func list_new(): *List {
     return calloc(1, sizeof(List));
 }
 
+func list_len(self: *List): Int {
+    return self.len;
+}
+
+func list_get(self: *List, i: Int): *Void {
+    assert(i >= 0 && i < self.len, "list_get: index out of bounds");
+    return self.elems[i];
+}
+
+func list_set(self: *List, i: Int, elem: *Void) {
+    assert(i >= 0 && i < self.len, "list_set: index out of bounds");
+    self.elems[i] = elem;
+}
+
 func list_ensure_cap(self: *List, cap: Int) {
     if (self.cap >= cap) {
         return;
@@ -101,6 +115,19 @@ func list_push(self: *List, elem: *Void) {
 
 func str_eq(a: *Char, b: *Char): Bool {
     return strcmp(a, b) == 0;
+}
+
+func align_up(size: Int , align: Int): Int {
+    return (size + align - 1) / align * align;
+}
+
+func ilog2(n: Int): Int {
+    var i = 0;
+    while (n > 1) {
+        n = n / 2;
+        i += 1;
+    }
+    return i;
 }
 
 func read_file(file: *File): *Char {

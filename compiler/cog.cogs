@@ -37,9 +37,15 @@ func sb_append(self: *StringBuilder, s: *Char);
 func sb_finish(self: *StringBuilder): *Char;
 
 func list_new(): *List;
+func list_len(self: *List): Int;
+func list_get(self: *List, i: Int): *Void;
+func list_set(self: *List, i: Int, elem: *Void);
 func list_push(self: *List, elem: *Void);
 
 func str_eq(a: *Char, b: *Char): Bool;
+
+func align_up(size: Int , align: Int): Int;
+func ilog2(n: Int): Int;
 
 func read_file(file: *File): *Char;
 func get_directory(path: *Char): *Char;
@@ -47,6 +53,128 @@ func join_paths(dir: *Char, file: *Char): *Char;
 
 func parse_char(c: *Char): Char;
 func parse_string(s: *Char): *Char;
+
+//==============================================================================
+//== type.cog
+
+const MAX_PARAMS = 8;
+
+struct Sym;
+
+enum {
+    Type_Void,
+    Type_Bool,
+    Type_Int,
+    Type_Ptr,
+    Type_Arr,
+    Type_Struct,
+    Type_Never,
+}
+
+struct Type;
+
+struct IntType {
+    size: Int,
+}
+
+struct PtrType {
+    pointee: *Type,
+}
+
+struct ArrType {
+    elem: *Type,
+    size: Int,
+}
+
+struct StructType {
+    sym: *Sym,
+}
+
+struct Type {
+    kind: Int32,
+    as_int: IntType,
+    as_ptr: PtrType,
+    as_arr: ArrType,
+    as_struct: StructType,
+}
+
+func mk_type(kind: Int32): *Type;
+func mk_void_type(): *Type;
+func mk_never_type(): *Type;
+func mk_bool_type(): *Type;
+func mk_int_type(size: Int): *Type;
+func mk_ptr_type(pointee: *Type): *Type;
+func mk_array_type(elem: *Type, size: Int): *Type;
+func mk_struct_type(sym: *Sym): *Type;
+
+func type_eq(t1: *Type, t2: *Type): Bool;
+func type_le(t1: *Type, t2: *Type): Bool;
+func type_size(type: *Type): Int;
+func type_align(type: *Type): Int;
+func is_scalar(type: *Type): Bool;
+func is_sized(type: *Type): Bool;
+
+func pretty_type(file: *File, type: *Type): Void;
+
+//==============================================================================
+//== sym.cog
+
+struct Sym;
+
+enum {
+    Sym_Struct,
+    Sym_Global,
+    Sym_Const,
+    Sym_Func,
+    Sym_Local,
+}
+
+struct StructField {
+    name: *Char,
+    type: *Type,
+}
+
+struct StructSym {
+    name: *Char,
+    fields: *List, // List<StructField>
+    unpadded_size: Int,
+    is_defined: Bool,
+}
+
+struct GlobalSym {
+    type: *Type,
+    is_defined: Bool,
+}
+
+struct ConstSym {
+    value: Int32,
+}
+
+struct FuncParam {
+    name: *Char,
+    type: *Type,
+}
+
+struct FuncSym {
+    params: *List, // List<FuncParam>
+    return_type: *Type,
+    is_variadic: Bool,
+    is_defined: Bool,
+}
+
+struct LocalSym {
+    type: *Type,
+}
+
+struct Sym {
+    kind: Int32,
+    name: *Char,
+    as_struct: StructSym,
+    as_global: GlobalSym,
+    as_const: ConstSym,
+    as_func: FuncSym,
+    as_local: LocalSym,
+}
 
 //==============================================================================
 //== tok.cog
@@ -253,7 +381,6 @@ struct Expr {
     kind: Int32,
     pos: Pos,
     type: *Type,
-    needs_cast: Bool,
     as_ident: IdentExpr,
     as_literal: *Literal,
     as_call: CallExpr,
@@ -392,6 +519,13 @@ struct Ast {
     decls: *List, // List<Decl>
 }
 
+func mk_type_expr(pos: *Pos, kind: Int32): *TypeExpr;
+func mk_literal(kind: Int32): *Literal;
+func mk_expr(pos: *Pos, kind: Int32): *Expr;
+func mk_stmt(pos: *Pos, kind: Int32): *Stmt;
+func mk_decl(pos: *Pos, kind: Int32): *Decl;
+func is_lvalue(expr: *Expr): Bool;
+
 //==============================================================================
 //== lexer.cog
 
@@ -407,3 +541,8 @@ struct Parser;
 
 func parser_new(lexer: *Lexer): *Parser;
 func parser_run(self: *Parser): *Ast;
+
+//==============================================================================
+//== elab.cog
+
+func elab(ast: *Ast);
