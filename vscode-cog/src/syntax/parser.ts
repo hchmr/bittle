@@ -57,6 +57,8 @@ type Checkpoint = {
     startIndex: number;
 };
 
+type Matcher = TokenKind | TokenKindSet | ((kind: TokenKind) => boolean);
+
 abstract class NodeBuilder {
     protected currentNodes: IncompleteNode[];
 
@@ -162,13 +164,33 @@ abstract class NodeBuilder {
     }
 }
 
+class PeekableIterator<T> implements Iterator<T> {
+    cached: IteratorResult<T>[] = [];
+    constructor(private it: Iterator<T>) {}
+
+    next(): IteratorResult<T> {
+        if (this.cached.length > 0) {
+            return this.cached.shift()!;
+        }
+        return this.it.next();
+    }
+
+    peekBy(i: number): IteratorResult<T> {
+        while (this.cached.length <= i) {
+            this.cached.push(this.it.next());
+        }
+        return this.cached[i];
+    }
+}
+
 class ParserBase extends NodeBuilder {
     tok: Token;
     lastErrorPosition: Point = { row: -1, column: -1 };
+    protected tokens: PeekableIterator<Token>;
 
     constructor(
         text: string,
-        protected tokens: Iterator<Token, Token>,
+        tokens: Iterator<Token, Token>,
         protected errorSink: ErrorSink,
     ) {
         const token = tokens.next().value;
@@ -183,6 +205,8 @@ class ParserBase extends NodeBuilder {
                 startIndex: token.startIndex,
             },
         );
+
+        this.tokens = new PeekableIterator(tokens);
 
         this.tok = token;
     }
@@ -199,17 +223,20 @@ class ParserBase extends NodeBuilder {
         return this.tok.startIndex;
     }
 
-    match(kind: TokenKind): boolean;
-    match(kinds: TokenKindSet): boolean;
-    match(test: (kind: TokenKind) => boolean): boolean;
-    match(test: TokenKind | TokenKindSet | ((kind: TokenKind) => boolean)): boolean {
-        if (typeof test === 'function') {
-            return test(this.tok.kind);
-        } else if (test instanceof TokenKindSet) {
-            return test.has(this.tok.kind);
-        } else {
-            return this.tok.kind === test;
-        }
+    peekBy(i: number) {
+        return i == 0 ? this.tok : this.tokens.peekBy(i - 1).value!;
+    }
+
+    match(...tests: Matcher[]): boolean {
+        return tests.every((test, i) => {
+            if (typeof test === 'function') {
+                return test(this.peekBy(i).kind);
+            } else if (test instanceof TokenKindSet) {
+                return test.has(this.peekBy(i).kind);
+            } else {
+                return this.peekBy(i).kind === test;
+            }
+        });
     }
 
     bump(assertedToken?: TokenKind) {
@@ -770,9 +797,29 @@ export class Parser extends ParserBase {
         this.beginNodeAt(CompositeNodeTypes.CallExpr, checkpoint);
         this.groupExistingChildren('callee');
         this.beginField('args');
-        this.delimited('(', ')', ',', () => this.expr());
+        this.callArgs();
         this.finishField('args');
         this.finishNode(CompositeNodeTypes.CallExpr);
+    }
+
+    callArgs() {
+        this.beginNode(CompositeNodeTypes.CallArgList);
+        this.delimited('(', ')', ',', () => this.callArg());
+        this.finishNode(CompositeNodeTypes.CallArgList);
+    }
+
+    callArg() {
+        this.beginNode(CompositeNodeTypes.CallArg);
+        if (this.match('identifier', ':')) {
+            this.beginField('label');
+            this.bump('identifier');
+            this.finishField('label');
+            this.bump(':');
+        }
+        this.beginField('value');
+        this.expr();
+        this.finishField('value');
+        this.finishNode(CompositeNodeTypes.CallArg);
     }
 
     indexExpr(checkpoint: Checkpoint) {

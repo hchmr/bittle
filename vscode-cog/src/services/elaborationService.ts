@@ -4,6 +4,7 @@ import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { mkErrorType, Type } from '../semantics/type';
 import { typeLayout, TypeLayout } from '../semantics/typeLayout';
 import { SyntaxNode } from '../syntax';
+import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { Stream, stream } from '../utils/stream';
 import { IncludeResolver } from './IncludeResolver';
@@ -44,21 +45,9 @@ export class ElaborationService {
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
         if (isFieldName(nameNode)) {
             return this.resolveFieldName(path, nameNode);
-        } else if (isTypeName(nameNode)) {
-            return this.resolveTypeName(path, nameNode);
-        } else if (isValueName(nameNode)) {
-            return this.resolveValueName(path, nameNode);
         } else {
-            return;
+            return this.resolveName(path, nameNode);
         }
-    }
-
-    private resolveTypeName(path: string, nameNode: SyntaxNode): Sym | undefined {
-        return this.resolveName(path, nameNode);
-    }
-
-    private resolveValueName(path: string, nameNode: SyntaxNode): Sym | undefined {
-        return this.resolveName(path, nameNode);
     }
 
     private resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSym | undefined {
@@ -126,22 +115,5 @@ export class ElaborationService {
 //= Helpers
 
 function isFieldName(nameNode: SyntaxNode): boolean {
-    return nameNode.parent!.type === 'field_expr';
-}
-
-function isTypeName(nameNode: SyntaxNode): boolean {
-    return nameNode.parent!.type === 'name_type' || nameNode.parent!.type === 'struct_decl';
-}
-
-function isValueName(nameNode: SyntaxNode): boolean {
-    return [
-        'enum_member',
-        'struct_member',
-        'func_decl',
-        'param_decl',
-        'global_decl',
-        'const_decl',
-        'local_decl',
-        'name_expr',
-    ].includes(nameNode.parent!.type);
+    return nameNode.parent!.type === ExprNodeTypes.FieldExpr;
 }

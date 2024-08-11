@@ -84,6 +84,8 @@ export const CompositeNodeTypes = {
     ...StmtNodeTypes,
     // Expressions
     ...ExprNodeTypes,
+    CallArgList: 'call_arg_list',
+    CallArg: 'call_arg',
     // Types
     ...TypeNodeTypes,
     // Literals
@@ -133,4 +135,8 @@ export function isStmtNode(node: SyntaxNode): boolean {
 
 export function isExprNode(node: SyntaxNode): boolean {
     return Object.values(<Record<string, string>>ExprNodeTypes).includes(node.type);
+}
+
+export function isArgNode(node: SyntaxNode): boolean {
+    return node.type === CompositeNodeTypes.CallArg;
 }

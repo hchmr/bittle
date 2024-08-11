@@ -41,8 +41,8 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         if (!nameNode) {
             return;
         }
-        const argsNodes = callNode.childrenForFieldName('args');
-        const argIndex = countPrecedingCommas(argsNodes, position);
+        const argNodes = callNode.childForFieldName('args')!.children;
+        const argIndex = countPrecedingCommas(argNodes, position);
 
         const funcSym = this.elaborationService.resolveSymbol(filePath, nameNode);
         if (!funcSym || funcSym.kind !== SymKind.Func) {

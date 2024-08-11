@@ -6,6 +6,7 @@ import {
     ErrorNodeType,
     ExprNodeType,
     ExprNodeTypes,
+    isArgNode,
     isExprNode,
     isStmtNode,
     isTopLevelNode,
@@ -1020,7 +1021,9 @@ export class Elaborator {
 
     private elabCallExpr(node: SyntaxNode): Type {
         const calleeNode = node.childForFieldName('callee');
-        const argsNodes = node.childrenForFieldName('args');
+        const argListNode = node.childForFieldName('args');
+        assert(argListNode);
+
         if (!calleeNode) {
             return this.elabCallExprUnknown(node);
         }
@@ -1042,20 +1045,38 @@ export class Elaborator {
         }
 
         const params = funcSym.params;
-        const args = argsNodes.filter(x => isExprNode(x));
+        const argNodes = argListNode.children.filter(x => isArgNode(x));
 
-        if (args.length < params.length) {
-            this.reportError(node, `Too few arguments provided (${args.length} < ${params.length}).`);
-        } else if (args.length > params.length && !funcSym.isVariadic) {
-            this.reportError(node, `Too many arguments provided (${args.length} > ${params.length}).`);
+        if (argNodes.length < params.length) {
+            this.reportError(node, `Too few arguments provided (${argNodes.length} < ${params.length}).`);
+        } else if (argNodes.length > params.length && !funcSym.isVariadic) {
+            this.reportError(node, `Too many arguments provided (${argNodes.length} > ${params.length}).`);
         }
-        for (let i = 0; i < args.length; i++) {
+        for (let i = 0; i < argNodes.length; i++) {
+            const argNode = argNodes[i];
+            const argLabelNode = argNode.childForFieldName('label');
+            const argValueNode = argNode.childForFieldName('value');
             if (i < params.length) {
-                this.elabExpr(args[i], params[i].type);
+                if (argLabelNode) {
+                    const paramName = params[i].name;
+                    if (argLabelNode.text !== paramName) {
+                        this.reportError(argLabelNode, `Expected label '${paramName}'.`);
+                    } else {
+                        this.recordNameResolution(params[i], argLabelNode);
+                    }
+                }
+                if (argValueNode) {
+                    this.elabExpr(argValueNode, params[i].type);
+                }
             } else if (funcSym.isVariadic) {
-                const argType = this.elabExprInfer(args[i]);
-                if (isNonScalarType(argType)) {
-                    this.reportError(node, `Variadic argument must be scalar type.`);
+                if (argLabelNode) {
+                    this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
+                }
+                if (argValueNode) {
+                    const argType = this.elabExprInfer(argValueNode);
+                    if (isNonScalarType(argType)) {
+                        this.reportError(node, `Variadic argument must be scalar type.`);
+                    }
                 }
             }
         }
@@ -1064,10 +1085,11 @@ export class Elaborator {
     }
 
     private elabCallExprUnknown(node: SyntaxNode): Type {
-        const argsNodes = node.childrenForFieldName('args');
+        const argListNode = node.childForFieldName('args')!;
 
-        for (const argNode of argsNodes.filter(x => isExprNode(x))) {
-            this.elabExprInfer(argNode);
+        for (const argNode of argListNode.children.filter(x => isArgNode(x) && x.childForFieldName('value'))) {
+            const valueNode = argNode.childForFieldName('value')!;
+            this.elabExprInfer(valueNode);
         }
         return mkErrorType();
     }
