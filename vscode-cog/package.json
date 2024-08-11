@@ -1,29 +1,30 @@
 {
     "name": "vscode-cog",
-    "publisher": "anon",
-    "version": "0.0.1",
     "displayName": "Cog",
-    "description": "Language support for Cog",
+    "description": "Cog language support for Visual Studio Code",
+    "version": "0.0.1",
+    "publisher": "anon",
+    "scripts": {
+        "vscode:prepublish": "npm run build",
+        "build": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "test": "vitest",
+        "lint": "eslint . --max-warnings 0"
+    },
     "engines": {
-        "vscode": "^1.22.0"
+        "vscode": "^1.91.0"
     },
     "categories": [
         "Programming Languages"
     ],
-    "main": "./out/extension.js",
+    "main": "./dist/extension.js",
     "contributes": {
-        "grammars": [
-            {
-                "language": "cog",
-                "scopeName": "source.cog",
-                "path": "./cog.tmLanguage.json"
-            }
-        ],
         "languages": [
             {
                 "id": "cog",
                 "aliases": [
-                    "Cog"
+                    "Cog",
+                    "cog"
                 ],
                 "extensions": [
                     ".cog",
@@ -31,24 +32,27 @@
                 ],
                 "configuration": "./language-configuration.json"
             }
+        ],
+        "grammars": [
+            {
+                "language": "cog",
+                "scopeName": "source.cog",
+                "path": "./cog.tmLanguage.json"
+            }
         ]
     },
-    "activationEvents": [
-        "*.cog"
-    ],
-    "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "prepare": "lezer-generator src/cog.grammar --typeScript --output src/parser.ts",
-        "compile": "npm run prepare && tsc -p ./",
-        "watch": "tsc -watch -p ./"
-    },
-    "dependencies": {
-        "@lezer/lr": "^1.4.0"
-    },
     "devDependencies": {
-        "@types/node": "^20.12.11",
-        "@types/vscode": "^1.89.0",
-        "typescript": "^5.4.5",
-        "@lezer/generator": "^1.7.0"
+        "@eslint/js": "^9.8.0",
+        "@stylistic/eslint-plugin": "^2.3.0",
+        "@types/eslint__js": "^8.42.3",
+        "@types/node": "^20.14.10",
+        "@types/vscode": "^1.91.0",
+        "eslint": "^8.57.0",
+        "eslint-plugin-only-warn": "^1.1.0",
+        "fuzzysort": "3.0.2",
+        "globals": "^15.8.0",
+        "typescript": "^5.5.3",
+        "typescript-eslint": "^7.17.0",
+        "vitest": "^2.0.4"
     }
 }

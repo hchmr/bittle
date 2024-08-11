@@ -1,233 +1,128 @@
 import * as vscode from 'vscode';
-import { parser } from './parser';
-import * as lezer from '@lezer/common';
-import * as path from 'path';
-import * as fs from 'fs';
-import { getCompilerDiagnostics } from './compiler-check';
-
-export let log: vscode.OutputChannel;
-
-// Map of diagnostics generated for each document
-const diagnosticCollections = new Map<string, vscode.DiagnosticCollection>();
-
-function getSyntaxErrors(tree: any, document: vscode.TextDocument) {
-    const diagnostics = [];
-
-    const cursor = tree.cursor();
-    do {
-        if (!cursor.type.isError)
-            continue;
-        diagnostics.push(new vscode.Diagnostic(
-            new vscode.Range(
-                document.positionAt(cursor.from),
-                document.positionAt(cursor.to)
-            ),
-            'Syntax error',
-            vscode.DiagnosticSeverity.Error,
-        ));
-    } while (cursor.next());
-
-    return diagnostics;
-}
-
-async function lintDocument(document: vscode.TextDocument) {
-    log.appendLine(`Linting ${document.uri.toString()}`);
-
-    const tree = parser.parse(document.getText());
-
-    let collection = diagnosticCollections.get(document.fileName)
-        ?? vscode.languages.createDiagnosticCollection(document.uri.toString());
-    collection.clear();
-    diagnosticCollections.set(document.fileName, collection);
-
-    const parserDiagnostics = getSyntaxErrors(tree, document);
-
-    const groups: Map<string, vscode.Diagnostic[]> = new Map();
-    groups.set(document.uri.toString(), parserDiagnostics);
-
-    const compilerDiagnostics = await getCompilerDiagnostics(document);
-    for (const { fileName, diagnostic } of compilerDiagnostics) {
-        const diagnostics = groups.get(fileName) ?? [];
-        diagnostics.push(diagnostic);
-        groups.set(fileName, diagnostics);
-    }
-
-    for (const [path, diagnostics] of groups) {
-        collection.set(vscode.Uri.parse(path), diagnostics);
-    }
-}
-
-function getText(node: lezer.SyntaxNode, document: vscode.TextDocument) {
-    return document.getText().slice(node.from, node.to);
-}
-
-function makeDefinition(kind: vscode.SymbolKind, node: lezer.SyntaxNode, document: vscode.TextDocument) {
-    return new vscode.SymbolInformation(
-        getText(node, document),
-        kind,
-        undefined!,
-        new vscode.Location(
-            document.uri,
-            new vscode.Range(
-                document.positionAt(node.from),
-                document.positionAt(node.to),
-            )
-        ),
-    )
-}
-
-function resolveIncludePath(document: vscode.TextDocument, fileName: string) {
-    const includeFilename = JSON.parse(fileName);
-    const includeFilePath = path.resolve(path.dirname(document.fileName), includeFilename);
-    if (!fs.existsSync(includeFilePath))
-        return;
-    return includeFilePath;
-}
-
-async function* getTopLevelSymbols(document: vscode.TextDocument): AsyncGenerator<vscode.SymbolInformation> {
-    const tree = parser.parse(document.getText());
-
-    for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
-        if (node.type.name == 'IncludeDecl') {
-            const stringNode = node.getChild('String');
-            if (!stringNode)
-                continue;
-            const includeFilePath = resolveIncludePath(document, getText(stringNode, document));
-            if (!includeFilePath)
-                continue;
-            const includedDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(includeFilePath));
-            yield* getTopLevelSymbols(includedDocument);
-        } else if (node.type.name == 'FuncDecl') {
-            const nameNode = node.getChild('Identifier');
-            if (!nameNode)
-                continue;
-            yield makeDefinition(vscode.SymbolKind.Function, nameNode, document);
-        } else if (node.type.name == 'GlobalDecl') {
-            const nameNode = node.getChild('Identifier');
-            if (!nameNode)
-                continue;
-            yield makeDefinition(vscode.SymbolKind.Function, nameNode, document);
-        } else if (node.type.name == 'ConstDecl') {
-            const nameNode = node.getChild('Identifier');
-            if (!nameNode)
-                continue;
-            yield makeDefinition(vscode.SymbolKind.Constant, nameNode, document);
-        } else if (node.type.name == 'EnumDecl') {
-            for (let child = node.firstChild; child; child = child.nextSibling) {
-                if (child.type.name !== 'EnumValue')
-                    continue;
-                const nameNode = child.getChild('Identifier');
-                if (!nameNode)
-                    continue;
-                yield makeDefinition(vscode.SymbolKind.Constant, nameNode, document);
-            }
-        } else if (node.type.name == 'StructDecl') {
-            const nameNode = node.getChild('Identifier');
-            if (!nameNode)
-                continue;
-            yield makeDefinition(vscode.SymbolKind.Struct, nameNode, document);
-        }
-    }
-}
-
-async function getDefinition(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.DefinitionLink[] | vscode.Definition> {
-    const offset = document.offsetAt(position);
-    const node = parser.parse(document.getText()).topNode.resolve(offset);
-    if (node.type.name == 'String' && node.matchContext(['IncludeDecl'])) {
-        const resolvedPath = resolveIncludePath(document, getText(node, document));
-        if (resolvedPath) {
-            const resolvedUri = vscode.Uri.file(resolvedPath);
-            return [{
-                originSelectionRange: new vscode.Range(
-                    document.positionAt(node.from + 1),
-                    document.positionAt(node.to - 1),
-                ),
-                targetUri: resolvedUri,
-                targetRange: new vscode.Range(0, 0, 0, 0),
-            }];
-        }
-    }
-
-    const topLevelSymbols = getTopLevelSymbols(document);
-
-    const result = [];
-    if (node.type.name == 'Identifier') {
-        const name = getText(node, document);
-        for await (const symbol of topLevelSymbols) {
-            if (symbol.name === name) {
-                result.push(symbol.location);
-            }
-        }
-    }
-
-    return result;
-}
-
-async function getDocumentSymbols(document: vscode.TextDocument): Promise<vscode.SymbolInformation[]> {
-    const symbols = [];
-    for await (const symbol of getTopLevelSymbols(document)) {
-        if (symbol.location.uri === document.uri)
-            symbols.push(symbol);
-    }
-    return symbols;
-}
-
-async function findWorkspaceSymbols(query: string, token: vscode.CancellationToken): Promise<vscode.SymbolInformation[]> {
-    log.appendLine(`Searching for symbols matching ${query} in the following documents:`);
-    for (const document of vscode.workspace.textDocuments) {
-        if (document.languageId === 'cog')
-            log.appendLine('  ' + document.uri.toString());
-    }
-    const symbols = [];
-    for (const document of vscode.workspace.textDocuments) {
-        if (document.languageId !== 'cog')
-            continue;
-        for await (const symbol of getTopLevelSymbols(document)) {
-            if (!symbol.name.includes(query))
-                continue;
-            symbols.push(symbol);
-        }
-    }
-    return symbols;
-}
+import { CodeActionsProvider } from './features/codeActions';
+import { createCompilerErrorProvider } from './features/compilerErrors';
+import { CompletionProvider } from './features/completion';
+import { ElaborationErrorProvider } from './features/elaborationErrors';
+import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
+import { HoverProvider } from './features/hover';
+import { ReferenceProvider } from './features/references';
+import { SemanticTokensProvider } from './features/semanticTokens';
+import { SignatureHelpProvider } from './features/signatureHelp';
+import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
+import { SyntaxErrorProvider } from './features/syntaxErrors';
+import { CompilerService } from './services/compilerService';
+import { ElaborationService } from './services/elaborationService';
+import { IncludeGraphService } from './services/includeGraphService';
+import { IncludeResolver } from './services/IncludeResolver';
+import { ParsingServiceImpl } from './services/parsingService';
+import { ReactiveCache } from './utils/reactiveCache';
+import { VirtualFileSystemImpl } from './vfs';
 
 export function activate(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-        log = vscode.window.createOutputChannel('Cog'),
-    );
-    setTimeout(() => log.show(), 1000);
+    // Services
+
+    const cache = new ReactiveCache();
+
+    const vfs = new VirtualFileSystemImpl(cache);
+    context.subscriptions.push(vfs);
+
+    const parsingService = new ParsingServiceImpl(cache, vfs);
+
+    const includeResolver = new IncludeResolver(vfs);
+
+    const elaborationService = new ElaborationService(parsingService, includeResolver, cache);
+
+    const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
+
+    const compilerService = new CompilerService();
+
+    // Hover
 
     context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(e => {
-            if (e.languageId !== 'cog')
-                return;
-            lintDocument(e);
-        }),
-        vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.languageId !== 'cog')
-                return;
-            lintDocument(e.document);
-        }),
+        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, elaborationService)),
     );
-    vscode.workspace.textDocuments.forEach(document => {
-        if (document.languageId === 'cog')
-            lintDocument(document);
-    });
-    context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('cog', {
-            provideDefinition: getDefinition,
-        }),
-        vscode.languages.registerDocumentSymbolProvider('cog', {
-            provideDocumentSymbols: getDocumentSymbols,
-        }),
-        vscode.languages.registerWorkspaceSymbolProvider({
-            provideWorkspaceSymbols: findWorkspaceSymbols,
-        }),
-    );
-}
 
-export function deactivate() {
-    for (const collection of diagnosticCollections.values()) {
-        collection.dispose();
+    // Semantic tokens
+
+    const semanticTokensProvider = new SemanticTokensProvider(parsingService);
+    context.subscriptions.push(
+        vscode.languages.registerDocumentSemanticTokensProvider(
+            'cog',
+            semanticTokensProvider,
+            semanticTokensProvider.legend,
+        ),
+    );
+
+    // Syntax errors
+
+    const syntaxErrorProvider = new SyntaxErrorProvider(parsingService);
+    context.subscriptions.push(syntaxErrorProvider);
+
+    const elaborationErrorProvider = new ElaborationErrorProvider(elaborationService, cache);
+    context.subscriptions.push(elaborationErrorProvider);
+
+    const compilerErrorProvider = createCompilerErrorProvider(compilerService);
+    context.subscriptions.push(compilerErrorProvider);
+
+    function refreshDiagnostics(document: vscode.TextDocument) {
+        if (document.languageId !== 'cog')
+            return;
+
+        syntaxErrorProvider.updateDiagnostics(document);
+        elaborationErrorProvider.updateDiagnostics();
+        compilerErrorProvider.updateDiagnostics();
     }
+
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument(document => refreshDiagnostics(document)),
+        vscode.workspace.onDidChangeTextDocument(event => refreshDiagnostics(event.document)),
+        vscode.workspace.onDidCloseTextDocument(document => refreshDiagnostics(document)),
+    );
+    vscode.workspace.textDocuments.forEach(refreshDiagnostics);
+
+    // Document symbols and workspace symbols
+
+    const symbolProvider = new SymbolProvider(parsingService, vfs, cache);
+    context.subscriptions.push(
+        vscode.languages.registerDocumentSymbolProvider('cog', symbolProvider),
+        vscode.languages.registerWorkspaceSymbolProvider(symbolProvider),
+    );
+
+    // Code actions
+
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider(parsingService)),
+    );
+
+    // Navigation
+
+    const nameDefinitionProvider = new NameDefinitionProvider(parsingService, elaborationService, includeGraphService);
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
+        vscode.languages.registerDefinitionProvider('cog', nameDefinitionProvider),
+        vscode.languages.registerImplementationProvider('cog', nameDefinitionProvider),
+        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, elaborationService)),
+    );
+
+    // Completion
+
+    context.subscriptions.push(
+        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, elaborationService), '.'),
+    );
+
+    context.subscriptions.push(
+        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ','),
+    );
+
+    // Rename and references
+
+    const referenceProvider = new ReferenceProvider(parsingService, elaborationService, includeGraphService);
+    context.subscriptions.push(
+        vscode.languages.registerReferenceProvider('cog', referenceProvider),
+        vscode.languages.registerRenameProvider('cog', referenceProvider),
+    );
+
+    // TODO:
+    // - More code actions
+    // - Formatting
 }

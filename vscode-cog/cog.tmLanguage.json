@@ -1,32 +1,20 @@
 {
     "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "Cog",
     "scopeName": "source.cog",
-    "fileTypes": [
-        "cog",
-        "cogs"
-    ],
     "patterns": [
         {
-            "name": "keyword.control.cog",
-            "match": "\\b(break|continue|if|else|return|while)\\b"
-        },
-        {
-            "name": "keyword.regular.cog",
-            "match": "\\b(as|const|enum|extern|false|func|include|null|sizeof|struct|true|var)\\b"
-        },
-        {
             "name": "comment.line.cog",
-            "match": "//.*$"
+            "match": "//.*"
         },
         {
-            "name": "constant.numeric.cog",
-            "match": "\\b\\d+\\b"
+            "name": "comment.block.cog",
+            "begin": "/\\*",
+            "end": "\\*/"
         },
         {
-            "name": "string.quoted.cog",
-            "begin": "(\"|\\')",
-            "end": "\\1",
+            "name": "string.quoted.double.cog",
+            "begin": "\"",
+            "end": "\"",
             "patterns": [
                 {
                     "name": "constant.character.escape.cog",
@@ -35,12 +23,35 @@
             ]
         },
         {
-            "name": "entity.name.function",
-            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*\\()"
+            "name": "string.quoted.single.cog",
+            "begin": "'",
+            "end": "'",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.cog",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        {
+            "name": "keyword.control.cog",
+            "match": "(?:break|continue|do|else|if|return|while)\\b"
+        },
+        {
+            "name": "keyword.cog",
+            "match": "(?:as|const|enum|extern|false|func|include|null|sizeof|struct|true|var)\\b"
+        },
+        {
+            "name": "constant.language.cog",
+            "match": "(?:true|false)\\b"
         },
         {
             "name": "variable.other.cog",
-            "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+            "match": "[^\\W\\d]\\w*"
+        },
+        {
+            "name": "constant.numeric.cog",
+            "match": "\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?"
         }
     ]
 }

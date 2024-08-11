@@ -1,0 +1,147 @@
+import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
+import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
+import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
+import { mkErrorType, Type } from '../semantics/type';
+import { typeLayout, TypeLayout } from '../semantics/typeLayout';
+import { SyntaxNode } from '../syntax';
+import { ReactiveCache } from '../utils/reactiveCache';
+import { Stream, stream } from '../utils/stream';
+import { IncludeResolver } from './IncludeResolver';
+import { ParsingService } from './parsingService';
+
+export class ElaborationService {
+    constructor(
+        private parsingService: ParsingService,
+        private includeResolver: IncludeResolver,
+        private cache: ReactiveCache,
+    ) { }
+
+    getErrors(path: string): ElaborationError[] {
+        const elaborationErrors = this.elaborateFile(path).errors;
+        const flowAnalysisErrors = analyzeControlFlow(
+            path,
+            this.parsingService.parse(path),
+            this.elaborateFile(path),
+        );
+        return [...elaborationErrors, ...flowAnalysisErrors];
+    }
+
+    getSymbolsAtNode(path: string, node: SyntaxNode): Stream<Sym> {
+        const module = this.elaborateFile(path);
+        const innerScope = module.scope.findScopeForPosition(path, node.startPosition);
+        if (!innerScope) {
+            return stream([]);
+        }
+        return stream(function* go(scope): Iterable<Sym> {
+            if (!scope) {
+                return;
+            }
+            yield * stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
+            yield * go(scope.parent!);
+        }(innerScope));
+    }
+
+    resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
+        if (isFieldName(nameNode)) {
+            return this.resolveFieldName(path, nameNode);
+        } else if (isTypeName(nameNode)) {
+            return this.resolveTypeName(path, nameNode);
+        } else if (isValueName(nameNode)) {
+            return this.resolveValueName(path, nameNode);
+        } else {
+            return;
+        }
+    }
+
+    private resolveTypeName(path: string, nameNode: SyntaxNode): Sym | undefined {
+        return this.resolveName(path, nameNode);
+    }
+
+    private resolveValueName(path: string, nameNode: SyntaxNode): Sym | undefined {
+        return this.resolveName(path, nameNode);
+    }
+
+    private resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSym | undefined {
+        const module = this.elaborateFile(path);
+        const qname = module.nodeSymMap.get(nameNode);
+        if (!qname) {
+            return;
+        }
+        const sym = module.symbols.get(qname)!;
+        if (sym.kind !== SymKind.StructField) {
+            return;
+        }
+        return sym;
+    }
+
+    public resolveName(path: string, nameNode: SyntaxNode): Sym | undefined {
+        const module = this.elaborateFile(path);
+        const qname = module.nodeSymMap.get(nameNode);
+        if (!qname) {
+            return;
+        }
+        return module.symbols.get(qname)!;
+    }
+
+    public getSymbol(path: string, qualifiedName: string): Sym | undefined {
+        const module = this.elaborateFile(path);
+        return module.symbols.get(qualifiedName);
+    }
+
+    inferType(path: string, exprNode: SyntaxNode): Type {
+        const module = this.elaborateFile(path);
+        return module.nodeTypeMap.get(exprNode) ?? mkErrorType();
+    }
+
+    evalType(path: string, node: SyntaxNode): Type {
+        const module = this.elaborateFile(path);
+        return module.nodeTypeMap.get(node) ?? mkErrorType();
+    }
+
+    getLayout(path: string, type: Type): TypeLayout | undefined {
+        const module = this.elaborateFile(path);
+        return typeLayout(type, {
+            getStruct: name => {
+                const sym = module.symbols.get(name);
+                if (!sym || sym.kind !== SymKind.Struct)
+                    return;
+                return sym;
+            },
+        });
+    }
+
+    public references(path: string, qname: string): SymReference[] {
+        const module = this.elaborateFile(path);
+        return module.references.get(qname) ?? [];
+    }
+
+    private elaborateFile(path: string): ElaboratorResult {
+        return this.cache.compute('elaborationService:elaborateFile:' + path, () =>
+            Elaborator.elaborate(this.parsingService, this.includeResolver, path),
+        );
+    }
+}
+
+//================================================================================
+//= Helpers
+
+function isFieldName(nameNode: SyntaxNode): boolean {
+    return nameNode.parent!.type === 'field_expr';
+}
+
+function isTypeName(nameNode: SyntaxNode): boolean {
+    return nameNode.parent!.type === 'name_type' || nameNode.parent!.type === 'struct_decl';
+}
+
+function isValueName(nameNode: SyntaxNode): boolean {
+    return [
+        'enum_member',
+        'struct_member',
+        'func_decl',
+        'param_decl',
+        'global_decl',
+        'const_decl',
+        'local_decl',
+        'name_expr',
+    ].includes(nameNode.parent!.type);
+}

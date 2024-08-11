@@ -1,5 +1,9 @@
 {
     "comments": {
+        "blockComment": [
+            "/*",
+            "*/"
+        ],
         "lineComment": "//"
     },
     "brackets": [
@@ -43,7 +47,5 @@
             "{",
             "}"
         ]
-    ],
-    "smartIndent": true,
-    "wordPattern": "[a-zA-Z0-9_]+"
+    ]
 }
