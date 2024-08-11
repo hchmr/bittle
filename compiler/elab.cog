@@ -29,13 +29,11 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
     if (scope == null || max_depth == 0) {
         return -1;
     }
-    var i = 0;
-    while (i < scope.entries.len) {
+    for (var i = 0; i < scope.entries.len; i += 1) {
         var entry: *ScopeEntry = list_get(scope.entries, i);
         if (str_eq(entry.name, name)) {
             return entry.sym_index;
         }
-        i += 1;
     }
     return scope_lookup(scope.parent, name, max_depth - 1);
 }
@@ -112,14 +110,12 @@ func params_eq(xs: *List, ys: *List): Bool {
     if (xs.len != ys.len) {
         return false;
     }
-    var i = 0;
-    while (i < xs.len) {
+    for (var i = 0; i < xs.len; i += 1) {
         var param1: *FuncParam = list_get(xs, i);
         var param2: *FuncParam = list_get(ys, i);
         if (!type_eq(param1.type, param2.type)) {
             return false;
         }
-        i += 1;
     }
     return true;
 }
@@ -208,12 +204,10 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *Sym {
 }
 
 func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
-    var i = 0;
-    while (i < list_len(params)) {
+    for (var i = 0; i < list_len(params); i += 1) {
         var param_decl: *FuncParamDecl = list_get(param_decls, i);
         var param: *FuncParam = list_get(params, i);
         define_local(ctx, &param_decl.pos, param.name, param.type);
-        i += 1;
     }
 }
 
@@ -462,19 +456,17 @@ func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
         exit(1);
     }
     var i = 0;
-    while (i < param_count) {
+    for (; i < param_count; i += 1) {
         var param: *FuncParam = list_get(params, i);
         var arg: *Expr = list_get(args, i);
         elab_expr_expect(ctx, arg, param.type);
-        i += 1;
     }
-    while (i < arg_count) {
+    for (; i < arg_count; i += 1) {
         var arg: *Expr = list_get(args, i);
         elab_expr_infer(ctx, arg);
         if (!is_scalar(arg.type)) {
             die_at(&expr.pos, "Variadic argument must be scalar.");
         }
-        i += 1;
     }
     expr.type = sym.as_func.return_type;
 }
@@ -669,11 +661,9 @@ func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
 
 func elab_block_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     enter_scope(ctx);
-    var i = 0;
-    while (i < stmt.as_block.stmts.len) {
+    for (var i = 0; i < stmt.as_block.stmts.len; i += 1) {
         var stmt = list_get(stmt.as_block.stmts, i);
         elab_stmt(ctx, stmt);
-        i += 1;
     }
     exit_scope(ctx);
 }
@@ -848,11 +838,9 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
         sym.as_struct.fields = list_new();
         var fields = sym.as_struct.fields;
 
-        var i = 0;
-        while (i < list_len(field_decls)) {
+        for (var i = 0; i < list_len(field_decls); i += 1) {
             var field_decl: *StructFieldDecl = list_get(field_decls, i);
             add_struct_field(ctx, sym, field_decl);
-            i += 1;
         }
 
         sym.as_struct.is_defined = true;
@@ -860,28 +848,24 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
 }
 
 func string_list_contains(list: *List, value: *Char): Bool {
-    var i = 0;
-    while (i < list_len(list)) {
+    for (var i = 0; i < list_len(list); i += 1) {
         var item: *Char = list_get(list, i);
         if (str_eq(item, value)) {
             return true;
         }
-        i += 1;
     }
     return false;
 }
 
 func ensure_unique_params(ctx: *ElabCtx, params_decls: *List) {
     var seen = list_new();
-    var i = 0;
-    while (i < list_len(params_decls)) {
+    for (var i = 0; i < list_len(params_decls); i += 1) {
         var param_decl: *FuncParamDecl = list_get(params_decls, i);
         var name = param_decl.name;
         if (string_list_contains(seen, name)) {
             die_at(&param_decl.pos, "Duplicate parameter name");
         }
         list_push(seen, name);
-        i += 1;
     }
 }
 
@@ -909,12 +893,10 @@ func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 
     var params = list_new();
-    var i = 0;
-    while (i < list_len(param_decls)) {
+    for (var i = 0; i < list_len(param_decls); i += 1) {
         var param_decl = list_get(param_decls, i);
         var param = elab_param(ctx, param_decl);
         list_push(params, param);
-        i += 1;
     }
 
     var return_type = decl.as_func.return_type
@@ -958,12 +940,10 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *Decl) {
     var member_decls = decl.as_enum.members;
 
     var next_value: Int32 = 0;
-    var i = 0;
-    while (i < list_len(member_decls)) {
+    for (var i = 0; i < list_len(member_decls); i += 1) {
         var member_decl: *EnumMember = list_get(member_decls, i);
         var value = elab_enum_member(ctx, member_decl, next_value);
         next_value = value + 1;
-        i += 1;
     }
 }
 
@@ -1005,11 +985,9 @@ func elab(ast: *Ast): *List { // *List<*Sym>
     ctx.scope = scope_new(null);
     ctx.syms = list_new();
 
-    var i = 0;
-    while (i < ast.decls.len) {
+    for (var i = 0; i < ast.decls.len; i += 1) {
         var decl = list_get(ast.decls, i);
         elab_decl(ctx, decl);
-        i += 1;
     }
 
     return ctx.syms;

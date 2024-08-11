@@ -255,12 +255,10 @@ func lower_call_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var ast_args = expr.as_call.args;
 
     var hir_args = list_new();
-    var i = 0;
-    while (i < ast_args.len) {
+    for (var i = 0; i < list_len(ast_args); i += 1) {
         var ast_arg = list_get(ast_args, i);
         var hir_arg = lower_expr(ctx, ast_arg);
         list_push(hir_args, hir_arg);
-        i += 1;
     }
 
     return mk_call_hir_expr(resolved_callee, hir_args, &expr.pos);
@@ -415,14 +413,11 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr;
 func lower_block_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
     var current = mk_skip_stmt(&stmt.pos);
 
-    var i = 0;
-    while (i < stmt.as_block.stmts.len) {
+    for (var i = 0; i < stmt.as_block.stmts.len; i += 1) {
         var ast_stmt = list_get(stmt.as_block.stmts, i);
         var hir_stmt = lower_stmt(ctx, ast_stmt);
 
         current = mk_seq_hir_expr(current, hir_stmt);
-
-        i += 1;
     }
 
     return current;

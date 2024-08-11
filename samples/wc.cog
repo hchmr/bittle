@@ -180,7 +180,7 @@ func main(argc: Int32, argv: **Char): Int32 {
     stats_init(&total);
 
     var i = 0;
-    while (i < args.files_count) {
+    for (; i < args.files_count; i += 1) {
         var stats: Stats;
         stats_init(&stats);
         var file_name = args.files[i];
@@ -189,7 +189,6 @@ func main(argc: Int32, argv: **Char): Int32 {
         close_file(stream);
         print_row(args.options, &stats, file_name);
         stats_accum(&total, &stats);
-        i += 1;
     }
 
     if (i == 0) {

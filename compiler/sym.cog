@@ -24,13 +24,11 @@ func find_struct_field(sym: *Sym, name: *Char): Int {
     if (!fields) {
         return -1;
     }
-    var i = 0;
-    while (i < list_len(fields)) {
+    for (var i = 0; i < list_len(fields); i += 1) {
         var field: *StructField = list_get(fields, i);
         if (str_eq(field.name, name)) {
             return i;
         }
-        i += 1;
     }
     return -1;
 }

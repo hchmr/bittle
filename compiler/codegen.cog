@@ -98,15 +98,12 @@ func compute_locals_layout(sym: *Sym): Int {
     var locals = sym.as_func.locals;
 
     var size = 0;
-    var i = 0;
-    while (i < list_len(locals)) {
+    for (var i = 0; i < list_len(locals); i += 1) {
         var local_sym: *Sym = list_get(locals, i);
         var type = local_sym.as_local.type;
 
         size = align_up(size + type_size(type), type_align(type));
         local_sym.as_local.frame_offset = size;
-
-        i += 1;
     }
     return size;
 }
@@ -462,12 +459,11 @@ func emit_func(ctx: *CodegenCtx, sym: *Sym) {
     printf("  mov x29, sp\n");
     printf("  sub sp, sp, #%d\n", ctx.frame_size);
     var i = 0;
-    while (i < list_len(params)) {
+    for (var i = 0; i < list_len(params); i += 1) {
         var param: *FuncParam = list_get(params, i);
         var local: *Sym = list_get(locals, i);
         var offset = local.as_local.frame_offset;
         printf("  %s%d, [sp, #%d] // %s\n", strx(param.type), i, ctx.frame_size - offset, param.name);
-        i += 1;
     }
     emit_expr(ctx, hir_body, 0);
     printf(".L.%s.ret:\n", sym.name);
@@ -500,10 +496,8 @@ func emit_program(syms: *List) {
     var ctx = calloc(1, sizeof(CodegenCtx)) as *CodegenCtx;
     ctx.temp_offsets = list_new();
 
-    var i = 0;
-    while (i < list_len(syms)) {
+    for (var i = 0; i < list_len(syms); i += 1) {
         var sym = list_get(syms, i);
         emit_sym(ctx, sym);
-        i += 1;
     }
 }
