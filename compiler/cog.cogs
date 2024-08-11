@@ -212,6 +212,7 @@ enum {
     Tok_Enum,
     Tok_Extern,
     Tok_False,
+    Tok_For,
     Tok_Func,
     Tok_If,
     Tok_Include,
@@ -421,6 +422,7 @@ enum {
     Stmt_Local,
     Stmt_If,
     Stmt_While,
+    Stmt_For,
     Stmt_Return,
     Stmt_Break,
     Stmt_Continue,
@@ -449,6 +451,13 @@ struct WhileStmt {
     body: *Stmt,
 }
 
+struct ForStmt {
+    init: *Stmt,
+    cond: *Expr,
+    step: *Expr,
+    body: *Stmt,
+}
+
 struct ReturnStmt {
     expr: *Expr,
 }
@@ -464,6 +473,7 @@ struct Stmt {
     as_local: LocalStmt,
     as_if: IfStmt,
     as_while: WhileStmt,
+    as_for: ForStmt,
     as_return: ReturnStmt,
     as_expr: ExprStmt,
 }
@@ -627,6 +637,7 @@ struct CondHirExpr {
 struct LoopHirExpr {
     cond: *HirExpr,
     body: *HirExpr,
+    step: *HirExpr,
 }
 
 struct ReturnHirExpr {

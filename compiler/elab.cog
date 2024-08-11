@@ -727,6 +727,31 @@ func elab_while_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     ctx.loop_depth -= 1;
 }
 
+func elab_for_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+    var init = stmt.as_for.init;
+    var cond = stmt.as_for.cond;
+    var step = stmt.as_for.step;
+    var body = stmt.as_for.body;
+
+    enter_scope(ctx);
+
+    if (init) {
+        elab_stmt(ctx, init);
+    }
+    if (cond) {
+        elab_expr_bool(ctx, cond);
+    }
+    if (step) {
+        elab_expr_infer(ctx, step);
+    }
+
+    ctx.loop_depth += 1;
+    elab_stmt_with_scope(ctx, body);
+    ctx.loop_depth -= 1;
+
+    exit_scope(ctx);
+}
+
 func elab_return_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     var return_expr = stmt.as_return.expr;
 
@@ -764,6 +789,8 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
         elab_if_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_While) {
         elab_while_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_For) {
+        elab_for_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_Return) {
         elab_return_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_Break) {

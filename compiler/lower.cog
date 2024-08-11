@@ -95,10 +95,11 @@ func mk_cond_hir_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, 
     return result;
 }
 
-func mk_loop_hir_expr(cond: *HirExpr, body: *HirExpr, pos: *Pos): *HirExpr {
+func mk_loop_hir_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos): *HirExpr {
     var result = mk_hir_expr(HirExpr_Loop, body.type, pos);
     result.as_loop.cond = cond;
     result.as_loop.body = body;
+    result.as_loop.step = step;
     return result;
 }
 
@@ -462,8 +463,23 @@ func lower_while_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
 
     var cond = lower_expr(ctx, ast_cond);
     var body = lower_stmt(ctx, ast_body);
+    var step = mk_skip_stmt(&stmt.pos);
 
-    return mk_loop_hir_expr(cond, body, &stmt.pos);
+    return mk_loop_hir_expr(cond, body, step, &stmt.pos);
+}
+
+func lower_for_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+    var ast_init = stmt.as_for.init;
+    var ast_cond = stmt.as_for.cond;
+    var ast_step = stmt.as_for.step;
+    var ast_body = stmt.as_for.body;
+
+    var init = ast_init ? lower_stmt(ctx, ast_init) : mk_skip_stmt(&stmt.pos);
+    var cond = ast_cond ? lower_expr(ctx, ast_cond) : mk_int_hir_expr(1, mk_int_type(32), &stmt.pos);
+    var step = ast_step ? lower_expr(ctx, ast_step) : mk_skip_stmt(&stmt.pos);
+    var body = lower_stmt(ctx, ast_body);
+
+    return mk_seq_hir_expr(init, mk_loop_hir_expr(cond, body, step, &stmt.pos));
 }
 
 func lower_return_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
@@ -496,6 +512,8 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
         return lower_if_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_While) {
         return lower_while_stmt(ctx, stmt);
+    } else if (stmt.kind == Stmt_For) {
+        return lower_for_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_Return) {
         return lower_return_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_Break) {

@@ -252,16 +252,19 @@ func emit_cond_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
 func emit_loop_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     var cond = e.as_loop.cond;
     var body = e.as_loop.body;
+    var step = e.as_loop.step;
 
     var label = next_label(ctx);
     var outer_loop = ctx.current_loop;
     ctx.current_loop = label;
-    printf(".L%d.next:\n", label);
+    printf(".L%d.while:\n", label);
     emit_expr(ctx, cond, 0);
     printf("  cbz x0, .L%d.done\n", label);
     printf(".L%d.do:\n", label);
     emit_expr(ctx, body, 0);
-    printf("  b .L%d.next\n", label);
+    printf(".L%d.step:\n", label);
+    emit_expr(ctx, step, 0);
+    printf("  b .L%d.while\n", label);
     printf(".L%d.done:\n", label);
     ctx.current_loop = outer_loop;
 }
@@ -271,7 +274,7 @@ func emit_jump_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     if (is_break) {
         printf("  b .L%d.done\n", ctx.current_loop);
     } else {
-        printf("  b .L%d.next\n", ctx.current_loop);
+        printf("  b .L%d.step\n", ctx.current_loop);
     }
 }
 

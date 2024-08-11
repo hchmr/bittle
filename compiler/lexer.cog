@@ -21,6 +21,7 @@ func lookup_keyword(lexeme: *Char, out: *Int32): Bool {
         || try_keyword(lexeme, "enum", out, Tok_Enum)
         || try_keyword(lexeme, "extern", out, Tok_Extern)
         || try_keyword(lexeme, "false", out, Tok_False)
+        || try_keyword(lexeme, "for", out, Tok_For)
         || try_keyword(lexeme, "func", out, Tok_Func)
         || try_keyword(lexeme, "if", out, Tok_If)
         || try_keyword(lexeme, "include", out, Tok_Include)

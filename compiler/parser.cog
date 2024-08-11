@@ -407,6 +407,8 @@ func p_expr(self: *Parser, max_prec: Int32): *Expr {
 
 func p_stmt(self: *Parser): *Stmt;
 
+func p_expr_stmt(self: *Parser): *Stmt;
+
 func p_block(self: *Parser): *Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_LBrace);
@@ -474,6 +476,39 @@ func p_while_stmt(self: *Parser): *Stmt {
     return result;
 }
 
+func p_for_stmt(self: *Parser): *Stmt {
+    var pos = self.tok.pos;
+    expect(self, Tok_For);
+    expect(self, Tok_LParen);
+    var init: *Stmt = null;
+    if (!eat(self, Tok_Semicolon)) {
+        if (at(self, Tok_Var)) {
+            init = p_local(self);
+        } else {
+            init = p_expr_stmt(self);
+        }
+    }
+    var cond: *Expr = null;
+    if (!at(self, Tok_Semicolon)) {
+        cond = p_expr(self, 0);
+    }
+    expect(self, Tok_Semicolon);
+    var step: *Expr = null;
+    if (!at(self, Tok_RParen)) {
+        step = p_expr(self, 0);
+    }
+    expect(self, Tok_RParen);
+    var body = p_stmt(self);
+
+    var result = mk_stmt(&pos, Stmt_For);
+    result.as_for.init = init;
+    result.as_for.cond = cond;
+    result.as_for.step = step;
+    result.as_for.body = body;
+    return result;
+}
+
+
 func p_return_stmt(self: *Parser): *Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Return);
@@ -525,6 +560,8 @@ func p_stmt(self: *Parser): *Stmt {
         return p_if_stmt(self);
     } else if (at(self, Tok_While)) {
         return p_while_stmt(self);
+    } else if (at(self, Tok_For)) {
+        return p_for_stmt(self);
     } else if (at(self, Tok_Return)) {
         return p_return_stmt(self);
     } else if (at(self, Tok_Break)) {
