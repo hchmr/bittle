@@ -6,15 +6,22 @@ include "cog.cogs";
 struct Parser {
     lexer: *Lexer,
     tok: Tok,
+    lookahead: Tok,
 }
 
 func advance(self: *Parser) {
-    lexer_next(self.lexer, &self.tok);
+    self.tok = self.lookahead;
+    lexer_next(self.lexer, &self.lookahead);
+}
+
+func peek(self: *Parser): *Tok {
+    return &self.lookahead;
 }
 
 func parser_new(lexer: *Lexer): *Parser {
     var self: *Parser = calloc(1, sizeof(Parser));
     self.lexer = lexer;
+    advance(self);
     advance(self);
     return self;
 }
@@ -25,6 +32,10 @@ func at_eof(self: *Parser): Bool {
 
 func at(self: *Parser, kind: Int32): Bool {
     return self.tok.kind == kind;
+}
+
+func next_is(self: *Parser, kind: Int32): Bool {
+    return self.lookahead.kind == kind;
 }
 
 func eat(self: *Parser, kind: Int32): Bool {
@@ -229,12 +240,26 @@ func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
     return result;
 }
 
+func p_call_arg(self: *Parser, max_prec: Int32): *CallArg {
+    var label: *Char = null;
+    if (at(self, Tok_Ident) && next_is(self, Tok_Colon)) {
+        label = p_ident(self);
+        expect(self, Tok_Colon);
+    }
+    var expr = p_expr(self, max_prec);
+
+    var result: *CallArg = calloc(1, sizeof(CallArg));
+    result.label = label;
+    result.expr = expr;
+    return result;
+}
+
 func p_call_expr(self: *Parser, callee: *Expr): *Expr {
     var pos = self.tok.pos;
     expect(self, Tok_LParen);
     var args: *List = list_new();
     while (!at_eof(self) && !eat(self, Tok_RParen)) {
-        var arg = p_expr(self, 0);
+        var arg = p_call_arg(self, 0);
         list_push(args, arg);
         if (!at(self, Tok_RParen)) {
             expect(self, Tok_Comma);

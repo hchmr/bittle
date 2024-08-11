@@ -355,8 +355,13 @@ struct IdentExpr {
 
 struct CallExpr {
     callee: *Expr,
-    args: *List, // List<Expr>
+    args: *List, // List<CallArg>
     resolved_callee: *Sym,
+}
+
+struct CallArg {
+    label: *Char,
+    expr: *Expr,
 }
 
 struct IndexExpr {

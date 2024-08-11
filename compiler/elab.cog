@@ -458,13 +458,16 @@ func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
     var i = 0;
     for (; i < param_count; i += 1) {
         var param: *FuncParam = list_get(params, i);
-        var arg: *Expr = list_get(args, i);
-        elab_expr_expect(ctx, arg, param.type);
+        var arg: *CallArg = list_get(args, i);
+        if (arg.label && !str_eq(arg.label, param.name)) {
+            die_at(&arg.expr.pos, "Argument label does not match parameter name");
+        }
+        elab_expr_expect(ctx, arg.expr, param.type);
     }
     for (; i < arg_count; i += 1) {
-        var arg: *Expr = list_get(args, i);
-        elab_expr_infer(ctx, arg);
-        if (!is_scalar(arg.type)) {
+        var arg: *CallArg = list_get(args, i);
+        elab_expr_infer(ctx, arg.expr);
+        if (!is_scalar(arg.expr.type)) {
             die_at(&expr.pos, "Variadic argument must be scalar.");
         }
     }

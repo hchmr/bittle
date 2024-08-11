@@ -256,8 +256,8 @@ func lower_call_expr(ctx: *Context, expr: *Expr): *HirExpr {
 
     var hir_args = list_new();
     for (var i = 0; i < list_len(ast_args); i += 1) {
-        var ast_arg = list_get(ast_args, i);
-        var hir_arg = lower_expr(ctx, ast_arg);
+        var ast_arg: *CallArg = list_get(ast_args, i);
+        var hir_arg = lower_expr(ctx, ast_arg.expr);
         list_push(hir_args, hir_arg);
     }
 
