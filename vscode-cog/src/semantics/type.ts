@@ -122,6 +122,17 @@ export function mkErrorType(): Type {
     return ERROR_TYPE;
 }
 
+export const primitiveTypes: Partial<Record<string, Type>> = {
+    Void: mkVoidType(),
+    Bool: mkBoolType(),
+    Char: mkIntType(8),
+    Int8: mkIntType(8),
+    Int16: mkIntType(16),
+    Int32: mkIntType(32),
+    Int: mkIntType(64),
+    Int64: mkIntType(64),
+};
+
 //= Type merging
 
 export function unifyTypes(t1: Type, t2: Type): Type {

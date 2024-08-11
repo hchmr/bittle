@@ -47,6 +47,7 @@ import {
     mkStructType,
     mkVoidType,
     prettyType,
+    primitiveTypes,
     tryUnifyTypes,
     Type,
     TypeKind,
@@ -241,32 +242,20 @@ export class Elaborator {
                 }
                 case TypeNodeTypes.NameType: {
                     const nameNode = typeNode.firstChild!;
-                    switch (nameNode.text) {
-                        case 'Void':
-                            return mkVoidType();
-                        case 'Bool':
-                            return mkBoolType();
-                        case 'Char':
-                        case 'Int8':
-                            return mkIntType(8);
-                        case 'Int16':
-                            return mkIntType(16);
-                        case 'Int32':
-                            return mkIntType(32);
-                        case 'Int':
-                        case 'Int64':
-                            return mkIntType(64);
-                        default: {
-                            const sym = this.resolveName(nameNode);
-                            if (!sym) {
-                                return mkErrorType();
-                            }
-                            if (sym.kind !== SymKind.Struct) {
-                                this.reportError(typeNode, `'${sym.name}' is not a struct.`);
-                                return mkErrorType();
-                            }
-                            return mkStructType(sym.name, sym.qualifiedName);
+                    const name = nameNode.text;
+
+                    if (name in primitiveTypes) {
+                        return primitiveTypes[name]!;
+                    } else {
+                        const sym = this.resolveName(nameNode);
+                        if (!sym) {
+                            return mkErrorType();
                         }
+                        if (sym.kind !== SymKind.Struct) {
+                            this.reportError(typeNode, `'${sym.name}' is not a struct.`);
+                            return mkErrorType();
+                        }
+                        return mkStructType(sym.name, sym.qualifiedName);
                     }
                 }
                 case TypeNodeTypes.PointerType: {
