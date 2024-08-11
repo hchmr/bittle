@@ -185,7 +185,7 @@ func mk_deref_hir_expr(expr: *HirExpr, pos: *Pos): *HirExpr {
 }
 
 func mk_addr_hir_expr(expr: *HirExpr, pos: *Pos): *HirExpr {
-    var result = mk_hir_expr(HirExpr_Addr, expr.type, pos);
+    var result = mk_hir_expr(HirExpr_Addr, mk_ptr_type(expr.type), pos);
     result.as_addr.expr = expr;
     return result;
 }
