@@ -69,11 +69,7 @@ func sb_finish(self: *StringBuilder): *Char {
     sb_push(self, '\0');
     var string = self.buf;
     realloc(string, self.len);
-
-    self.len = -1;
-    self.cap = -1;
-    self.buf = null;
-
+    *self = StringBuilder(buf: null, len: -1, cap: -1);
     return string;
 }
 

@@ -97,7 +97,7 @@ func p_ptr_type(self: *Parser): *TypeExpr {
     var pointee = p_type(self);
 
     var result = mk_type_expr(&pos, TypeExpr_Ptr);
-    result.as_ptr.pointee = pointee;
+    result.as_ptr = PtrTypeExpr(pointee);
     return result;
 }
 
@@ -110,8 +110,7 @@ func p_arr_type(self: *Parser): *TypeExpr {
     expect(self, Tok_RBracket);
 
     var result = mk_type_expr(&pos, TypeExpr_Arr);
-    result.as_array.elem = elem;
-    result.as_array.size = size;
+    result.as_array = ArrTypeExpr(elem, size);
     return result;
 }
 
@@ -203,7 +202,7 @@ func p_name_expr(self: *Parser): *Expr {
     var name = p_ident(self);
 
     var result = mk_expr(&pos, Expr_Ident);
-    result.as_ident.name = name;
+    result.as_ident = IdentExpr(name, sym: null);
     return result;
 }
 
@@ -224,7 +223,7 @@ func p_sizeof_expr(self: *Parser): *Expr {
     expect(self, Tok_RParen);
 
     var result = mk_expr(&pos, Expr_Sizeof);
-    result.as_sizeof.type = type;
+    result.as_sizeof = SizeofExpr(type, size: -1);
     return result;
 }
 
@@ -235,8 +234,7 @@ func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
     expect(self, Tok_RBracket);
 
     var result = mk_expr(&pos, Expr_Index);
-    result.as_index.indexee = indexee;
-    result.as_index.index = index;
+    result.as_index = IndexExpr(indexee, index);
     return result;
 }
 
@@ -267,8 +265,7 @@ func p_call_expr(self: *Parser, callee: *Expr): *Expr {
     }
 
     var result = mk_expr(&pos, Expr_Call);
-    result.as_call.callee = callee;
-    result.as_call.args = args;
+    result.as_call = CallExpr(callee, args, resolved_callee: null);
     return result;
 }
 
@@ -278,8 +275,7 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
     var name = p_ident(self);
 
     var result = mk_expr(&pos, Expr_Member);
-    result.as_member.left = left;
-    result.as_member.name = name;
+    result.as_member = MemberExpr(left, name, resolved_field: -1);
     return result;
 }
 
@@ -288,8 +284,7 @@ func p_unary_expr(self: *Parser, op: Int32): *Expr {
     var right = p_expr(self, Prec_Unary);
 
     var result = mk_expr(&pos, Expr_Unary);
-    result.as_unary.op = op;
-    result.as_unary.right = right;
+    result.as_unary = UnaryExpr(op, right);
     return result;
 }
 
@@ -298,8 +293,7 @@ func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
     var type = p_type(self);
 
     var result = mk_expr(&pos, Expr_Cast);
-    result.as_cast.type = type;
-    result.as_cast.expr = expr;
+    result.as_cast = CastExpr(expr, type);
     return result;
 }
 
@@ -308,9 +302,7 @@ func p_binary_expr(self: *Parser, lhs: *Expr, op: Int32, prec: Int32): *Expr {
     var rhs = p_expr(self, prec);
 
     var result = mk_expr(&pos, Expr_Binary);
-    result.as_binary.op = op;
-    result.as_binary.left = lhs;
-    result.as_binary.right = rhs;
+    result.as_binary = BinaryExpr(op, lhs, rhs);
     return result;
 }
 
@@ -322,9 +314,7 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
     var else_expr = p_expr(self, Prec_Cond);
 
     var result = mk_expr(&pos, Expr_Ternary);
-    result.as_ternary.cond = cond;
-    result.as_ternary.then_expr = then_expr;
-    result.as_ternary.else_expr = else_expr;
+    result.as_ternary = TernaryExpr(cond, then_expr, else_expr);
     return result;
 }
 
@@ -443,7 +433,7 @@ func p_block(self: *Parser): *Stmt {
         list_push(stmts, stmt);
     }
     var result = mk_stmt(&pos, Stmt_Block);
-    result.as_block.stmts = stmts;
+    result.as_block = BlockStmt(stmts);
     return result;
 }
 
@@ -462,9 +452,7 @@ func p_local(self: *Parser): *Stmt {
     expect(self, Tok_Semicolon);
 
     var result = mk_stmt(&pos, Stmt_Local);
-    result.as_local.name = name;
-    result.as_local.type = type;
-    result.as_local.init = init;
+    result.as_local = LocalStmt(name, type, init, sym: null);
     return result;
 }
 
@@ -481,9 +469,7 @@ func p_if_stmt(self: *Parser): *Stmt {
     }
 
     var result = mk_stmt(&pos, Stmt_If);
-    result.as_if.cond = cond;
-    result.as_if.then_stmt = then_stmt;
-    result.as_if.else_stmt = else_stmt;
+    result.as_if = IfStmt(cond, then_stmt, else_stmt);
     return result;
 }
 
@@ -496,8 +482,7 @@ func p_while_stmt(self: *Parser): *Stmt {
     var body = p_stmt(self);
 
     var result = mk_stmt(&pos, Stmt_While);
-    result.as_while.cond = cond;
-    result.as_while.body = body;
+    result.as_while = WhileStmt(cond, body);
     return result;
 }
 
@@ -526,10 +511,7 @@ func p_for_stmt(self: *Parser): *Stmt {
     var body = p_stmt(self);
 
     var result = mk_stmt(&pos, Stmt_For);
-    result.as_for.init = init;
-    result.as_for.cond = cond;
-    result.as_for.step = step;
-    result.as_for.body = body;
+    result.as_for = ForStmt(init, cond, step, body);
     return result;
 }
 
@@ -544,7 +526,7 @@ func p_return_stmt(self: *Parser): *Stmt {
     }
 
     var result = mk_stmt(&pos, Stmt_Return);
-    result.as_return.expr = expr;
+    result.as_return = ReturnStmt(expr);
     return result;
 }
 
@@ -572,7 +554,7 @@ func p_expr_stmt(self: *Parser): *Stmt {
     expect(self, Tok_Semicolon);
 
     var result = mk_stmt(&pos, Stmt_Expr);
-    result.as_expr.expr = expr;
+    result.as_expr = ExprStmt(expr);
     return result;
 }
 
@@ -608,9 +590,7 @@ func p_struct_field(self: *Parser): *StructFieldDecl {
     var type = p_type(self);
 
     var result: *StructFieldDecl = calloc(1, sizeof(StructFieldDecl));
-    result.pos = pos;
-    result.name = name;
-    result.type = type;
+    *result = StructFieldDecl(pos, name, type);
     return result;
 }
 
@@ -634,8 +614,7 @@ func p_struct_decl(self: *Parser): *Decl {
     }
 
     var result = mk_decl(&pos, Decl_Struct);
-    result.as_struct.name = name;
-    result.as_struct.fields = body;
+    result.as_struct = StructDecl(name, body);
     return result;
 }
 
@@ -682,12 +661,14 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
     }
 
     var result = mk_decl(&pos, Decl_Func);
-    result.as_func.is_extern = is_extern;
-    result.as_func.name = name;
-    result.as_func.params = params;
-    result.as_func.is_variadic = is_variadic;
-    result.as_func.return_type = return_type;
-    result.as_func.body = body;
+    result.as_func = FuncDecl(
+        is_extern,
+        name,
+        params,
+        is_variadic,
+        return_type,
+        body,
+    );
     return result;
 }
 
@@ -700,9 +681,7 @@ func p_enum_member(self: *Parser): *EnumMember {
     }
 
     var result: *EnumMember = calloc(1, sizeof(EnumMember));
-    result.pos = pos;
-    result.name = name;
-    result.value = value;
+    *result = EnumMember(pos, name, value);
     return result;
 }
 
@@ -720,7 +699,7 @@ func p_enum_decl(self: *Parser): *Decl {
     }
 
     var result = mk_decl(&pos, Decl_Enum);
-    result.as_enum.members = members;
+    result.as_enum = EnumDecl(members);
     return result;
 }
 
@@ -733,8 +712,7 @@ func p_const_decl(self: *Parser): *Decl {
     expect(self, Tok_Semicolon);
 
     var result = mk_decl(&pos, Decl_Const);
-    result.as_const.name = name;
-    result.as_const.value = value;
+    result.as_const = ConstDecl(name, value);
     return result;
 }
 
@@ -747,9 +725,7 @@ func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
     expect(self, Tok_Semicolon);
 
     var result = mk_decl(&pos, Decl_Global);
-    result.as_global.is_extern = is_extern;
-    result.as_global.name = name;
-    result.as_global.type = type;
+    result.as_global = GlobalDecl(is_extern, name, type);
     return result;
 }
 

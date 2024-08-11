@@ -494,7 +494,14 @@ func emit_sym(ctx: *CodegenCtx, sym: *Sym) {
 
 func emit_program(syms: *List) {
     var ctx = calloc(1, sizeof(CodegenCtx)) as *CodegenCtx;
-    ctx.temp_offsets = list_new();
+    *ctx = CodegenCtx(
+        frame_size: 0,
+        label_count: 0,
+        temp_size: 0,
+        current_func: null,
+        current_loop: 0,
+        temp_offsets: list_new(),
+    );
 
     for (var i = 0; i < list_len(syms); i += 1) {
         var sym = list_get(syms, i);

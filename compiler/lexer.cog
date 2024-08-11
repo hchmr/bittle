@@ -50,17 +50,17 @@ struct Lexer {
 func lexer_new(file_name: *Char, input: *Char): *Lexer {
     var self: *Lexer = calloc(1, sizeof(Lexer));
 
-    self.input = input;
-    self.index = 0;
+    var pos = Pos(file: file_name, row: 1, col: 1);
 
-    self.pos.file = file_name;
-    self.pos.row = 1;
-    self.pos.col = 1;
-
-    self.tok_kind = Tok_Eof;
-    self.tok_index = 0;
-    self.tok_pos = self.pos;
-    self.tok_lexeme = "";
+    *self = Lexer(
+        input: input,
+        index: 0,
+        pos: pos,
+        tok_kind: Tok_Eof,
+        tok_index: 0,
+        tok_pos: pos,
+        tok_lexeme: "",
+    );
     return self;
 }
 
@@ -383,9 +383,11 @@ func lexer_next(self: *Lexer, token: *Tok) {
             exit(1);
         }
 
-        token.kind = self.tok_kind;
-        token.pos = self.tok_pos;
-        token.lexeme = self.tok_lexeme;
+        *token = Tok(
+            kind: self.tok_kind,
+            pos: self.tok_pos,
+            lexeme: self.tok_lexeme,
+        );
         return;
     }
 }
