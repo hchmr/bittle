@@ -217,6 +217,8 @@ func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
 
+func lower_assign_expr(ctx: *Context, dest: *HirExpr, src: *Expr, pos: *Pos): *HirExpr;
+
 func lower_ident_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var sym = expr.as_ident.sym;
     if (sym.kind == Sym_Global || sym.kind == Sym_Local) {
@@ -253,6 +255,7 @@ func lower_literal_expr(ctx: *Context, expr: *Expr): *HirExpr {
 func lower_call_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var resolved_callee = expr.as_call.resolved_callee;
     var ast_args = expr.as_call.args;
+    assert(resolved_callee.kind == Sym_Func, "lower_call_expr: callee should be a function");
 
     var hir_args = list_new();
     for (var i = 0; i < list_len(ast_args); i += 1) {
@@ -260,7 +263,6 @@ func lower_call_expr(ctx: *Context, expr: *Expr): *HirExpr {
         var hir_arg = lower_expr(ctx, ast_arg.expr);
         list_push(hir_args, hir_arg);
     }
-
     return mk_call_hir_expr(resolved_callee, hir_args, &expr.pos);
 }
 
@@ -322,34 +324,37 @@ func lower_binary_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var ast_right = expr.as_binary.right;
 
     var left = lower_expr(ctx, ast_left);
-    var right = lower_expr(ctx, ast_right);
 
     var result: *HirExpr;
     if (ast_op == Tok_Eq) {
-        result = mk_assign_hir_expr(left, right);
+        result = lower_assign_expr(ctx, left, ast_right, &expr.pos);
     } else if (ast_op == Tok_AmpEq || ast_op == Tok_BarEq || ast_op == Tok_CaretEq || ast_op == Tok_LtLtEq || ast_op == Tok_GtGtEq || ast_op == Tok_PlusEq || ast_op == Tok_MinusEq || ast_op == Tok_StarEq || ast_op == Tok_SlashEq || ast_op == Tok_PercentEq) {
-        // Desugar
-        //   left op= right
-        // to
-        //   let temp: *typeof(left) = &left;
-        //   in *temp = *temp op right;
-
+        /*
+            Desugar
+                left op= right
+            to
+                let temp: *typeof(left) = &left in
+                *temp = *temp op right
+        */
+        var right = lower_expr(ctx, ast_right);
         var typeof_addr_left = mk_ptr_type(left.type);
         var op = translate_assign_op(ast_op);
-        var temp = mk_temp_var(ctx, typeof_addr_left);
-        var temp_expr = mk_temp_hir_expr(temp, &expr.pos);
-        var addr_left_expr = mk_addr_hir_expr(left, &expr.pos);
-        var load_temp_expr = mk_deref_hir_expr(temp_expr, &expr.pos);
-        var computation = mk_binary_op_hir_expr(op, load_temp_expr, right);
-        var assign_temp_expr = mk_assign_hir_expr(load_temp_expr, computation);
-        result = mk_let_hir_expr(temp, addr_left_expr, assign_temp_expr, &expr.pos);
+        var temp_var = mk_temp_var(ctx, typeof_addr_left);
+        var temp = mk_temp_hir_expr(temp_var, &expr.pos);
+        var addr_left = mk_addr_hir_expr(left, &expr.pos);
+        var temp_deref = mk_deref_hir_expr(temp, &expr.pos);
+        var computation = mk_binary_op_hir_expr(op, temp_deref, right);
+        var assign_temp = mk_assign_hir_expr(temp_deref, computation);
+        result = mk_let_hir_expr(temp_var, addr_left, assign_temp, &expr.pos);
     } else if (ast_op == Tok_AmpAmp || ast_op == Tok_BarBar) {
+        var right = lower_expr(ctx, ast_right);
         if (ast_op == Tok_AmpAmp) {
             result = mk_cond_hir_expr(left, right, mk_int_hir_expr(0, expr.type, &right.pos), &expr.pos);
         } else {
             result = mk_cond_hir_expr(left, mk_int_hir_expr(1, expr.type, &right.pos), right, &expr.pos);
         }
     } else if (ast_op == Tok_EqEq || ast_op == Tok_BangEq || ast_op == Tok_Lt || ast_op == Tok_LtEq || ast_op == Tok_Gt || ast_op == Tok_GtEq || ast_op == Tok_Amp || ast_op == Tok_Bar || ast_op == Tok_Caret || ast_op == Tok_LtLt || ast_op == Tok_GtGt || ast_op == Tok_Plus || ast_op == Tok_Minus || ast_op == Tok_Star || ast_op == Tok_Slash || ast_op == Tok_Percent) {
+        var right = lower_expr(ctx, ast_right);
         var op = translate_binary_op(ast_op);
         result = mk_binary_op_hir_expr(op, left, right);
     } else {
@@ -405,6 +410,49 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
     }
 }
 
+func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
+    var type = dst.type;
+    assert(type_eq(type, ast_src.type), "lower_assign_expr: type mismatch");
+
+    if (ast_src.kind == Expr_Call && ast_src.as_call.resolved_callee.kind == Sym_Struct) {
+        /*
+            desugar
+                x = List(1, List(2, null))
+            to
+                let t1: *List = &x in
+                    (*t1).value = 1;
+                    let t2: *List = &t1.next in
+                        (*t2).value = 2;
+                        (*t2).next = null
+        */
+
+        var resolved_callee = ast_src.as_call.resolved_callee;
+        var args = ast_src.as_call.args;
+        var structSym = resolved_callee;
+        var fields = structSym.as_struct.fields;
+
+        var addr_dst = mk_addr_hir_expr(dst, &dst.pos);
+        var temp_var = mk_temp_var(ctx, addr_dst.type);
+        var temp = mk_temp_hir_expr(temp_var, pos);
+        var body = mk_skip_stmt(pos);
+
+        for (var i = 0; i < args.len; i += 1) {
+            var ast_arg: *CallArg = list_get(args, i);
+            var field: *StructField = list_get(fields, i);
+
+            var temp_deref = mk_deref_hir_expr(temp, pos);
+            var field_access = mk_member_hir_expr(temp_deref, field.name, i, field.type);
+            var assignment = lower_assign_expr(ctx, field_access, ast_arg.expr, &ast_arg.expr.pos);
+            body = mk_seq_hir_expr(body, assignment);
+        }
+
+        return mk_let_hir_expr(temp_var, addr_dst, body, pos);
+    } else {
+        var src = lower_expr(ctx, ast_src);
+        return mk_assign_hir_expr(dst, src);
+    }
+}
+
 //==============================================================================
 //== Statements
 
@@ -433,9 +481,7 @@ func lower_local_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
     }
 
     var var_expr = mk_var_hir_expr(sym, type, &stmt.pos);
-    var init_expr = lower_expr(ctx, ast_init);
-
-    return mk_assign_hir_expr(var_expr, init_expr);
+    return lower_assign_expr(ctx, var_expr, ast_init, &ast_init.pos);
 }
 
 func lower_if_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {

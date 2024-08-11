@@ -421,25 +421,18 @@ func elab_literal_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 }
 
-func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
-    var callee = expr.as_call.callee;
-
-    if (callee.kind != Expr_Ident) {
-        die_at(&callee.pos, "Expected function name");
-    }
-    var sym = lookup(ctx, callee.as_ident.name);
-    if (!sym) {
-        die_at(&callee.pos, "Unknown function");
-    }
-    if (sym.kind != Sym_Func) {
-        die_at(&callee.pos, "Expected a function");
-    }
+func elab_call_expr_part2(
+    ctx: *ElabCtx,
+    sym: *Sym,
+    expr: *Expr,
+    params: *List, // List<FuncParam>
+    args: *List, // List<CallArg>
+    is_variadic: Bool,
+    return_type: *Type
+) {
     expr.as_call.resolved_callee = sym;
 
-    var params = sym.as_func.params;
     var param_count = list_len(params);
-    var is_variadic = sym.as_func.is_variadic;
-    var args = expr.as_call.args;
     var arg_count = list_len(args);
 
     if (arg_count > MAX_PARAMS) {
@@ -471,7 +464,48 @@ func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
             die_at(&expr.pos, "Variadic argument must be scalar.");
         }
     }
-    expr.type = sym.as_func.return_type;
+    expr.type = return_type;
+}
+
+func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
+    var callee = expr.as_call.callee;
+    var args = expr.as_call.args;
+
+    if (callee.kind != Expr_Ident) {
+        die_at(&callee.pos, "Expected function name");
+    }
+    var sym = lookup(ctx, callee.as_ident.name);
+    if (!sym) {
+        die_at(&callee.pos, "Unknown function");
+    }
+    if (sym.kind == Sym_Func) {
+        var params = sym.as_func.params;
+        var return_type = sym.as_func.return_type;
+        var is_variadic = sym.as_func.is_variadic;
+        elab_call_expr_part2(
+            ctx,
+            sym,
+            expr,
+            params,
+            args,
+            is_variadic,
+            return_type
+        );
+    } else if (sym.kind == Sym_Struct) {
+        var fields = sym.as_struct.fields;
+        var return_type = mk_struct_type(sym);
+        elab_call_expr_part2(
+            ctx,
+            sym,
+            expr,
+            fields, // StructField has the same layout as FuncParam
+            args,
+            false,
+            return_type
+        );
+    } else {
+        die_at(&callee.pos, "Expected a function");
+    }
 }
 
 func elab_index_expr(ctx: *ElabCtx, expr: *Expr) {

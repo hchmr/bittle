@@ -167,9 +167,11 @@ func arg_parse(argc: Int32, argv: **Char, args: *Args) {
     if (options == 0) {
         options = Opt_PrintLines | Opt_PrintWords | Opt_PrintBytes;
     }
-    args.options = options;
-    args.files = &argv[i];
-    args.files_count = argc - i as Int32;
+    *args = Args(
+        options: options,
+        files: &argv[i],
+        files_count: argc - i as Int32
+    );
 }
 
 func main(argc: Int32, argv: **Char): Int32 {
