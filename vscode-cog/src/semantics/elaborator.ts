@@ -1060,9 +1060,9 @@ export class Elaborator {
         const argNodes = argListNode.children.filter(x => isArgNode(x));
 
         if (argNodes.length < params.length) {
-            this.reportError(node, `Too few arguments provided (${argNodes.length} < ${params.length}).`);
+            this.reportError(argListNode, `Too few arguments provided (${argNodes.length} < ${params.length}).`);
         } else if (argNodes.length > params.length && !isVariadic) {
-            this.reportError(node, `Too many arguments provided (${argNodes.length} > ${params.length}).`);
+            this.reportError(argListNode, `Too many arguments provided (${argNodes.length} > ${params.length}).`);
         }
         for (let i = 0; i < argNodes.length; i++) {
             const argNode = argNodes[i];
