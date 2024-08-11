@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { FuncSym, prettySym, SymKind } from '../semantics/sym';
+import { FuncParamSym, FuncSym, prettySym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
@@ -45,23 +45,30 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         const argIndex = countPrecedingCommas(argNodes, position);
 
         const calleeSym = this.elaborationService.resolveSymbol(filePath, calleeNameNode);
-        if (!calleeSym || calleeSym.kind !== SymKind.Func) {
+        if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
             return;
         }
 
-        return createSignatureHelp(calleeSym, argIndex);
+        return createSignatureHelp(
+            calleeSym,
+            calleeSym.kind === SymKind.Func ? calleeSym.params : calleeSym.fields ?? [],
+            calleeSym.kind === SymKind.Func && calleeSym.isVariadic,
+            argIndex,
+        );
     }
 }
 
 function createSignatureHelp(
-    funcSym: FuncSym,
+    sym: FuncSym | StructSym,
+    params: (FuncParamSym | StructFieldSym)[],
+    isVariadic: boolean,
     paramIndex: number,
 ): vscode.SignatureHelp {
-    const signature = new vscode.SignatureInformation(prettySym(funcSym));
-    signature.parameters = funcSym.params.map((param) => {
-        return new vscode.ParameterInformation(param.name, prettySym(param));
+    const signature = new vscode.SignatureInformation(prettySym(sym));
+    signature.parameters = params.map((param) => {
+        return new vscode.ParameterInformation(param.name);
     });
-    if (funcSym.isVariadic) {
+    if (isVariadic) {
         signature.parameters.push(new vscode.ParameterInformation('...', ''));
     }
 
@@ -69,8 +76,8 @@ function createSignatureHelp(
     signatureHelp.signatures = [signature];
     signatureHelp.activeSignature = 0; // Easy, we don't have overloads
     signatureHelp.activeParameter = paramIndex;
-    if (funcSym.isVariadic) {
-        signatureHelp.activeParameter = Math.min(paramIndex, funcSym.params.length);
+    if (isVariadic) {
+        signatureHelp.activeParameter = Math.min(paramIndex, params.length);
     }
 
     return signatureHelp;
