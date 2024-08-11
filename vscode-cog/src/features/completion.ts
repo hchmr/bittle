@@ -4,13 +4,13 @@ import { prettySym, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
-import { SyntaxNode } from '../syntax';
-import { ExprNodeTypes } from '../syntax/nodeTypes';
+import { Point, SyntaxNode } from '../syntax';
+import { ExprNodeTypes, isArgNode } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
-import { fromVscPosition } from '../utils';
+import { fromVscPosition, pointLe, rangeContains } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { getNodesAtPosition } from '../utils/nodeSearch';
+import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(
@@ -35,6 +35,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         return this.autoCompleteFieldAccess(filePath, node)
+            || this.autoCompleteArgumentLabel(filePath, node)
             || this.autoCompleteDefault(filePath, node);
     }
 
@@ -87,6 +88,58 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         return results.map(toCompletionItem);
+    }
+
+    private autoCompleteArgumentLabel(
+        filePath: string,
+        node: SyntaxNode,
+    ): vscode.CompletionItem[] | undefined {
+        if (node.type !== 'identifier' && node.type !== ',' && node.type !== '(') {
+            return;
+        }
+
+        const callNode = node.closest(ExprNodeTypes.CallExpr);
+        if (!callNode) {
+            return;
+        }
+        const calleeNode = callNode.childForFieldName('callee');
+        if (!calleeNode) {
+            return;
+        }
+        const calleeNameNode = calleeNode.type === ExprNodeTypes.NameExpr && calleeNode.firstChild;
+        if (!calleeNameNode) {
+            return;
+        }
+        const argNodes = callNode.childForFieldName('args')!.children;
+        const argIndex = countPrecedingCommas(argNodes, node.endPosition);
+
+        const argNode = argNodes.filter(isArgNode)[argIndex];
+        if (argNode) {
+            const labelNode = argNode.childForFieldName('label');
+            if (labelNode && !rangeContains(labelNode, node)) {
+                return; // Already has a label
+            }
+        }
+
+        const calleeSym = this.elaborationService.resolveSymbol(filePath, calleeNameNode);
+        if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
+            return;
+        }
+
+        const labelSym
+            = calleeSym.kind === SymKind.Func
+                ? calleeSym.params[argIndex]
+                : calleeSym.fields?.[argIndex];
+        if (!labelSym) {
+            return;
+        }
+
+        const labelCompletion = toCompletionItem(labelSym);
+        labelCompletion.insertText = `${labelSym.name}: `;
+
+        const valueCompletions = this.autoCompleteDefault(filePath, node) ?? [];
+
+        return [labelCompletion, ...valueCompletions];
     }
 
     private autoCompleteDefault(

@@ -1,4 +1,4 @@
-import { PointRange, rangeContains, rangeContainsPoint } from '.';
+import { pointLe, PointRange, rangeContains, rangeContainsPoint } from '.';
 import { Point, SyntaxNode, Tree } from '../syntax';
 
 export function getIdentifierAtPosition(tree: Tree, point: Point): SyntaxNode | null {
@@ -80,4 +80,12 @@ export function nodeContains(x1: SyntaxNode, x2: SyntaxNode): boolean {
     } while (node);
 
     return false;
+}
+
+export function countPrecedingCommas(argsNodes: SyntaxNode[], treePosition: Point) {
+    return argsNodes
+        .filter((argNode) =>
+            argNode.type == ',' && pointLe(argNode.endPosition, treePosition),
+        )
+        .length;
 }

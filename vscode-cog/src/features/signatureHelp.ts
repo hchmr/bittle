@@ -2,10 +2,10 @@ import * as vscode from 'vscode';
 import { FuncSym, prettySym, SymKind } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
-import { Point, SyntaxNode } from '../syntax';
-import { fromVscPosition, pointLe } from '../utils';
+import { ExprNodeTypes } from '../syntax/nodeTypes';
+import { fromVscPosition } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { getNodesAtPosition } from '../utils/nodeSearch';
+import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(
@@ -29,7 +29,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return;
         }
 
-        const callNode = node.closest('call_expr');
+        const callNode = node.closest(ExprNodeTypes.CallExpr);
         if (!callNode) {
             return;
         }
@@ -37,19 +37,19 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         if (!calleeNode) {
             return;
         }
-        const nameNode = calleeNode.type === 'name_expr' && calleeNode.firstChild;
-        if (!nameNode) {
+        const calleeNameNode = calleeNode.type === ExprNodeTypes.NameExpr && calleeNode.firstChild;
+        if (!calleeNameNode) {
             return;
         }
         const argNodes = callNode.childForFieldName('args')!.children;
         const argIndex = countPrecedingCommas(argNodes, position);
 
-        const funcSym = this.elaborationService.resolveSymbol(filePath, nameNode);
-        if (!funcSym || funcSym.kind !== SymKind.Func) {
+        const calleeSym = this.elaborationService.resolveSymbol(filePath, calleeNameNode);
+        if (!calleeSym || calleeSym.kind !== SymKind.Func) {
             return;
         }
 
-        return createSignatureHelp(funcSym, argIndex);
+        return createSignatureHelp(calleeSym, argIndex);
     }
 }
 
@@ -74,12 +74,4 @@ function createSignatureHelp(
     }
 
     return signatureHelp;
-}
-
-function countPrecedingCommas(argsNodes: SyntaxNode[], treePosition: Point) {
-    return argsNodes
-        .filter((argNode) =>
-            argNode.type == ',' && pointLe(argNode.endPosition, treePosition),
-        )
-        .length;
 }
