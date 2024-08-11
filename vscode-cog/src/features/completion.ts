@@ -1,13 +1,14 @@
+import assert from 'assert';
 import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
-import { prettySym, Sym, SymKind } from '../semantics/sym';
+import { isDefined, prettySym, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
-import { Point, SyntaxNode } from '../syntax';
-import { ExprNodeTypes, isArgNode } from '../syntax/nodeTypes';
+import { SyntaxNode } from '../syntax';
+import { ExprNodeTypes, isArgNode, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
-import { fromVscPosition, pointLe, rangeContains } from '../utils';
+import { fromVscPosition, rangeContains } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
@@ -36,6 +37,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         return this.autoCompleteFieldAccess(filePath, node)
             || this.autoCompleteArgumentLabel(filePath, node)
+            || this.autoCompleteDefinition(filePath, node)
             || this.autoCompleteDefault(filePath, node);
     }
 
@@ -142,6 +144,37 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         return [labelCompletion, ...valueCompletions];
     }
 
+    private autoCompleteDefinition(
+        filePath: string,
+        nameNode: SyntaxNode,
+    ): vscode.CompletionItem[] | undefined {
+        if (nameNode.type !== 'identifier' || !nameNode.parent || !isCompletable(nameNode.parent.type)) {
+            return;
+        }
+
+        return this.elaborationService
+            .getSymbolsAtNode(filePath, nameNode)
+            .filter(sym => !isDefined(sym) && !isCurrentDeclaration(sym, nameNode.parent!))
+            .map(toDefinitionCompletionItem)
+            .toArray();
+
+        function isCompletable(nodeType: string): boolean {
+            switch (nodeType) {
+                case TopLevelNodeTypes.Func:
+                case TopLevelNodeTypes.Global:
+                case TopLevelNodeTypes.Struct:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        function isCurrentDeclaration(sym: Sym, nameNode: SyntaxNode): boolean {
+            return sym.origins.length === 1
+                && sym.origins.some(origin => rangeContains(origin.node, nameNode));
+        }
+    }
+
     private autoCompleteDefault(
         filePath: string,
         node: SyntaxNode,
@@ -188,6 +221,22 @@ function toCompletionItem(candidate: CompletionCandidate): vscode.CompletionItem
         item.detail = prettySym(sym);
         return item;
     }
+}
+
+function toDefinitionCompletionItem(sym: Sym): vscode.CompletionItem {
+    const item = toCompletionItem(sym);
+    let insertText;
+    if (sym.kind === SymKind.Func) {
+        insertText = (prettySym(sym) + ' {\n\t$1\n}').replace(/^func /, '');
+    } else if (sym.kind === SymKind.Struct) {
+        insertText = (prettySym(sym) + ' {\n\t$1\n}').replace(/^struct /, '');
+    } else if (sym.kind === SymKind.Global) {
+        insertText = (prettySym(sym) + ';').replace(/^extern var /, '');
+    } else {
+        assert(false, `Unexpected symbol kind: ${sym.kind}`);
+    }
+    item.insertText = new vscode.SnippetString(insertText);
+    return item;
 }
 
 function toCompletionType(kind: SymKind): vscode.CompletionItemKind {

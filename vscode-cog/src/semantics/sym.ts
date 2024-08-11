@@ -75,6 +75,16 @@ export type Origin = {
     isForwardDecl: boolean;
 };
 
+export function isDefined(sym: Sym): boolean {
+    if (sym.kind === SymKind.Struct) {
+        return !!sym.fields;
+    } else if (sym.kind === SymKind.Func || sym.kind === SymKind.Global) {
+        return sym.isDefined;
+    } else {
+        return true;
+    }
+}
+
 export function symRelatedType(sym: Sym): Type {
     if (sym.kind === SymKind.Struct) {
         return mkStructType(sym.name, sym.qualifiedName);
