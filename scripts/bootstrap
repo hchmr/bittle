@@ -87,7 +87,9 @@ stage 3 "feat(compiler): Add never type"
 
 stage 4 "Merge branch 'compiler-rewrite'"
 
-stage 5 "Merge branch 'compiler-rewrite'"
+stage 5 "feat(compiler): Add for loops"
+
+stage 6 "feat(compiler): Add for loops"
 
 verify
 
