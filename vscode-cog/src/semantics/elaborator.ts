@@ -1028,28 +1028,40 @@ export class Elaborator {
             return this.elabCallExprUnknown(node);
         }
         if (calleeNode.type !== ExprNodeTypes.NameExpr) {
-            this.reportError(calleeNode, `Function name expected.`);
+            this.reportError(calleeNode, `Function or struct name expected.`);
             return this.elabCallExprUnknown(node);
         }
 
-        const funcNameNode = calleeNode.firstChild!;
-        const funcName = funcNameNode.text;
+        const calleeNameNode = calleeNode.firstChild!;
+        const calleeName = calleeNameNode.text;
 
-        const funcSym = this.resolveName(funcNameNode);
-        if (!funcSym) {
+        const sym = this.resolveName(calleeNameNode);
+        if (!sym) {
             return this.elabCallExprUnknown(node);
         }
-        if (funcSym.kind !== SymKind.Func) {
-            this.reportError(calleeNode, `'${funcName}' is not a function.`);
+        if (sym.kind == SymKind.Func) {
+            return this.elabCallExprPart2(node, sym.params, sym.isVariadic, sym.returnType);
+        } else if (sym.kind === SymKind.Struct && sym.fields) {
+            return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym.name, sym.qualifiedName));
+        } else {
+            this.reportError(calleeNode, `'${calleeName}' is not a function or struct.`);
             return this.elabCallExprUnknown(node);
         }
+    }
 
-        const params = funcSym.params;
+    elabCallExprPart2(
+        node: SyntaxNode,
+        params: (FuncParamSym | StructFieldSym)[],
+        isVariadic: boolean,
+        returnType: Type,
+    ): Type {
+        const argListNode = node.childForFieldName('args')!;
+
         const argNodes = argListNode.children.filter(x => isArgNode(x));
 
         if (argNodes.length < params.length) {
             this.reportError(node, `Too few arguments provided (${argNodes.length} < ${params.length}).`);
-        } else if (argNodes.length > params.length && !funcSym.isVariadic) {
+        } else if (argNodes.length > params.length && !isVariadic) {
             this.reportError(node, `Too many arguments provided (${argNodes.length} > ${params.length}).`);
         }
         for (let i = 0; i < argNodes.length; i++) {
@@ -1068,7 +1080,7 @@ export class Elaborator {
                 if (argValueNode) {
                     this.elabExpr(argValueNode, params[i].type);
                 }
-            } else if (funcSym.isVariadic) {
+            } else if (isVariadic) {
                 if (argLabelNode) {
                     this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
                 }
@@ -1081,7 +1093,7 @@ export class Elaborator {
             }
         }
 
-        return funcSym.returnType;
+        return returnType;
     }
 
     private elabCallExprUnknown(node: SyntaxNode): Type {
