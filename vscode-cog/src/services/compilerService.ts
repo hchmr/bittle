@@ -20,13 +20,13 @@ export class CompilerService {
             stderr += data.toString();
         });
 
-        const code = await new Promise(resolve => {
+        const code = await new Promise((resolve, reject) => {
             process.on('close', code => {
                 resolve(code ?? 'unknown');
             });
             process.on('error', error => {
                 console.log(`Error invoking compiler: ${error}`);
-                resolve('unknown');
+                reject(new Error('Error invoking compiler: ' + error));
             });
         });
         console.log(`Compiler exited with code ${code}`);
