@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { Minimatch } from 'minimatch';
 import path from 'path';
 import * as vscode from 'vscode';
 import { isCogFile } from './utils';
@@ -17,12 +18,17 @@ export interface VirtualFileSystem {
 export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposable {
     private disposables: vscode.Disposable[] = [];
     private cache: ReactiveCache;
+    private excludes: Minimatch[] = [];
 
     constructor(cache: ReactiveCache) {
         this.cache = cache;
+        this.excludes = getExcludes();
 
         vscode.workspace.onDidChangeTextDocument((event) => {
-            if (event.document.languageId !== 'cog' || event.contentChanges.length === 0)
+            if (event.document.languageId !== 'cog'
+                || event.contentChanges.length === 0
+                || this.isExcluded(event.document.uri.fsPath)
+            )
                 return;
 
             const path = event.document.uri.fsPath;
@@ -104,23 +110,37 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
     private listFilesUncached(): Array<string> {
         const files: Array<string> = [];
 
-        files.push(...vscode.workspace.textDocuments
-            .map(doc => doc.uri.fsPath)
-            .filter(filePath => isCogFile(filePath)),
+        files.push(
+            ...vscode.workspace.textDocuments
+                .map(doc => doc.uri.fsPath)
+                .filter(filePath => isCogFile(filePath) && !this.isExcluded(filePath)),
         );
 
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
             files.push(...this.listFilesInWorkspaceFolder(folder.uri.fsPath));
         }
 
+        console.log('listFilesUncached', files);
         return files;
     }
 
     private *listFilesInWorkspaceFolder(folder: string): Iterable<string> {
         for (const entry of fs.readdirSync(folder, { withFileTypes: true, recursive: true })) {
             if (entry.isFile() && isCogFile(entry.name)) {
-                yield path.join(entry.parentPath, entry.name);
+                const filePath = path.join(entry.parentPath, entry.name);
+                if (!this.isExcluded(filePath)) {
+                    yield filePath;
+                }
             }
         }
     }
+
+    private isExcluded(path: string): boolean {
+        return this.excludes.some(exclude => exclude.match(path));
+    }
+}
+
+function getExcludes(): Minimatch[] {
+    const excludes = vscode.workspace.getConfiguration('cog').get<string[]>('exclude', []);
+    return excludes.map(pattern => new Minimatch(pattern, { dot: true, optimizationLevel: 2 }));
 }

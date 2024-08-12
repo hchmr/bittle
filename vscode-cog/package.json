@@ -51,6 +51,7 @@
         "eslint-plugin-only-warn": "^1.1.0",
         "fuzzysort": "3.0.2",
         "globals": "^15.8.0",
+        "minimatch": "^10.0.1",
         "typescript": "^5.5.3",
         "typescript-eslint": "^7.17.0",
         "vitest": "^2.0.4"
