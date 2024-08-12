@@ -37,6 +37,7 @@ func sb_append(self: *StringBuilder, s: *Char);
 func sb_finish(self: *StringBuilder): *Char;
 
 func list_new(): *List;
+func list_new_with_cap(cap: Int): *List;
 func list_len(self: *List): Int;
 func list_get(self: *List, i: Int): *Void;
 func list_set(self: *List, i: Int, elem: *Void);
@@ -144,6 +145,7 @@ struct StructField {
 }
 
 struct StructSym {
+    base: *Sym,
     fields: *List, // List<StructField>
     unpadded_size: Int,
     is_defined: Bool,
@@ -507,6 +509,7 @@ struct StructFieldDecl {
 
 struct StructDecl {
     name: *Char,
+    base: *TypeExpr,
     fields: *List, // List<StructFieldDecl>
 }
 

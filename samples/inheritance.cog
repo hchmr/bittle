@@ -1,0 +1,40 @@
+extern func printf(fmt: *Char, ...): Int32;
+
+enum {
+    Shape_Base,
+    Shape_Rectangle,
+    Shape_Circle,
+}
+
+struct Shape {
+    kind: Int32,
+}
+
+struct Rectangle: Shape {
+    width: Int,
+    height: Int,
+}
+
+struct Circle: Shape {
+    radius: Int,
+}
+
+func area(shape: *Shape): Int {
+    if (shape.kind == Shape_Rectangle) {
+        var rect = shape as *Rectangle;
+        return rect.width * rect.height;
+    } else if (shape.kind == Shape_Circle) {
+        var circle = shape as *Circle;
+        return 3 * circle.radius * circle.radius; // Approximation
+    } else {
+        return -1;
+    }
+}
+
+func main() {
+    var rect = Rectangle(Shape_Rectangle, 10, 20);
+    var circle = Circle(Shape_Circle, 5);
+
+    printf("Rectangle area: %d\n", area(&rect));
+    printf("Circle area: %d\n", area(&circle));
+}

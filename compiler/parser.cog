@@ -618,6 +618,10 @@ func p_struct_decl(self: *Parser): *Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Struct);
     var name = p_ident(self);
+    var base: *TypeExpr = null;
+    if (eat(self, Tok_Colon)) {
+        base = p_type(self);
+    }
     var body: *List;
     if (eat(self, Tok_LBrace)) {
         body = list_new();
@@ -634,7 +638,7 @@ func p_struct_decl(self: *Parser): *Decl {
     }
 
     var result = mk_decl(&pos, Decl_Struct);
-    result.as_struct = StructDecl(name, body);
+    result.as_struct = StructDecl(name, base, body);
     return result;
 }
 

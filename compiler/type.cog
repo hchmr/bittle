@@ -61,6 +61,23 @@ func type_eq(t1: *Type, t2: *Type): Bool {
     return true;
 }
 
+func struct_le(s1: *Sym, s2: *Sym): Bool {
+    if (s1 == s2) {
+        return true;
+    }
+    var base = s1.as_struct.base;
+    if (!base) {
+        return false;
+    }
+    return struct_le(base, s2);
+}
+
+func pointee_type_le(t1: *Type, t2: *Type): Bool {
+    return type_eq(t1, t2)
+        || t1.kind == Type_Void
+        || t1.kind == Type_Struct && t2.kind == Type_Struct && struct_le(t1.as_struct.sym, t2.as_struct.sym);
+}
+
 func type_le(t1: *Type, t2: *Type): Bool {
     if (t1.kind == Type_Never) {
         return true;
@@ -69,7 +86,7 @@ func type_le(t1: *Type, t2: *Type): Bool {
     } else if (t1.kind == Type_Int && t2.kind == Type_Int) {
         return t1.as_int.size <= t2.as_int.size;
     } else if (t1.kind == Type_Ptr && t2.kind == Type_Ptr) {
-        return t1.as_ptr.pointee.kind == Type_Void;
+        return pointee_type_le(t1.as_ptr.pointee, t2.as_ptr.pointee);
     } else {
         return type_eq(t1, t2);
     }

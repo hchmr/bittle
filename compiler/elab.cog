@@ -893,24 +893,64 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
     sym.as_struct.unpadded_size = field_offset + field_size;
 }
 
+func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *Sym, is_definition: Bool) {
+    var base_type = eval_type(ctx, base);
+    if (base_type.kind != Type_Struct) {
+        die_at(&base.pos, "Expected a struct type");
+    }
+    var baseSym = base_type.as_struct.sym;
+    if (baseSym == struct_sym) {
+        die_at(&base.pos, "Struct cannot inherit from itself");
+    }
+    if (!baseSym.as_struct.is_defined) {
+        die_at(&base.pos, "Base has incomplete type");
+    }
+    if (!is_definition) {
+        die_at(&base.pos, "Forward declaration cannot have a base");
+    }
+    var base_fields = baseSym.as_struct.fields;
+    var fields = list_new_with_cap(list_len(base_fields));
+    for (var i = 0; i < list_len(base_fields); i += 1) {
+        var field: *StructField = list_get(base_fields, i);
+        var copy: *StructField = calloc(1, sizeof(StructField));
+        *copy = *field;
+        list_push(fields, copy);
+    }
+
+    struct_sym.as_struct = StructSym(
+        base: baseSym,
+        fields: fields,
+        unpadded_size: baseSym.as_struct.unpadded_size,
+        is_defined: false
+    );
+}
+
 func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
     var name = decl.as_struct.name;
+    var base = decl.as_struct.base;
     var field_decls = decl.as_struct.fields;
 
     var is_definition = field_decls != null;
 
     var sym = declare_struct(ctx, &decl.pos, name, is_definition);
 
+    if (base) {
+        elab_struct_base(ctx, base, sym, is_definition);
+    }
+
     if (field_decls) {
-        if (list_len(field_decls) == 0) {
-            die_at(&decl.pos, "Empty struct");
+        if (!sym.as_struct.fields) {
+            sym.as_struct.fields = list_new();
         }
-        sym.as_struct.fields = list_new();
         var fields = sym.as_struct.fields;
 
         for (var i = 0; i < list_len(field_decls); i += 1) {
             var field_decl: *StructFieldDecl = list_get(field_decls, i);
             add_struct_field(ctx, sym, field_decl);
+        }
+
+        if (list_len(fields) == 0) {
+            die_at(&decl.pos, "Empty struct");
         }
 
         sym.as_struct.is_defined = true;
