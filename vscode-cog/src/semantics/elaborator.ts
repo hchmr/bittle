@@ -819,6 +819,8 @@ export class Elaborator {
                     return this.elabSizeofExpr(node);
                 case ExprNodeTypes.LiteralExpr:
                     return this.elabLiteralExpr(node);
+                case ExprNodeTypes.ArrayExpr:
+                    return this.elabArrayExpr(node);
                 case ExprNodeTypes.BinaryExpr:
                     return this.elabBinaryExpr(node);
                 case ExprNodeTypes.TernaryExpr:
@@ -897,6 +899,21 @@ export class Elaborator {
                 throw new Error(`Unexpected literal type: ${unreachable} `);
             }
         }
+    }
+
+    private elabArrayExpr(node: SyntaxNode): Type {
+        const elemNodes = node.children.filter(isExprNode);
+        if (elemNodes.length === 0) {
+            this.reportError(node, `Empty array literal.`);
+            return mkErrorType();
+        }
+
+        const elemType = this.elabExprInfer(elemNodes[0]);
+        for (let i = 1; i < elemNodes.length; i++) {
+            this.elabExpr(elemNodes[i], elemType);
+        }
+
+        return mkArrayType(elemType, elemNodes.length);
     }
 
     private elabUnaryExpr(node: SyntaxNode): Type {

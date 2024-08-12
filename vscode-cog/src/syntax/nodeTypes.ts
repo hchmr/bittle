@@ -47,6 +47,7 @@ export const ExprNodeTypes = {
     NameExpr: 'name_expr',
     SizeofExpr: 'sizeof_expr',
     LiteralExpr: 'literal_expr',
+    ArrayExpr: 'array_expr',
     BinaryExpr: 'binary_expr',
     TernaryExpr: 'ternary_expr',
     UnaryExpr: 'unary_expr',

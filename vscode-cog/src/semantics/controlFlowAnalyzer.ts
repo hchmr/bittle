@@ -231,6 +231,8 @@ class ControlFlowAnalyzer {
                 return this.analyzeSizeofExpr(node, state);
             case ExprNodeTypes.LiteralExpr:
                 return this.analyzeLiteralExpr(node, state);
+            case ExprNodeTypes.ArrayExpr:
+                return this.analyzeArrayExpr(node, state);
             case ExprNodeTypes.BinaryExpr:
                 return this.analyzeBinaryExpr(node, state);
             case ExprNodeTypes.TernaryExpr:
@@ -268,6 +270,12 @@ class ControlFlowAnalyzer {
 
     private analyzeLiteralExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
         return state;
+    }
+
+    private analyzeArrayExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+        return node.children
+            .filter(isExprNode)
+            .reduce((state, child) => this.analyzeExpr(child, state), state);
     }
 
     private analyzeBinaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {

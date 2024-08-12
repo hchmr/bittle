@@ -747,6 +747,12 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.LiteralExpr);
     }
 
+    arrayExpr() {
+        this.beginNode(CompositeNodeTypes.ArrayExpr);
+        this.delimited('[', ']', ',', () => this.expr());
+        this.finishNode(CompositeNodeTypes.ArrayExpr);
+    }
+
     unaryExpr(op: TokenKind) {
         this.beginNode(CompositeNodeTypes.UnaryExpr);
         this.beginField('operator');
@@ -1013,6 +1019,7 @@ const Prec = {
 const nudTable: Record<TokenKind, Nud> = (function () {
     return createTable(
         mkRow('(', parser => parser.groupExpr()),
+        mkRow('[', parser => parser.arrayExpr()),
         mkRow('identifier', parser => parser.nameExpr()),
         ...(['number_literal', 'string_literal', 'char_literal', 'null', 'true', 'false'] as const)
             .map(kind => mkRow(kind, parser => parser.literalExpr())),
