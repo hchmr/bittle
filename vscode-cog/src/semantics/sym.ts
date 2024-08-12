@@ -31,7 +31,8 @@ type SymBase = {
 
 export type StructSym = SymBase & {
     kind: SymKind.Struct;
-    fields?: StructFieldSym[];
+    base: StructSym | undefined;
+    fields: StructFieldSym[] | undefined;
 };
 
 export type StructFieldSym = SymBase & {
@@ -87,7 +88,7 @@ export function isDefined(sym: Sym): boolean {
 
 export function symRelatedType(sym: Sym): Type {
     if (sym.kind === SymKind.Struct) {
-        return mkStructType(sym.name, sym.qualifiedName);
+        return mkStructType(sym);
     } else if (sym.kind === SymKind.StructField) {
         return sym.type;
     } else if (sym.kind === SymKind.Func) {
@@ -108,7 +109,7 @@ export function symRelatedType(sym: Sym): Type {
 
 export function prettySym(sym: Sym): string {
     if (sym.kind === SymKind.Struct) {
-        return `struct ${sym.name}`;
+        return `struct ${sym.name}${prettyBase(sym)}`;
     } else if (sym.kind === SymKind.StructField) {
         return `(field) ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Func) {
@@ -129,6 +130,10 @@ export function prettySym(sym: Sym): string {
         const unreachable: never = sym;
         return unreachable;
     }
+}
+
+function prettyBase(sym: StructSym) {
+    return sym.base ? `: ${sym.base.name}` : '';
 }
 
 //================================================================================
@@ -177,6 +182,7 @@ export function tryMergeStructSym(existing: StructSym, sym: StructSym, onError: 
         name: existing.name,
         qualifiedName: existing.qualifiedName,
         origins: mergeOrigins(existing.origins, sym.origins),
+        base: existing.base || sym.base,
         fields: tryMergeStructFields(existing, sym, onError),
     };
 

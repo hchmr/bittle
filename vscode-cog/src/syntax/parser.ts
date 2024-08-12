@@ -410,6 +410,12 @@ export class Parser extends ParserBase {
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
+        if (this.match(':')) {
+            this.expect(':');
+            this.beginField('base');
+            this.type();
+            this.finishField('base');
+        }
         if (!this.match('{') && !this.match(';')) {
             this.addErrorAndTryBump(`Expected struct body.`);
         }

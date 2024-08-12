@@ -256,7 +256,7 @@ export class Elaborator {
                             this.reportError(typeNode, `'${sym.name}' is not a struct.`);
                             return mkErrorType();
                         }
-                        return mkStructType(sym.name, sym.qualifiedName);
+                        return mkStructType(sym);
                     }
                 }
                 case TypeNodeTypes.PointerType: {
@@ -442,6 +442,7 @@ export class Elaborator {
 
     private elabStruct(node: SyntaxNode) {
         const nameNode = node?.childForFieldName('name');
+        const baseTypeNode = node.childForFieldName('base');
         const bodyNode = node.childForFieldName('body');
 
         const name = nameNode?.text ?? '';
@@ -450,14 +451,25 @@ export class Elaborator {
             name,
             qualifiedName: name,
             origins: [this.createOrigin(node, nameNode, !bodyNode)],
+            base: undefined,
             fields: undefined,
         };
 
         this.addSymbol<StructSym>(nameNode, { ...sym });
 
+        if (baseTypeNode) {
+            this.elabStructBase(baseTypeNode, bodyNode, sym);
+        }
+
         if (bodyNode) {
-            sym.fields = [];
+            sym.fields ??= [];
+
             this.enterScope(bodyNode);
+
+            // Add base fields to the scope
+            for (const field of sym.fields ?? []) {
+                this.addSymbol(field.origins[0].nameNode, field);
+            }
 
             for (const fieldNode of stream(bodyNode.children).filter(n => n.type === 'struct_member')) {
                 this.elabStructField(fieldNode, sym);
@@ -467,6 +479,37 @@ export class Elaborator {
         }
 
         this.addSymbol(nameNode, sym);
+    }
+
+    private elabStructBase(
+        baseTypeNode: SyntaxNode,
+        bodyNode: SyntaxNode | Nullish,
+        structSym: StructSym,
+    ): StructSym | undefined {
+        const baseType = this.typeEval(baseTypeNode);
+        if (baseType.kind === TypeKind.Err) {
+            return;
+        }
+        if (baseType.kind !== TypeKind.Struct) {
+            this.reportError(baseTypeNode!, `Base type must be a struct.`);
+            return;
+        }
+        if (baseType.qualifiedName === structSym.qualifiedName) {
+            this.reportError(baseTypeNode!, `Struct cannot inherit from itself.`);
+            return;
+        }
+        if (this.isUnsizedType(baseType)) {
+            this.reportError(baseTypeNode!, `Base type has incomplete type.`);
+            return;
+        }
+        if (baseType && !bodyNode) {
+            this.reportError(baseTypeNode!, `A forward-declaration cannot specify a base type.`);
+            return;
+        }
+        const baseSym = this.symbols.get(baseType.qualifiedName);
+        assert(baseSym?.kind === SymKind.Struct);
+        structSym.base = baseSym;
+        structSym.fields = [...baseSym?.fields ?? []];
     }
 
     private elabStructField(fieldNode: SyntaxNode, structSym: StructSym) {
@@ -1059,7 +1102,7 @@ export class Elaborator {
         if (sym.kind == SymKind.Func) {
             return this.elabCallExprPart2(node, sym.params, sym.isVariadic, sym.returnType);
         } else if (sym.kind === SymKind.Struct && sym.fields) {
-            return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym.name, sym.qualifiedName));
+            return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym));
         } else {
             this.reportError(calleeNode, `'${calleeName}' is not a function or struct.`);
             return this.elabCallExprUnknown(node);

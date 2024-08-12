@@ -1,3 +1,5 @@
+import { StructSym } from './sym';
+
 export type Type =
     | VoidType
     | BoolType
@@ -47,6 +49,7 @@ export type StructType = Readonly<{
     kind: TypeKind.Struct;
     name: string;
     qualifiedName: string;
+    base: StructType | undefined;
 }>;
 
 export type NeverType = Readonly<{
@@ -114,8 +117,13 @@ export function mkNeverType(): Type {
     return NEVER_TYPE;
 }
 
-export function mkStructType(name: string, qualifiedName: string): Type {
-    return { kind: TypeKind.Struct, name, qualifiedName };
+export function mkStructType(sym: StructSym): StructType {
+    return {
+        kind: TypeKind.Struct,
+        name: sym.name,
+        qualifiedName: sym.qualifiedName,
+        base: sym.base ? mkStructType(sym.base) : undefined,
+    };
 }
 
 export function mkErrorType(): Type {
@@ -223,7 +231,24 @@ export function typeLe(t1: Type, t2: Type): boolean {
         || (t1.kind === TypeKind.Never)
         || (isScalarType(t1) && t2.kind === TypeKind.Bool)
         || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Int && t1.size! <= t2.size!)
-        || (t1.kind === TypeKind.Ptr && t2.kind === TypeKind.Ptr && t1.pointeeType.kind === TypeKind.Void);
+        || (t1.kind === TypeKind.Ptr && t2.kind === TypeKind.Ptr && pointeeTypeLe(t1.pointeeType, t2.pointeeType));
+}
+
+function pointeeTypeLe(t1: Type, t2: Type): boolean {
+    return typeEq(t1, t2)
+        || (t1.kind === TypeKind.Err)
+        || (t1.kind === TypeKind.Void)
+        || (t1.kind === TypeKind.Struct && t2.kind === TypeKind.Struct && structLe(t1, t2));
+}
+
+function structLe(s1: StructType, s2: StructType): boolean {
+    if (s1.qualifiedName === s2.qualifiedName) {
+        return true;
+    }
+    if (s1.base === undefined) {
+        return false;
+    }
+    return structLe(s1.base, s2);
 }
 
 export function prettyType(t: Type): string {
