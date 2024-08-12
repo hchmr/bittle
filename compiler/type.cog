@@ -133,9 +133,9 @@ func is_sized(type: *Type): Bool {
 
 func pretty_type(file: *File, type: *Type): Void {
     if (type.kind == Type_Void) {
-        fprintf(file, "void");
+        fprintf(file, "Void");
     } else if (type.kind == Type_Bool) {
-        fprintf(file, "bool");
+        fprintf(file, "Bool");
     } else if (type.kind == Type_Int) {
         fprintf(file, "Int%d", type.as_int.size * 8);
     } else if (type.kind == Type_Ptr) {
