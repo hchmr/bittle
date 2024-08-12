@@ -173,10 +173,12 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
         var index = e.as_index.index;
         if (indexee.type.kind == Type_Ptr) {
             emit_operands(ctx, indexee, index, 0, 1);
-        } else {
+        } else if (indexee.type.kind == Type_Arr) {
             emit_operands_lvalue(ctx, indexee, index, 0, 1);
+        } else {
+            unreachable("emit_expr_lvalue: indexee should be a pointer or an array.");
         }
-        var elem_size = type_size(indexee.type.as_ptr.pointee);
+        var elem_size = type_size(e.type);
         printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
     } else {
         unreachable("emit_expr_lvalue");
