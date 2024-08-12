@@ -15,17 +15,15 @@ func binary_search(xs: *Int, n: Int, key: Int): Int {
             return mid;
         }
     }
-    return -lo;
+    return -lo - 1;
 }
 
-func main(): Int {
-    var xs: [Int; 10];
-
-    // Fill the array
-    for (var i = 0; i < 10; i += 1) {
-        xs[i] = i + 1;
+func main() {
+    var xs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    var keys = [-1, 0, 5, 10, 11];
+    for (var i = 0; i < 5; i += 1) {
+        var key = keys[i];
+        var idx = binary_search(&xs[0], 11, key);
+        printf("binary_search(xs, 11, %d) = %d\n", i, idx);
     }
-
-    var key = 9;
-    return binary_search(&xs[0], 11, key);
 }

@@ -422,6 +422,34 @@ func elab_literal_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 }
 
+func elab_array_expr(ctx: *ElabCtx, expr: *Expr) {
+    var elems = expr.as_array.elems;
+
+    var elem_type: *Type = null;
+    var elem_count = list_len(elems);
+
+    for (var i = 0; i < elem_count; i += 1) {
+        var elem: *Expr = list_get(elems, i);
+        elab_expr_infer(ctx, elem);
+        if (i == 0) {
+            elem_type = elem.type;
+        } else {
+            var prev_expr: *Expr = list_get(elems, i - 1);
+            unify_types(elem, prev_expr);
+        }
+    }
+
+    if (!elem_type) {
+        die_at(&expr.pos, "Empty array");
+    }
+
+    if (!is_sized(elem_type)) {
+        die_at(&expr.pos, "Array element type is not sized");
+    }
+
+    expr.type = mk_array_type(elem_type, elem_count);
+}
+
 func elab_call_expr_part2(
     ctx: *ElabCtx,
     sym: *Sym,
@@ -660,6 +688,8 @@ func elab_expr_infer2(ctx: *ElabCtx, expr: *Expr) {
         elab_ident_expr(ctx, expr);
     } else if (expr.kind == Expr_Literal) {
         elab_literal_expr(ctx, expr);
+    } else if (expr.kind == Expr_Array) {
+        elab_array_expr(ctx, expr);
     } else if (expr.kind == Expr_Call) {
         elab_call_expr(ctx, expr);
     } else if (expr.kind == Expr_Index) {

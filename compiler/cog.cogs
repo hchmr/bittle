@@ -338,6 +338,7 @@ struct Literal {
 enum {
     Expr_Ident,
     Expr_Literal,
+    Expr_Array,
     Expr_Call,
     Expr_Index,
     Expr_Member,
@@ -351,6 +352,10 @@ enum {
 struct IdentExpr {
     name: *Char,
     sym: *Sym,
+}
+
+struct ArrayExpr {
+    elems: *List, // List<Expr>
 }
 
 struct CallExpr {
@@ -408,6 +413,7 @@ struct Expr {
     type: *Type,
     as_ident: IdentExpr,
     as_literal: *Literal,
+    as_array: ArrayExpr,
     as_call: CallExpr,
     as_index: IndexExpr,
     as_member: MemberExpr,

@@ -241,6 +241,10 @@ func lower_literal_expr(ctx: *Context, expr: *Expr): *HirExpr {
     return result;
 }
 
+func lower_array_expr(ctx: *Context, expr: *Expr): *HirExpr {
+    die_at(&expr.pos, "Array literal outside of an assignment statement");
+}
+
 func lower_call_expr(ctx: *Context, expr: *Expr): *HirExpr {
     var resolved_callee = expr.as_call.resolved_callee;
     var ast_args = expr.as_call.args;
@@ -378,6 +382,8 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
         return lower_ident_expr(ctx, expr);
     } else if (expr.kind == Expr_Literal) {
         return lower_literal_expr(ctx, expr);
+    } else if (expr.kind == Expr_Array) {
+        return lower_array_expr(ctx, expr);
     } else if (expr.kind == Expr_Call) {
         return lower_call_expr(ctx, expr);
     } else if (expr.kind == Expr_Index) {
@@ -436,6 +442,43 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         }
 
         return mk_let_hir_expr(temp_var, addr_dst, body, pos);
+    } else if (ast_src.kind == Expr_Array) {
+        /*
+            desugar
+                x = [a, b, c]
+            to
+                let t1: *T = &x[0] in
+                    t1[0] = a;
+                    t1[1] = b;
+                    t1[2] = c
+        */
+
+        var elems = ast_src.as_array.elems;
+        var elem_type = type.as_arr.elem;
+        assert(elem_type, "lower_assign_expr: array type should have an element type");
+        var array_size = type.as_arr.size;
+
+        var zero = mk_int_hir_expr(0, mk_int_type(4), pos);
+        var zero_index = mk_index_hir_expr(dst, zero);
+        var addr_zero_index = mk_addr_hir_expr(zero_index, pos);
+
+        var temp_var = mk_temp_var(ctx, addr_zero_index.type);
+        var temp = mk_temp_hir_expr(temp_var, pos);
+        var body = mk_skip_stmt(pos);
+
+        for (var i = 0; i < array_size; i += 1) {
+            var ast_elem: *Expr = list_get(elems, i);
+            var index = mk_int_hir_expr(i, mk_int_type(4), pos);
+            var index_expr = mk_index_hir_expr(temp, index);
+            var assignment = lower_assign_expr(ctx, index_expr, ast_elem, &ast_elem.pos);
+            body = mk_seq_hir_expr(body, assignment);
+        }
+
+        // something is null...
+        assert(addr_zero_index.type, "lower_assign_expr: addr_zero_index should have a type");
+        assert(addr_zero_index.as_addr.expr.type, "lower_assign_expr: addr_zero_index should have a type");
+
+        return mk_let_hir_expr(temp_var, addr_zero_index, body, pos);
     } else {
         var src = lower_expr(ctx, ast_src);
         return mk_assign_hir_expr(dst, src);
@@ -505,7 +548,7 @@ func lower_for_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
     var ast_body = stmt.as_for.body;
 
     var init = ast_init ? lower_stmt(ctx, ast_init) : mk_skip_stmt(&stmt.pos);
-    var cond = ast_cond ? lower_expr(ctx, ast_cond) : mk_int_hir_expr(1, mk_int_type(32), &stmt.pos);
+    var cond = ast_cond ? lower_expr(ctx, ast_cond) : mk_int_hir_expr(1, mk_int_type(4), &stmt.pos);
     var step = ast_step ? lower_expr(ctx, ast_step) : mk_skip_stmt(&stmt.pos);
     var body = lower_stmt(ctx, ast_body);
 

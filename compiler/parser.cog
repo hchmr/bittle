@@ -227,6 +227,24 @@ func p_sizeof_expr(self: *Parser): *Expr {
     return result;
 }
 
+func p_array_expr(self: *Parser): *Expr {
+    var pos = self.tok.pos;
+
+    expect(self, Tok_LBracket);
+    var elements: *List = list_new();
+    while (!at_eof(self) && !eat(self, Tok_RBracket)) {
+        var element = p_expr(self, 0);
+        list_push(elements, element);
+        if (!at(self, Tok_RBracket)) {
+            expect(self, Tok_Comma);
+        }
+    }
+
+    var result = mk_expr(&pos, Expr_Array);
+    result.as_array = ArrayExpr(elements);
+    return result;
+}
+
 func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
     var pos = self.tok.pos;
     expect(self, Tok_LBracket);
@@ -327,6 +345,8 @@ func p_expr(self: *Parser, max_prec: Int32): *Expr {
         lhs = p_name_expr(self);
     } else if (at(self, Tok_Null) || at(self, Tok_True) || at(self, Tok_False) || at(self, Tok_Int) || at(self, Tok_Char) || at(self, Tok_String)) {
         lhs = p_literal_expr(self);
+    } else if (at(self, Tok_LBracket)) {
+        lhs = p_array_expr(self);
     } else if (at(self, Tok_Sizeof)) {
         lhs = p_sizeof_expr(self);
     } else if (max_prec <= Prec_Unary && eat(self, Tok_Minus)) {
