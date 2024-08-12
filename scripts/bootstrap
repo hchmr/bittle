@@ -91,7 +91,9 @@ stage 5 "feat(compiler): Add for loops"
 
 stage 6 "feat(compiler): Add struct initializer expressions"
 
-stage 7 "feat(compiler): Add struct initializer expressions"
+stage 7 "feat(compiler): Add struct inheritance"
+
+stage 8 "feat(compiler): Add struct inheritance"
 
 verify
 
