@@ -109,30 +109,30 @@ func mk_jump_hir_expr(is_break: Bool, pos: *Pos): *HirExpr {
 }
 
 func mk_assign_hir_expr(dst: *HirExpr, src: *HirExpr): *HirExpr {
-    var result = mk_hir_expr(HirExpr_Assign, dst.type, &dst.pos);
+    var result = mk_hir_expr(HirExpr_Assign, mk_void_type(), &dst.pos);
     result.as_assign = AssignHirExpr(dst, src);
     return result;
 }
 
-func mk_binary_op_hir_expr(op: Int32, left: *HirExpr, right: *HirExpr): *HirExpr {
-    var result = mk_hir_expr(HirExpr_BinaryOp, left.type, &left.pos);
+func mk_binary_op_hir_expr(op: Int32, left: *HirExpr, right: *HirExpr, type: *Type): *HirExpr {
+    var result = mk_hir_expr(HirExpr_BinaryOp, type, &left.pos);
     result.as_binary_op = BinaryOpHirExpr(op, left, right);
     return result;
 }
 
 func mk_neg_hir_expr(expr: *HirExpr): *HirExpr {
     var zero = mk_int_hir_expr(0, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(HirOp_Sub, zero, expr);
+    return mk_binary_op_hir_expr(HirOp_Sub, zero, expr, expr.type);
 }
 
 func mk_not_hir_expr(expr: *HirExpr): *HirExpr {
     var one = mk_int_hir_expr(1, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(HirOp_Xor, expr, one);
+    return mk_binary_op_hir_expr(HirOp_Xor, expr, one, expr.type);
 }
 
 func mk_bit_not_hir_expr(expr: *HirExpr): *HirExpr {
     var minus_one = mk_int_hir_expr(-1, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(HirOp_Xor, expr, minus_one);
+    return mk_binary_op_hir_expr(HirOp_Xor, expr, minus_one, expr.type);
 }
 
 func mk_call_hir_expr(callee: *Sym, args: *List, pos: *Pos): *HirExpr {
@@ -336,7 +336,7 @@ func lower_binary_expr(ctx: *Context, expr: *Expr): *HirExpr {
         var temp = mk_temp_hir_expr(temp_var, &expr.pos);
         var addr_left = mk_addr_hir_expr(left, &expr.pos);
         var temp_deref = mk_deref_hir_expr(temp, &expr.pos);
-        var computation = mk_binary_op_hir_expr(op, temp_deref, right);
+        var computation = mk_binary_op_hir_expr(op, temp_deref, right, left.type);
         var assign_temp = mk_assign_hir_expr(temp_deref, computation);
         result = mk_let_hir_expr(temp_var, addr_left, assign_temp, &expr.pos);
     } else if (ast_op == Tok_AmpAmp || ast_op == Tok_BarBar) {
@@ -349,7 +349,7 @@ func lower_binary_expr(ctx: *Context, expr: *Expr): *HirExpr {
     } else if (ast_op == Tok_EqEq || ast_op == Tok_BangEq || ast_op == Tok_Lt || ast_op == Tok_LtEq || ast_op == Tok_Gt || ast_op == Tok_GtEq || ast_op == Tok_Amp || ast_op == Tok_Bar || ast_op == Tok_Caret || ast_op == Tok_LtLt || ast_op == Tok_GtGt || ast_op == Tok_Plus || ast_op == Tok_Minus || ast_op == Tok_Star || ast_op == Tok_Slash || ast_op == Tok_Percent) {
         var right = lower_expr(ctx, ast_right);
         var op = translate_binary_op(ast_op);
-        result = mk_binary_op_hir_expr(op, left, right);
+        result = mk_binary_op_hir_expr(op, left, right, expr.type);
     } else {
         unreachable("elab_binary_expr");
     }
