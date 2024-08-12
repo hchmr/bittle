@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
+import { NodeTypes } from '../syntax/nodeTypes';
 import { toVscRange } from '../utils';
 import { fuzzySearch as searchFuzzy } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
@@ -10,14 +11,14 @@ import { VirtualFileSystem } from '../vfs';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, vscode.WorkspaceSymbolProvider {
     private readonly symbolKindMapping = {
-        'enum_member': vscode.SymbolKind.Constant,
-        'struct_decl': vscode.SymbolKind.Struct,
-        'struct_member': vscode.SymbolKind.Field,
-        'func_decl': vscode.SymbolKind.Function,
-        'param_decl': vscode.SymbolKind.Variable,
-        'global_decl': vscode.SymbolKind.Variable,
-        'const_decl': vscode.SymbolKind.Constant,
-        'local_decl': vscode.SymbolKind.Variable,
+        [NodeTypes.EnumMember]: vscode.SymbolKind.Constant,
+        [NodeTypes.StructDecl]: vscode.SymbolKind.Struct,
+        [NodeTypes.StructMember]: vscode.SymbolKind.Field,
+        [NodeTypes.FuncDecl]: vscode.SymbolKind.Function,
+        [NodeTypes.FuncParam]: vscode.SymbolKind.Variable,
+        [NodeTypes.GlobalDecl]: vscode.SymbolKind.Variable,
+        [NodeTypes.ConstDecl]: vscode.SymbolKind.Constant,
+        [NodeTypes.LocalDecl]: vscode.SymbolKind.Variable,
     };
 
     constructor(
@@ -34,7 +35,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     @interceptExceptions
     provideWorkspaceSymbols(query: string, token: vscode.CancellationToken): vscode.ProviderResult<vscode.SymbolInformation[]> {
         const unfilteredSymbols = this.getUnfilteredWorkspaceSymbols();
-        return searchFuzzy(query, unfilteredSymbols, { key: 'name' });
+        return searchFuzzy(query, unfilteredSymbols, { key: 'name' }).reverse(); // Reverse to show definitions before declarations.
     }
 
     private getDocumentSymbols(path: string) {
@@ -80,7 +81,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
         const nameNode = node.children.find(child => child.type === 'identifier');
         const symbol = new vscode.DocumentSymbol(
             nameNode?.text || '{unknown}',
-            '',
+            isForwardDeclaration(node) ? '(declaration)' : '',
             this.convertSymbolKind(node.type),
             toVscRange(node),
             toVscRange(nameNode ?? node),
@@ -91,7 +92,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     private fromDocumentSymbol(uri: vscode.Uri, symbol: vscode.DocumentSymbol, parent?: vscode.DocumentSymbol): vscode.SymbolInformation[] {
         return [
             new vscode.SymbolInformation(
-                symbol.name,
+                symbol.name + (symbol.detail ? ` ${symbol.detail}` : ''),
                 symbol.kind,
                 parent?.name ?? '',
                 new vscode.Location(uri, symbol.range),
@@ -105,5 +106,15 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     private convertSymbolKind(type: string) {
         const symbolKindMapping: Record<string, vscode.SymbolKind> = this.symbolKindMapping;
         return symbolKindMapping[type] ?? null;
+    }
+}
+
+function isForwardDeclaration(node: SyntaxNode) {
+    if (node.type === NodeTypes.FuncDecl || node.type === NodeTypes.StructDecl) {
+        return !node.childForFieldName('body');
+    } else if (node.type === NodeTypes.GlobalDecl) {
+        return !node.children.find(n => n.type === 'extern');
+    } else {
+        return false;
     }
 }
