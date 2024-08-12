@@ -1,14 +1,14 @@
 import assert from 'assert';
 import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
-import { isDefined, prettySym, Sym, SymKind } from '../semantics/sym';
+import { FuncParamSym, isDefined, prettySym, StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeTypes, isArgNode, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
-import { fromVscPosition, rangeContains } from '../utils';
+import { fromVscPosition, rangeContains, toVscRange } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
@@ -116,11 +116,9 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         const argIndex = countPrecedingCommas(argNodes, node.endPosition);
 
         const argNode = argNodes.filter(isArgNode)[argIndex];
-        if (argNode) {
-            const labelNode = argNode.childForFieldName('label');
-            if (labelNode && !rangeContains(labelNode, node)) {
-                return; // Already has a label
-            }
+        const labelNode = argNode?.childForFieldName('label');
+        if (labelNode && !rangeContains(labelNode, node)) {
+            return; // Already has a label
         }
 
         const calleeSym = this.elaborationService.resolveSymbol(filePath, calleeNameNode);
@@ -136,8 +134,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
 
-        const labelCompletion = toCompletionItem(labelSym);
-        labelCompletion.insertText = `${labelSym.name}: `;
+        const labelCompletion = toLabelCompletionItem(labelSym, labelNode);
 
         const valueCompletions = this.autoCompleteDefault(filePath, node) ?? [];
 
@@ -221,6 +218,20 @@ function toCompletionItem(candidate: CompletionCandidate): vscode.CompletionItem
         item.detail = prettySym(sym);
         return item;
     }
+}
+
+function toLabelCompletionItem(labelSym: StructFieldSym | FuncParamSym, labelNode: SyntaxNode | null): vscode.CompletionItem {
+    const insertText = `${labelSym.name}:`;
+    const item = new vscode.CompletionItem(insertText, vscode.CompletionItemKind.Text);
+    item.filterText = labelSym.name;
+    item.detail = `label '${insertText}'`;
+    if (labelNode) {
+        item.range = toVscRange(
+            labelNode.startPosition,
+            labelNode.nextSibling!.endPosition,
+        );
+    }
+    return item;
 }
 
 function toDefinitionCompletionItem(sym: Sym): vscode.CompletionItem {
