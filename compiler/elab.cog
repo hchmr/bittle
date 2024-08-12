@@ -352,6 +352,9 @@ func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
         return type_size(type) as Int32;
     } else if (expr.kind == Expr_Ident) {
         var sym = lookup(ctx, expr.as_ident.name);
+        if (!sym) {
+            die_at(&expr.pos, "Unknown symbol");
+        }
         if (sym.kind == Sym_Const) {
             return sym.as_const.value;
         } else {
