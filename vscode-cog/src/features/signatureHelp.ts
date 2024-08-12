@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { FuncParamSym, FuncSym, prettySym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
+import { FuncParamSym, FuncSym, prettyCallableSym, prettySym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
+import { mkStructType, prettyType } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
@@ -64,7 +65,7 @@ function createSignatureHelp(
     isVariadic: boolean,
     paramIndex: number,
 ): vscode.SignatureHelp {
-    const signature = new vscode.SignatureInformation(prettySym(sym));
+    const signature = new vscode.SignatureInformation(prettyCallableSym(sym));
     signature.parameters = params.map((param) => {
         return new vscode.ParameterInformation(param.name);
     });

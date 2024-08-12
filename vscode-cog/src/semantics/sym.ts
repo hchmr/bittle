@@ -113,10 +113,7 @@ export function prettySym(sym: Sym): string {
     } else if (sym.kind === SymKind.StructField) {
         return `(field) ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Func) {
-        const params = sym.params.map(p => `${p.name}: ${prettyType(p.type)}`).join(', ');
-        const dots = sym.isVariadic ? sym.params.length ? ', ...' : '...' : '';
-        const returnType = prettyType(sym.returnType);
-        return `func ${sym.name}(${params}${dots}): ${returnType}`;
+        return `func ${prettyCallableSym(sym)}`;
     } else if (sym.kind === SymKind.Global) {
         const externModifier = sym.isDefined ? '' : 'extern ';
         return `${externModifier}var ${sym.name}: ${prettyType(sym.type)}`;
@@ -126,6 +123,21 @@ export function prettySym(sym: Sym): string {
         return `const ${sym.name}: ${prettyType(symRelatedType(sym)!)} = ${sym.value}`;
     } else if (sym.kind === SymKind.FuncParam) {
         return `(parameter) ${sym.name}: ${prettyType(sym.type)}`;
+    } else {
+        const unreachable: never = sym;
+        return unreachable;
+    }
+}
+
+export function prettyCallableSym(sym: FuncSym | StructSym): string {
+    if (sym.kind === SymKind.Func) {
+        const params = sym.params.map(p => `${p.name}: ${prettyType(p.type)}`).join(', ');
+        const dots = sym.isVariadic ? sym.params.length ? ', ...' : '...' : '';
+        const returnType = prettyType(sym.returnType);
+        return `${sym.name}(${params}${dots}): ${returnType}`;
+    } else if (sym.kind === SymKind.Struct) {
+        const params = sym.fields?.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ') || '';
+        return `${sym.name}(${params})`;
     } else {
         const unreachable: never = sym;
         return unreachable;
