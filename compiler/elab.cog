@@ -928,7 +928,7 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
     (sym as *StructSym).unpadded_size = field_offset + field_size;
 }
 
-func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym, is_definition: Bool) {
+func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym) {
     var base_type = eval_type(ctx, base);
     if (base_type.kind != Type_Struct) {
         die_at(&base.pos, "Expected a struct type");
@@ -939,9 +939,6 @@ func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym, is
     }
     if (!baseSym.is_defined) {
         die_at(&base.pos, "Base has incomplete type");
-    }
-    if (!is_definition) {
-        die_at(&base.pos, "Forward declaration cannot have a base");
     }
     var base_fields = baseSym.fields;
     var fields = list_new_with_cap(list_len(base_fields));
@@ -972,7 +969,7 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *StructDecl) {
     var sym = declare_struct(ctx, &decl.pos, name, is_definition);
 
     if (base) {
-        elab_struct_base(ctx, base, sym, is_definition);
+        elab_struct_base(ctx, base, sym);
     }
 
     if (field_decls) {
@@ -989,7 +986,9 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *StructDecl) {
         if (list_len(fields) == 0) {
             die_at(&decl.pos, "Empty struct");
         }
+    }
 
+    if (sym.fields) {
         sym.is_defined = true;
     }
 }
