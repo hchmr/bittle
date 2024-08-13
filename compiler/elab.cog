@@ -43,7 +43,7 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
 struct ElabCtx {
     syms: *List, // List<Sym>
     scope: *Scope,
-    current_func: *Sym,
+    current_func: *FuncSym,
     loop_depth: Int,
 }
 
@@ -88,7 +88,7 @@ func declare_struct(
     pos: *Pos,
     name: *Char,
     is_definition: Bool
-): *Sym {
+): *StructSym {
     var sym = try_get_existing(ctx, name);
     if (sym) {
         if (sym.kind != Sym_Struct) {
@@ -98,10 +98,11 @@ func declare_struct(
             die_at(pos, "redefinition of existing symbol");
         }
     } else {
-        sym = mk_sym(Sym_Struct, name);
+        sym = calloc(1, sizeof(StructSym)) as *StructSym;
+        *sym = Sym(Sym_Struct, name); // TODO
         add_sym(ctx, sym);
     }
-    return sym;
+    return sym as *StructSym;
 }
 
 func params_eq(xs: *List, ys: *List): Bool {
@@ -126,27 +127,28 @@ func declare_func(
     return_type: *Type,
     is_variadic: Bool,
     is_definition: Bool
-): *Sym {
+): *FuncSym {
     var sym = try_get_existing(ctx, name);
     if (sym) {
         if (sym.kind != Sym_Func) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        if (!params_eq(sym.as_func.params, params)) {
+        var sym = sym as *FuncSym;
+        if (!params_eq(sym.params, params)) {
             die_at(pos, "Symbol redeclared with different parameters");
         }
-        if (!type_eq(sym.as_func.return_type, return_type)) {
+        if (!type_eq(sym.return_type, return_type)) {
             die_at(pos, "Symbol redeclared with different return type");
         }
-        if (sym.as_func.is_variadic != is_variadic) {
+        if (sym.is_variadic != is_variadic) {
             die_at(pos, "Symbol redeclared with different variadicity");
         }
         if (sym_is_defined(sym) && is_definition) {
             die_at(pos, "Symbol is already defined");
         }
     } else {
-        sym = mk_sym(Sym_Func, name);
-        sym.as_func = FuncSym(
+        sym = calloc(1, sizeof(FuncSym)) as *FuncSym;
+        *(sym as *FuncSym) = FuncSym(Sym_Func, name,
             params: params,
             return_type: return_type,
             is_variadic: is_variadic,
@@ -156,7 +158,7 @@ func declare_func(
         );
         add_sym(ctx, sym);
     }
-    return sym;
+    return sym as *FuncSym;
 }
 
 func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, value: Int32) {
@@ -165,42 +167,42 @@ func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, value: Int32) {
         die_at(pos, "Symbol is already defined");
     }
 
-    var sym = mk_sym(Sym_Const, name);
-    sym.as_const = ConstSym(value);
+    var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
+    *sym = ConstSym(Sym_Const, name, value);
     add_sym(ctx, sym);
 }
 
-func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_definition: Bool): *Sym {
+func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_definition: Bool): *GlobalSym {
     var sym = try_get_existing(ctx, name);
     if (sym) {
         if (sym.kind != Sym_Global) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        if (!type_eq(sym.as_global.type, type)) {
+        if (!type_eq((sym as *GlobalSym).type, type)) {
             die_at(pos, "Symbol redeclared with different type");
         }
         if (sym_is_defined(sym) && is_definition) {
             die_at(pos, "Symbol is already defined");
         }
     } else {
-        sym = mk_sym(Sym_Global, name);
-        sym.as_global = GlobalSym(type, is_defined: false);
+        sym = calloc(1, sizeof(GlobalSym)) as *GlobalSym;
+        *(sym as *GlobalSym) = GlobalSym(Sym_Global, name, type, is_defined: false);
         add_sym(ctx, sym);
     }
-    return sym;
+    return sym as *GlobalSym;
 }
 
-func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *Sym {
+func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         die_at(pos, "Symbol is already defined");
     }
 
-    var sym = mk_sym(Sym_Local, name);
-    sym.as_local = LocalSym(type, frame_offset: -1);
+    var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
+    *sym = LocalSym(Sym_Local, name, type, frame_offset: -1);
     add_sym(ctx, sym);
 
-    list_push(ctx.current_func.as_func.locals, sym);
+    list_push((ctx.current_func).locals, sym);
 
     return sym;
 }
@@ -220,14 +222,14 @@ func try_coerce(e: *Expr, target: *Type): *Expr {
     if (type_eq(e.type, target)) {
         // Ok
     } else if (type_le(e.type, target)) {
-        var cast = mk_expr(&e.pos, Expr_Cast);
-        cast.type = target;
-        cast.as_cast = CastExpr(expr: e, type: null);
+        var cast: *CastExpr = calloc(1, sizeof(CastExpr));
+        *cast = CastExpr(Expr_Cast, e.pos, target, expr: e, type_expr: null);
         e = cast;
-    } else if (e.kind == Expr_Literal && e.as_literal.kind == Literal_Int && target.kind == Type_Int) {
-        var integer_value = e.as_literal.as_int;
+    } else if (e.kind == Expr_Literal && (e as *LiteralExpr).literal.kind == Literal_Int && target.kind == Type_Int) {
+        var target = target as *IntType;
+        var integer_value = ((e as *LiteralExpr).literal as *IntLiteral).value;
         var size = ilog2(integer_value) + 1;
-        if (size < target.as_int.size) {
+        if (size < target.size) {
             e.type = target;
         }
     } else {
@@ -238,7 +240,7 @@ func try_coerce(e: *Expr, target: *Type): *Expr {
 
 func check_type(e: **Expr, expected: *Type) {
     *e = try_coerce((*e), expected);
-    if (expected.kind == Type_Ptr && expected.as_ptr.pointee.kind == Type_Void && (*e).type.kind == Type_Ptr) {
+    if (expected.kind == Type_Ptr && (expected as *PtrType).pointee.kind == Type_Void && (*e).type.kind == Type_Ptr) {
         return;
     }
     if (!type_eq((*e).type, expected)) {
@@ -275,7 +277,7 @@ func const_eval(ctx: *ElabCtx, expr: *Expr): Int32;
 
 func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     if (type_expr.kind == TypeExpr_Named) {
-        var name: *Char = type_expr.as_named;
+        var name: *Char = (type_expr as *NamedTypeExpr).name;
         if (str_eq(name, "Void")) {
             return mk_void_type();
         } else if (str_eq(name, "Bool")) {
@@ -296,14 +298,15 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
             if (sym.kind != Sym_Struct) {
                 die_at(&type_expr.pos, "Expected a struct type");
             }
-            return mk_struct_type(sym);
+            return mk_struct_type(sym as *StructSym);
         }
     } else if (type_expr.kind == TypeExpr_Ptr) {
-        var pointee = eval_type(ctx, type_expr.as_ptr.pointee);
+        var pointee = eval_type(ctx, (type_expr as *PtrTypeExpr).pointee);
         return mk_ptr_type(pointee);
     } else if (type_expr.kind == TypeExpr_Arr) {
-        var elem = eval_type(ctx, type_expr.as_array.elem);
-        var size = const_eval(ctx, type_expr.as_array.size);
+        var type_expr = type_expr as *ArrTypeExpr;
+        var elem = eval_type(ctx, type_expr.elem);
+        var size = const_eval(ctx, type_expr.size);
         return mk_array_type(elem, size);
     } else if (type_expr.kind == TypeExpr_Never) {
         return mk_never_type();
@@ -320,20 +323,22 @@ func invalid_const_expr(ctx: *ElabCtx, expr: *Expr): ! {
 }
 
 func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
-    if (expr.kind == Expr_Literal && expr.as_literal.kind == Literal_Int) {
-        return expr.as_literal.as_int as Int32;
+    if (expr.kind == Expr_Literal && (expr as *LiteralExpr).literal.kind == Literal_Int) {
+        return ((expr as *LiteralExpr).literal as *IntLiteral).value as Int32;
     } else if (expr.kind == Expr_Unary) {
-        var op = expr.as_unary.op;
-        var right_expr = expr.as_unary.right;
+        var expr = expr as *UnaryExpr;
+        var op = expr.op;
+        var right_expr = expr.right;
         if (op == Tok_Minus) {
             return -const_eval(ctx, right_expr);
         } else {
             invalid_const_expr(ctx, expr);
         }
     } else if (expr.kind == Expr_Binary) {
-        var op = expr.as_binary.op;
-        var left_expr = expr.as_binary.left;
-        var right_expr = expr.as_binary.right;
+        var expr = expr as *BinaryExpr;
+        var op = expr.op;
+        var left_expr = expr.left;
+        var right_expr = expr.right;
         var left = const_eval(ctx, left_expr);
         var right = const_eval(ctx, right_expr);
         if (op == Tok_Plus) {
@@ -350,15 +355,15 @@ func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
             invalid_const_expr(ctx, expr);
         }
     } else if (expr.kind == Expr_Sizeof) {
-        var type = eval_type(ctx, expr.as_sizeof.type);
+        var type = eval_type(ctx, (expr as *SizeofExpr).type_expr);
         return type_size(type) as Int32;
     } else if (expr.kind == Expr_Ident) {
-        var sym = lookup(ctx, expr.as_ident.name);
+        var sym = lookup(ctx, (expr as *IdentExpr).name);
         if (!sym) {
             die_at(&expr.pos, "Unknown symbol");
         }
         if (sym.kind == Sym_Const) {
-            return sym.as_const.value;
+            return (sym as *ConstSym).value;
         } else {
             invalid_const_expr(ctx, expr);
         }
@@ -386,8 +391,8 @@ func elab_expr_int(ctx: *ElabCtx, expr: **Expr) {
     check_type_int(expr);
 }
 
-func elab_ident_expr(ctx: *ElabCtx, expr: *Expr) {
-    var name = expr.as_ident.name;
+func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
+    var name = expr.name;
 
     var sym = lookup(ctx, name);
     if (!sym) {
@@ -396,21 +401,21 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *Expr) {
 
     var type: *Type;
     if (sym.kind == Sym_Local) {
-        type = sym.as_local.type;
+        type = (sym as *LocalSym).type;
     } else if (sym.kind == Sym_Global) {
-        type = sym.as_global.type;
+        type = (sym as *GlobalSym).type;
     } else if (sym.kind == Sym_Const) {
         type = mk_int_type(4);
     } else {
         die_at(&expr.pos, "Expected a variable or constant");
     }
 
-    expr.as_ident.sym = sym;
+    expr.sym = sym;
     expr.type = type;
 }
 
-func elab_literal_expr(ctx: *ElabCtx, expr: *Expr) {
-    var literal = expr.as_literal;
+func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr) {
+    var literal = expr.literal;
 
     if (literal.kind == Literal_Null) {
         expr.type = mk_ptr_type(mk_void_type());
@@ -427,8 +432,8 @@ func elab_literal_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 }
 
-func elab_array_expr(ctx: *ElabCtx, expr: *Expr) {
-    var elems = expr.as_array.elems;
+func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr) {
+    var elems = expr.elems;
 
     var elem_type: *Type = null;
     var elem_count = list_len(elems);
@@ -466,7 +471,7 @@ func elab_call_expr_part2(
     is_variadic: Bool,
     return_type: *Type
 ) {
-    expr.as_call.resolved_callee = sym;
+    (expr as *CallExpr).resolved_callee = sym;
 
     var param_count = list_len(params);
     var arg_count = list_len(args);
@@ -503,21 +508,21 @@ func elab_call_expr_part2(
     expr.type = return_type;
 }
 
-func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
-    var callee = expr.as_call.callee;
-    var args = expr.as_call.args;
+func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
+    var callee = expr.callee;
+    var args = expr.args;
 
     if (callee.kind != Expr_Ident) {
         die_at(&callee.pos, "Expected function name");
     }
-    var sym = lookup(ctx, callee.as_ident.name);
+    var sym = lookup(ctx, (callee as *IdentExpr).name);
     if (!sym) {
         die_at(&callee.pos, "Unknown function");
     }
     if (sym.kind == Sym_Func) {
-        var params = sym.as_func.params;
-        var return_type = sym.as_func.return_type;
-        var is_variadic = sym.as_func.is_variadic;
+        var params = (sym as *FuncSym).params;
+        var return_type = (sym as *FuncSym).return_type;
+        var is_variadic = (sym as *FuncSym).is_variadic;
         elab_call_expr_part2(
             ctx,
             sym,
@@ -528,7 +533,8 @@ func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
             return_type
         );
     } else if (sym.kind == Sym_Struct) {
-        var fields = sym.as_struct.fields;
+        var sym = sym as *StructSym;
+        var fields = sym.fields;
         var return_type = mk_struct_type(sym);
         elab_call_expr_part2(
             ctx,
@@ -544,9 +550,9 @@ func elab_call_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 }
 
-func elab_index_expr(ctx: *ElabCtx, expr: *Expr) {
-    var indexee = expr.as_index.indexee;
-    var index = expr.as_index.index;
+func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
+    var indexee = expr.indexee;
+    var index = expr.index;
 
     elab_expr_infer(ctx, indexee);
     elab_expr_infer(ctx, index);
@@ -557,67 +563,68 @@ func elab_index_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 
     var elem_type = indexee_type.kind == Type_Arr
-        ? indexee_type.as_arr.elem
-        : indexee_type.as_ptr.pointee;
+        ? (indexee_type as *ArrType).elem
+        : (indexee_type as *PtrType).pointee;
 
     check_type_int(&index);
     expr.type = elem_type;
-    expr.as_index.index = index;
+    expr.index = index;
 }
 
-func elab_member_expr(ctx: *ElabCtx, expr: *Expr) {
-    var left = expr.as_member.left;
-    var field_name = expr.as_member.name;
+func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
+    var left = expr.left;
+    var field_name = expr.name;
 
     elab_expr_infer(ctx, left);
 
     var struc_type = left.type;
     // TODO: implicit dereference
     if (struc_type.kind == Type_Ptr) {
-        struc_type = struc_type.as_ptr.pointee;
+        struc_type = (struc_type as *PtrType).pointee;
     }
     if (struc_type.kind != Type_Struct) {
         die_at(&left.pos, "Expected a struct");
     }
+    var struct_type = struc_type as *StructType;
 
-    var struct_sym = struc_type.as_struct.sym;
+    var struct_sym = struct_type.sym;
     var field_index = find_struct_field(struct_sym, field_name);
     if (field_index == -1) {
         die_at(&expr.pos, "Unknown field");
     }
 
-    var field: *StructField = list_get(struct_sym.as_struct.fields, field_index);
-    expr.as_member.resolved_field = field_index;
+    var field: *StructField = list_get(struct_sym.fields, field_index);
+    expr.resolved_field = field_index;
     expr.type = field.type;
 }
 
-func elab_sizeof_expr(ctx: *ElabCtx, expr: *Expr) {
-    var type = eval_type(ctx, expr.as_sizeof.type);
+func elab_sizeof_expr(ctx: *ElabCtx, expr: *SizeofExpr) {
+    var type = eval_type(ctx, expr.type_expr);
     var size = type_size(type);
-    expr.as_sizeof.size = size;
+    expr.size = size;
     expr.type = mk_int_type(8);
 }
 
-func elab_unary_expr(ctx: *ElabCtx, expr: *Expr) {
-    var op = expr.as_unary.op;
-    var right = expr.as_unary.right;
+func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr) {
+    var op = expr.op;
+    var right = expr.right;
 
     elab_expr_infer(ctx, right);
 
     if (op == Tok_Minus || op == Tok_Tilde) {
         check_type_int(&right);
         expr.type = right.type;
-        expr.as_unary.right = right;
+        expr.right = right;
     } else if (op == Tok_Bang) {
         check_type_bool(&right);
         expr.type = mk_bool_type();
-        expr.as_unary.right = right;
+        expr.right = right;
     } else if (op == Tok_Star) {
         var pointee_type = right.type;
         if (pointee_type.kind != Type_Ptr) {
             die_at(&right.pos, "Expected a pointer");
         }
-        expr.type = pointee_type.as_ptr.pointee;
+        expr.type = (pointee_type as *PtrType).pointee;
     } else if (op == Tok_Amp) {
         if (!is_lvalue(right)) {
             die_at(&right.pos, "Expected an lvalue");
@@ -628,10 +635,10 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *Expr) {
     }
 }
 
-func elab_binary_expr(ctx: *ElabCtx, expr: *Expr) {
-    var op = expr.as_binary.op;
-    var left = expr.as_binary.left;
-    var right = expr.as_binary.right;
+func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr) {
+    var op = expr.op;
+    var left = expr.left;
+    var right = expr.right;
 
     if (op == Tok_Eq || op == Tok_AmpEq || op == Tok_BarEq || op == Tok_CaretEq || op == Tok_LtLtEq || op == Tok_GtGtEq || op == Tok_PlusEq || op == Tok_MinusEq || op == Tok_StarEq || op == Tok_SlashEq || op == Tok_PercentEq) {
         if (!is_lvalue(left)) {
@@ -647,14 +654,14 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *Expr) {
             die_at(&left.pos, "Cannot assign to an unsized type");
         }
         expr.type = mk_void_type();
-        expr.as_binary.left = left;
-        expr.as_binary.right = right;
+        expr.left = left;
+        expr.right = right;
     } else if (op == Tok_AmpAmp || op == Tok_BarBar) {
         elab_expr_bool(ctx, &left);
         elab_expr_bool(ctx, &right);
         expr.type = mk_bool_type();
-        expr.as_binary.left = left;
-        expr.as_binary.right = right;
+        expr.left = left;
+        expr.right = right;
     } else if (op == Tok_EqEq || op == Tok_BangEq || op == Tok_Lt || op == Tok_LtEq || op == Tok_Gt || op == Tok_GtEq) {
         elab_expr_infer(ctx, left);
         elab_expr_infer(ctx, right);
@@ -663,24 +670,24 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *Expr) {
             die_at(&left.pos, "Operands type is not comparable");
         }
         expr.type = mk_bool_type();
-        expr.as_binary.left = left;
-        expr.as_binary.right = right;
+        expr.left = left;
+        expr.right = right;
     } else if (op == Tok_Amp || op == Tok_Bar || op == Tok_Caret || op == Tok_LtLt || op == Tok_GtGt || op == Tok_Plus || op == Tok_Minus || op == Tok_Star || op == Tok_Slash || op == Tok_Percent) {
         elab_expr_int(ctx, &left);
         elab_expr_int(ctx, &right);
         unify_types(&left, &right);
         expr.type = left.type;
-        expr.as_binary.left = left;
-        expr.as_binary.right = right;
+        expr.left = left;
+        expr.right = right;
     } else {
         unreachable("elab_binary_expr");
     }
 }
 
-func elab_ternary_expr(ctx: *ElabCtx, expr: *Expr) {
-    var cond = expr.as_ternary.cond;
-    var then_expr = expr.as_ternary.then_expr;
-    var else_expr = expr.as_ternary.else_expr;
+func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr) {
+    var cond = expr.cond;
+    var then_expr = expr.then_expr;
+    var else_expr = expr.else_expr;
 
     elab_expr_bool(ctx, &cond);
     elab_expr_infer(ctx, then_expr);
@@ -688,14 +695,14 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *Expr) {
 
     unify_types(&then_expr, &else_expr);
     expr.type = then_expr.type;
-    expr.as_ternary.cond = cond;
-    expr.as_ternary.then_expr = then_expr;
-    expr.as_ternary.else_expr = else_expr;
+    expr.cond = cond;
+    expr.then_expr = then_expr;
+    expr.else_expr = else_expr;
 }
 
-func elab_cast_expr(ctx: *ElabCtx, expr: *Expr) {
-    var type = eval_type(ctx, expr.as_cast.type);
-    var subexpr = expr.as_cast.expr;
+func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
+    var type = eval_type(ctx, expr.type_expr);
+    var subexpr = expr.expr;
 
     elab_expr_infer(ctx, subexpr);
     if (!is_scalar(subexpr.type)) {
@@ -706,27 +713,27 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *Expr) {
 
 func elab_expr_infer2(ctx: *ElabCtx, expr: *Expr) {
     if (expr.kind == Expr_Ident) {
-        elab_ident_expr(ctx, expr);
+        elab_ident_expr(ctx, expr as *IdentExpr);
     } else if (expr.kind == Expr_Literal) {
-        elab_literal_expr(ctx, expr);
+        elab_literal_expr(ctx, expr as *LiteralExpr);
     } else if (expr.kind == Expr_Array) {
-        elab_array_expr(ctx, expr);
+        elab_array_expr(ctx, expr as *ArrayExpr);
     } else if (expr.kind == Expr_Call) {
-        elab_call_expr(ctx, expr);
+        elab_call_expr(ctx, expr as *CallExpr);
     } else if (expr.kind == Expr_Index) {
-        elab_index_expr(ctx, expr);
+        elab_index_expr(ctx, expr as *IndexExpr);
     } else if (expr.kind == Expr_Member) {
-        elab_member_expr(ctx, expr);
+        elab_member_expr(ctx, expr as *MemberExpr);
     } else if (expr.kind == Expr_Sizeof) {
-        elab_sizeof_expr(ctx, expr);
+        elab_sizeof_expr(ctx, expr as *SizeofExpr);
     } else if (expr.kind == Expr_Unary) {
-        elab_unary_expr(ctx, expr);
+        elab_unary_expr(ctx, expr as *UnaryExpr);
     } else if (expr.kind == Expr_Binary) {
-        elab_binary_expr(ctx, expr);
+        elab_binary_expr(ctx, expr as *BinaryExpr);
     } else if (expr.kind == Expr_Ternary) {
-        elab_ternary_expr(ctx, expr);
+        elab_ternary_expr(ctx, expr as *TernaryExpr);
     } else if (expr.kind == Expr_Cast) {
-        elab_cast_expr(ctx, expr);
+        elab_cast_expr(ctx, expr as *CastExpr);
     } else {
         unreachable("elab_expr_infer");
     }
@@ -748,19 +755,19 @@ func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
     exit_scope(ctx);
 }
 
-func elab_block_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+func elab_block_stmt(ctx: *ElabCtx, stmt: *BlockStmt) {
     enter_scope(ctx);
-    for (var i = 0; i < stmt.as_block.stmts.len; i += 1) {
-        var stmt = list_get(stmt.as_block.stmts, i);
+    for (var i = 0; i < stmt.stmts.len; i += 1) {
+        var stmt = list_get(stmt.stmts, i);
         elab_stmt(ctx, stmt);
     }
     exit_scope(ctx);
 }
 
-func elab_local_stmt(ctx: *ElabCtx, stmt: *Stmt) {
-    var name = stmt.as_local.name;
-    var typeExpr = stmt.as_local.type;
-    var init = stmt.as_local.init;
+func elab_local_stmt(ctx: *ElabCtx, stmt: *LocalStmt) {
+    var name = stmt.name;
+    var typeExpr = stmt.type;
+    var init = stmt.init;
 
     var type: *Type = typeExpr ? eval_type(ctx, typeExpr) : null;
     if (init) {
@@ -769,7 +776,7 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *Stmt) {
             type = init.type;
         } else {
             elab_expr_expect(ctx, &init, type);
-            stmt.as_local.init = init;
+            stmt.init = init;
         }
     } else {
         if (!type) {
@@ -782,16 +789,16 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     }
 
     var sym = define_local(ctx, &stmt.pos, name, type);
-    stmt.as_local.sym = sym;
+    stmt.sym = sym;
 }
 
-func elab_if_stmt(ctx: *ElabCtx, stmt: *Stmt) {
-    var cond = stmt.as_if.cond;
-    var then_stmt = stmt.as_if.then_stmt;
-    var else_stmt = stmt.as_if.else_stmt;
+func elab_if_stmt(ctx: *ElabCtx, stmt: *IfStmt) {
+    var cond = stmt.cond;
+    var then_stmt = stmt.then_stmt;
+    var else_stmt = stmt.else_stmt;
 
     elab_expr_bool(ctx, &cond);
-    stmt.as_if.cond = cond;
+    stmt.cond = cond;
 
     elab_stmt_with_scope(ctx, then_stmt);
     if (else_stmt) {
@@ -799,23 +806,23 @@ func elab_if_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     }
 }
 
-func elab_while_stmt(ctx: *ElabCtx, stmt: *Stmt) {
-    var cond = stmt.as_while.cond;
-    var body = stmt.as_while.body;
+func elab_while_stmt(ctx: *ElabCtx, stmt: *WhileStmt) {
+    var cond = stmt.cond;
+    var body = stmt.body;
 
     elab_expr_bool(ctx, &cond);
-    stmt.as_while.cond = cond;
+    stmt.cond = cond;
 
     ctx.loop_depth += 1;
     elab_stmt_with_scope(ctx, body);
     ctx.loop_depth -= 1;
 }
 
-func elab_for_stmt(ctx: *ElabCtx, stmt: *Stmt) {
-    var init = stmt.as_for.init;
-    var cond = stmt.as_for.cond;
-    var step = stmt.as_for.step;
-    var body = stmt.as_for.body;
+func elab_for_stmt(ctx: *ElabCtx, stmt: *ForStmt) {
+    var init = stmt.init;
+    var cond = stmt.cond;
+    var step = stmt.step;
+    var body = stmt.body;
 
     enter_scope(ctx);
 
@@ -824,7 +831,7 @@ func elab_for_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     }
     if (cond) {
         elab_expr_bool(ctx, &cond);
-        stmt.as_for.cond = cond;
+        stmt.cond = cond;
     }
     if (step) {
         elab_expr_infer(ctx, step);
@@ -837,13 +844,13 @@ func elab_for_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     exit_scope(ctx);
 }
 
-func elab_return_stmt(ctx: *ElabCtx, stmt: *Stmt) {
-    var return_expr = stmt.as_return.expr;
+func elab_return_stmt(ctx: *ElabCtx, stmt: *ReturnStmt) {
+    var return_expr = stmt.expr;
 
-    var return_type = ctx.current_func.as_func.return_type;
+    var return_type = ctx.current_func.return_type;
     if (return_expr) {
         elab_expr_expect(ctx, &return_expr, return_type);
-        stmt.as_return.expr = return_expr;
+        stmt.expr = return_expr;
     } else if (return_type.kind != Type_Void) {
         die_at(&stmt.pos, "Missing return value");
     }
@@ -861,30 +868,30 @@ func elab_continue_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     }
 }
 
-func elab_expr_stmt(ctx: *ElabCtx, stmt: *Stmt) {
-    var expr = stmt.as_expr.expr;
+func elab_expr_stmt(ctx: *ElabCtx, stmt: *ExprStmt) {
+    var expr = stmt.expr;
     elab_expr_infer(ctx, expr);
 }
 
 func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     if (stmt.kind == Stmt_Block) {
-        elab_block_stmt(ctx, stmt);
+        elab_block_stmt(ctx, stmt as *BlockStmt);
     } else if (stmt.kind == Stmt_Local) {
-        elab_local_stmt(ctx, stmt);
+        elab_local_stmt(ctx, stmt as *LocalStmt);
     } else if (stmt.kind == Stmt_If) {
-        elab_if_stmt(ctx, stmt);
+        elab_if_stmt(ctx, stmt as *IfStmt);
     } else if (stmt.kind == Stmt_While) {
-        elab_while_stmt(ctx, stmt);
+        elab_while_stmt(ctx, stmt as *WhileStmt);
     } else if (stmt.kind == Stmt_For) {
-        elab_for_stmt(ctx, stmt);
+        elab_for_stmt(ctx, stmt as *ForStmt);
     } else if (stmt.kind == Stmt_Return) {
-        elab_return_stmt(ctx, stmt);
+        elab_return_stmt(ctx, stmt as *ReturnStmt);
     } else if (stmt.kind == Stmt_Break) {
         elab_break_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_Continue) {
         elab_continue_stmt(ctx, stmt);
     } else if (stmt.kind == Stmt_Expr) {
-        elab_expr_stmt(ctx, stmt);
+        elab_expr_stmt(ctx, stmt as *ExprStmt);
     } else {
         unreachable("elab_stmt");
     }
@@ -907,7 +914,7 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
     if (!is_sized(field_type)) {
         die_at(&field_decl.pos, "Field has unsized type");
     }
-    var struct_size = sym.as_struct.unpadded_size;
+    var struct_size = (sym as *StructSym).unpadded_size;
     var field_offset = align_up(struct_size, field_align);
 
     var field: *StructField = calloc(1, sizeof(StructField));
@@ -917,26 +924,26 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
         offset: field_offset
     );
 
-    list_push(sym.as_struct.fields, field);
-    sym.as_struct.unpadded_size = field_offset + field_size;
+    list_push((sym as *StructSym).fields, field);
+    (sym as *StructSym).unpadded_size = field_offset + field_size;
 }
 
-func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *Sym, is_definition: Bool) {
+func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym, is_definition: Bool) {
     var base_type = eval_type(ctx, base);
     if (base_type.kind != Type_Struct) {
         die_at(&base.pos, "Expected a struct type");
     }
-    var baseSym = base_type.as_struct.sym;
+    var baseSym = (base_type as *StructType).sym;
     if (baseSym == struct_sym) {
         die_at(&base.pos, "Struct cannot inherit from itself");
     }
-    if (!baseSym.as_struct.is_defined) {
+    if (!baseSym.is_defined) {
         die_at(&base.pos, "Base has incomplete type");
     }
     if (!is_definition) {
         die_at(&base.pos, "Forward declaration cannot have a base");
     }
-    var base_fields = baseSym.as_struct.fields;
+    var base_fields = baseSym.fields;
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
         var field: *StructField = list_get(base_fields, i);
@@ -945,18 +952,20 @@ func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *Sym, is_defin
         list_push(fields, copy);
     }
 
-    struct_sym.as_struct = StructSym(
+    *struct_sym = StructSym(
+        kind: Sym_Struct,
+        name: struct_sym.name,
         base: baseSym,
         fields: fields,
-        unpadded_size: baseSym.as_struct.unpadded_size,
+        unpadded_size: baseSym.unpadded_size,
         is_defined: false
     );
 }
 
-func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
-    var name = decl.as_struct.name;
-    var base = decl.as_struct.base;
-    var field_decls = decl.as_struct.fields;
+func elab_struct_decl(ctx: *ElabCtx, decl: *StructDecl) {
+    var name = decl.name;
+    var base = decl.base;
+    var field_decls = decl.fields;
 
     var is_definition = field_decls != null;
 
@@ -967,10 +976,10 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 
     if (field_decls) {
-        if (!sym.as_struct.fields) {
-            sym.as_struct.fields = list_new();
+        if (!sym.fields) {
+            sym.fields = list_new();
         }
-        var fields = sym.as_struct.fields;
+        var fields = sym.fields;
 
         for (var i = 0; i < list_len(field_decls); i += 1) {
             var field_decl: *StructFieldDecl = list_get(field_decls, i);
@@ -981,7 +990,7 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *Decl) {
             die_at(&decl.pos, "Empty struct");
         }
 
-        sym.as_struct.is_defined = true;
+        sym.is_defined = true;
     }
 }
 
@@ -1020,10 +1029,10 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
     return result;
 }
 
-func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
-    var name = decl.as_func.name;
+func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
+    var name = decl.name;
 
-    var param_decls = decl.as_func.params;
+    var param_decls = decl.params;
 
     if (list_len(param_decls) > MAX_PARAMS) {
         die_at(&decl.pos, "Too many parameters");
@@ -1036,28 +1045,28 @@ func elab_func_decl(ctx: *ElabCtx, decl: *Decl) {
         list_push(params, param);
     }
 
-    var return_type = decl.as_func.return_type
-        ? eval_type(ctx, decl.as_func.return_type)
+    var return_type = decl.return_type
+        ? eval_type(ctx, decl.return_type)
         : mk_void_type();
 
-    var is_variadic = decl.as_func.is_variadic;
+    var is_variadic = decl.is_variadic;
 
-    var is_definition = decl.as_func.body != null;
+    var is_definition = decl.body != null;
 
     var sym = declare_func(ctx, &decl.pos, name, params, return_type, is_variadic, is_definition);
 
-    if (decl.as_func.body) {
+    if (decl.body) {
         enter_scope(ctx);
         ctx.current_func = sym;
 
         define_params(ctx, param_decls, params);
-        elab_stmt(ctx, decl.as_func.body);
+        elab_stmt(ctx, decl.body);
 
         ctx.current_func = null;
         exit_scope(ctx);
 
-        sym.as_func.body = decl.as_func.body;
-        sym.as_func.is_defined = true;
+        sym.body = decl.body;
+        sym.is_defined = true;
     } else {
         ensure_unique_params(ctx, param_decls);
     }
@@ -1073,8 +1082,8 @@ func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, next_value: Int32
     return value;
 }
 
-func elab_enum_decl(ctx: *ElabCtx, decl: *Decl) {
-    var member_decls = decl.as_enum.members;
+func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
+    var member_decls = decl.members;
 
     var next_value: Int32 = 0;
     for (var i = 0; i < list_len(member_decls); i += 1) {
@@ -1084,34 +1093,34 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 }
 
-func elab_const_decl(ctx: *ElabCtx, decl: *Decl) {
-    var name = decl.as_const.name;
-    var value_expr = decl.as_const.value;
+func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
+    var name = decl.name;
+    var value_expr = decl.value;
 
     var value = const_eval(ctx, value_expr);
     define_const(ctx, &decl.pos, name, value);
 }
 
-func elab_global_decl(ctx: *ElabCtx, decl: *Decl) {
-    var is_extern = decl.as_global.is_extern;
-    var name = decl.as_global.name;
-    var type = eval_type(ctx, decl.as_global.type);
+func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
+    var is_extern = decl.is_extern;
+    var name = decl.name;
+    var type = eval_type(ctx, decl.type);
 
     var sym = declare_global(ctx, &decl.pos, name, type, !is_extern);
-    sym.as_global.is_defined = !is_extern;
+    sym.is_defined = !is_extern;
 }
 
 func elab_decl(ctx: *ElabCtx, decl: *Decl) {
     if (decl.kind == Decl_Struct) {
-        elab_struct_decl(ctx, decl);
+        elab_struct_decl(ctx, decl as *StructDecl);
     } else if (decl.kind == Decl_Func) {
-        elab_func_decl(ctx, decl);
+        elab_func_decl(ctx, decl as *FuncDecl);
     } else if (decl.kind == Decl_Enum) {
-        elab_enum_decl(ctx, decl);
+        elab_enum_decl(ctx, decl as *EnumDecl);
     } else if (decl.kind == Decl_Const) {
-        elab_const_decl(ctx, decl);
+        elab_const_decl(ctx, decl as *ConstDecl);
     } else if (decl.kind == Decl_Global) {
-        elab_global_decl(ctx, decl);
+        elab_global_decl(ctx, decl as *GlobalDecl);
     } else {
         unreachable("elab_decl");
     }

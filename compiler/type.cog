@@ -1,47 +1,45 @@
 include "cog.cogs";
 
 struct Type;
-
-func mk_type(kind: Int32): *Type {
-    var type: *Type = calloc(1, sizeof(Type));
-    type.kind = kind;
+func mk_void_type(): *VoidType {
+    var type: *VoidType = calloc(1, sizeof(VoidType));
+    type.kind = Type_Void;
     return type;
 }
 
-func mk_void_type(): *Type {
-    return mk_type(Type_Void);
-}
-
-func mk_never_type(): *Type {
-    return mk_type(Type_Never);
-}
-
-func mk_bool_type(): *Type {
-    return mk_type(Type_Bool);
-}
-
-func mk_int_type(size: Int): *Type {
-    var type: *Type = mk_type(Type_Int);
-    type.as_int.size = size;
+func mk_never_type(): *NeverType {
+    var type: *NeverType = calloc(1, sizeof(NeverType));
+    type.kind = Type_Never;
     return type;
 }
 
-func mk_ptr_type(pointee: *Type): *Type {
-    var type: *Type = mk_type(Type_Ptr);
-    type.as_ptr.pointee = pointee;
+func mk_bool_type(): *BoolType {
+    var type: *BoolType = calloc(1, sizeof(BoolType));
+    type.kind = Type_Bool;
     return type;
 }
 
-func mk_array_type(elem: *Type, size: Int): *Type {
-    var type: *Type = mk_type(Type_Arr);
-    type.as_arr.elem = elem;
-    type.as_arr.size = size;
+func mk_int_type(size: Int): *IntType {
+    var type: *IntType = calloc(1, sizeof(IntType));
+    *type = IntType(kind: Type_Int, size);
     return type;
 }
 
-func mk_struct_type(sym: *Sym): *Type {
-    var type: *Type = mk_type(Type_Struct);
-    type.as_struct.sym = sym;
+func mk_ptr_type(pointee: *Type): *PtrType {
+    var type: *PtrType = calloc(1, sizeof(PtrType));
+    *type = PtrType(kind: Type_Ptr, pointee);
+    return type;
+}
+
+func mk_array_type(elem: *Type, size: Int): *ArrType {
+    var type: *ArrType = calloc(1, sizeof(ArrType));
+    *type = ArrType(kind: Type_Arr, elem, size);
+    return type;
+}
+
+func mk_struct_type(sym: *StructSym): *StructType {
+    var type: *StructType = calloc(1, sizeof(StructType));
+    *type = StructType(kind: Type_Struct, sym);
     return type;
 }
 
@@ -50,32 +48,39 @@ func type_eq(t1: *Type, t2: *Type): Bool {
         return false;
     }
     if (t1.kind == Type_Int) {
-        return t1.as_int.size == t2.as_int.size;
+        var t1 = t1 as *IntType;
+        var t2 = t2 as *IntType;
+        return t1.size == t2.size;
     } else if (t1.kind == Type_Ptr) {
-        return type_eq(t1.as_ptr.pointee, t2.as_ptr.pointee);
+        var t1 = t1 as *PtrType;
+        var t2 = t2 as *PtrType;
+        return type_eq(t1.pointee, t2.pointee);
     } else if (t1.kind == Type_Arr) {
-        return type_eq(t1.as_arr.elem, t2.as_arr.elem) && t1.as_arr.size == t2.as_arr.size;
+        var t1 = t1 as *ArrType;
+        var t2 = t2 as *ArrType;
+        return type_eq(t1.elem, t2.elem) && t1.size == t2.size;
     } else if (t1.kind == Type_Struct) {
-        return t1.as_struct.sym == t2.as_struct.sym;
+        var t1 = t1 as *StructType;
+        var t2 = t2 as *StructType;
+        return t1.sym == t2.sym;
     }
     return true;
 }
 
-func struct_le(s1: *Sym, s2: *Sym): Bool {
+func struct_le(s1: *StructSym, s2: *StructSym): Bool {
     if (s1 == s2) {
         return true;
     }
-    var base = s1.as_struct.base;
-    if (!base) {
+    if (!s1.base) {
         return false;
     }
-    return struct_le(base, s2);
+    return struct_le(s1.base, s2);
 }
 
 func pointee_type_le(t1: *Type, t2: *Type): Bool {
     return type_eq(t1, t2)
         || t1.kind == Type_Void
-        || t1.kind == Type_Struct && t2.kind == Type_Struct && struct_le(t1.as_struct.sym, t2.as_struct.sym);
+        || t1.kind == Type_Struct && t2.kind == Type_Struct && struct_le((t1 as *StructType).sym, (t2 as *StructType).sym);
 }
 
 func type_le(t1: *Type, t2: *Type): Bool {
@@ -84,9 +89,9 @@ func type_le(t1: *Type, t2: *Type): Bool {
     } else if (is_scalar(t1) && t2.kind == Type_Bool) {
         return true;
     } else if (t1.kind == Type_Int && t2.kind == Type_Int) {
-        return t1.as_int.size <= t2.as_int.size;
+        return (t1 as *IntType).size <= (t2 as *IntType).size;
     } else if (t1.kind == Type_Ptr && t2.kind == Type_Ptr) {
-        return pointee_type_le(t1.as_ptr.pointee, t2.as_ptr.pointee);
+        return pointee_type_le((t1 as *PtrType).pointee, (t2 as *PtrType).pointee);
     } else {
         return type_eq(t1, t2);
     }
@@ -98,14 +103,15 @@ func type_size(type: *Type): Int {
     } else if (type.kind == Type_Bool) {
         return 1;
     } else if (type.kind == Type_Int) {
-        return type.as_int.size;
+        return (type as *IntType).size;
     } else if (type.kind == Type_Ptr) {
         return 8;
     } else if (type.kind == Type_Arr) {
-        return type_size(type.as_arr.elem) * type.as_arr.size;
+        var type = type as *ArrType;
+        return type_size(type.elem) * type.size;
     } else if (type.kind == Type_Struct) {
-        var variant = type.as_struct.sym.as_struct;
-        return variant.fields.len == 0 ? -1 : align_up(variant.unpadded_size, type_align(type));
+        var type = type as *StructType;
+        return type.sym.fields.len == 0 ? -1 : align_up(type.sym.unpadded_size, type_align(type));
     } else if (type.kind == Type_Never) {
         return -1;
     } else {
@@ -137,16 +143,17 @@ func pretty_type(file: *File, type: *Type): Void {
     } else if (type.kind == Type_Bool) {
         fprintf(file, "Bool");
     } else if (type.kind == Type_Int) {
-        fprintf(file, "Int%d", type.as_int.size * 8);
+        fprintf(file, "Int%d", (type as *IntType).size * 8);
     } else if (type.kind == Type_Ptr) {
         fprintf(file, "*");
-        pretty_type(file, type.as_ptr.pointee);
+        pretty_type(file, (type as *PtrType).pointee);
     } else if (type.kind == Type_Arr) {
+        var type = type as *ArrType;
         fprintf(file, "[");
-        pretty_type(file, type.as_arr.elem);
-        fprintf(file, "; %d]", type.as_arr.size);
+        pretty_type(file, type.elem);
+        fprintf(file, "; %d]", type.size);
     } else if (type.kind == Type_Struct) {
-        var sym = type.as_struct.sym;
+        var sym = (type as *StructType).sym;
         fprintf(file, "%s", sym.name);
     } else if (type.kind == Type_Never) {
         fprintf(file, "!");

@@ -1,42 +1,8 @@
 include "cog.cogs";
 
-func mk_type_expr(pos: *Pos, kind: Int32): *TypeExpr {
-    var result: *TypeExpr = calloc(1, sizeof(TypeExpr));
-    result.kind = kind;
-    result.pos = *pos;
-    return result;
-}
-
-func mk_literal(kind: Int32): *Literal {
-    var result: *Literal = calloc(1, sizeof(Literal));
-    result.kind = kind;
-    return result;
-}
-
-func mk_expr(pos: *Pos, kind: Int32): *Expr {
-    var result: *Expr = calloc(1, sizeof(Expr));
-    result.kind = kind;
-    result.pos = *pos;
-    return result;
-}
-
-func mk_stmt(pos: *Pos, kind: Int32): *Stmt {
-    var result: *Stmt = calloc(1, sizeof(Stmt));
-    result.kind = kind;
-    result.pos = *pos;
-    return result;
-}
-
-func mk_decl(pos: *Pos, kind: Int32): *Decl {
-    var result: *Decl = calloc(1, sizeof(Decl));
-    result.kind = kind;
-    result.pos = *pos;
-    return result;
-}
-
 func is_lvalue(expr: *Expr): Bool {
     return expr.kind == Expr_Ident
         || expr.kind == Expr_Index
         || expr.kind == Expr_Member
-        || expr.kind == Expr_Unary && expr.as_unary.op == Tok_Star;
+        || expr.kind == Expr_Unary && (expr as *UnaryExpr).op == Tok_Star;
 }

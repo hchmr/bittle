@@ -1,26 +1,19 @@
 include "cog.cogs";
 
-func mk_sym(kind: Int32, name: *Char): *Sym {
-    var sym: *Sym = calloc(1, sizeof(Sym));
-    sym.kind = kind;
-    sym.name = name;
-    return sym;
-}
-
 func sym_is_defined(sym: *Sym): Bool {
     if (sym.kind == Sym_Struct) {
-        return sym.as_struct.is_defined;
+        return (sym as *StructSym).is_defined;
     } else if (sym.kind == Sym_Global) {
-        return sym.as_global.is_defined;
+        return (sym as *GlobalSym).is_defined;
     } else if (sym.kind == Sym_Func) {
-        return sym.as_func.is_defined;
+        return (sym as *FuncSym).is_defined;
     } else {
         return true;
     }
 }
 
 func find_struct_field(sym: *Sym, name: *Char): Int {
-    var fields = sym.as_struct.fields;
+    var fields = (sym as *StructSym).fields;
     if (!fields) {
         return -1;
     }

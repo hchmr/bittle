@@ -68,6 +68,7 @@ func parse_string(s: *Char): *Char;
 const MAX_PARAMS = 8;
 
 struct Sym;
+struct StructSym;
 
 enum {
     Type_Void,
@@ -79,41 +80,44 @@ enum {
     Type_Never,
 }
 
-struct Type;
+struct Type {
+    kind: Int32,
+}
 
-struct IntType {
+struct VoidType: Type {
+}
+
+struct BoolType: Type {
+}
+
+struct IntType: Type {
     size: Int,
 }
 
-struct PtrType {
+struct PtrType: Type {
     pointee: *Type,
 }
 
-struct ArrType {
+struct ArrType: Type {
     elem: *Type,
     size: Int,
 }
 
-struct StructType {
-    sym: *Sym,
+struct StructType: Type {
+    sym: *StructSym,
 }
 
-struct Type {
-    kind: Int32,
-    as_int: IntType,
-    as_ptr: PtrType,
-    as_arr: ArrType,
-    as_struct: StructType,
+struct NeverType: Type {
 }
 
 func mk_type(kind: Int32): *Type;
-func mk_void_type(): *Type;
-func mk_never_type(): *Type;
-func mk_bool_type(): *Type;
-func mk_int_type(size: Int): *Type;
-func mk_ptr_type(pointee: *Type): *Type;
-func mk_array_type(elem: *Type, size: Int): *Type;
-func mk_struct_type(sym: *Sym): *Type;
+func mk_void_type(): *VoidType;
+func mk_never_type(): *NeverType;
+func mk_bool_type(): *BoolType;
+func mk_int_type(size: Int): *IntType;
+func mk_ptr_type(pointee: *Type): *PtrType;
+func mk_array_type(elem: *Type, size: Int): *ArrType;
+func mk_struct_type(sym: *StructSym): *StructType;
 
 func type_eq(t1: *Type, t2: *Type): Bool;
 func type_le(t1: *Type, t2: *Type): Bool;
@@ -138,25 +142,30 @@ enum {
     Sym_Local,
 }
 
+struct Sym {
+    kind: Int32,
+    name: *Char,
+}
+
 struct StructField {
     name: *Char,
     type: *Type,
     offset: Int,
 }
 
-struct StructSym {
-    base: *Sym,
+struct StructSym: Sym {
+    base: *StructSym,
     fields: *List, // List<StructField>
     unpadded_size: Int,
     is_defined: Bool,
 }
 
-struct GlobalSym {
+struct GlobalSym: Sym {
     type: *Type,
     is_defined: Bool,
 }
 
-struct ConstSym {
+struct ConstSym: Sym {
     value: Int32,
 }
 
@@ -165,7 +174,7 @@ struct FuncParam {
     type: *Type,
 }
 
-struct FuncSym {
+struct FuncSym: Sym {
     params: *List, // List<FuncParam>
     return_type: *Type,
     is_variadic: Bool,
@@ -174,22 +183,11 @@ struct FuncSym {
     body: *Stmt,
 }
 
-struct LocalSym {
+struct LocalSym: Sym {
     type: *Type,
     frame_offset: Int,
 }
 
-struct Sym {
-    kind: Int32,
-    name: *Char,
-    as_struct: StructSym,
-    as_global: GlobalSym,
-    as_const: ConstSym,
-    as_func: FuncSym,
-    as_local: LocalSym,
-}
-
-func mk_sym(kind: Int32, name: *Char): *Sym;
 func sym_is_defined(sym: *Sym): Bool;
 func find_struct_field(sym: *Sym, name: *Char): Int;
 
@@ -291,6 +289,11 @@ struct Expr;
 
 struct TypeExpr;
 
+struct TypeExpr {
+    kind: Int32,
+    pos: Pos,
+}
+
 enum {
     TypeExpr_Named,
     TypeExpr_Ptr,
@@ -298,21 +301,17 @@ enum {
     TypeExpr_Never,
 }
 
-struct PtrTypeExpr {
+struct NamedTypeExpr: TypeExpr {
+    name: *Char,
+}
+
+struct PtrTypeExpr: TypeExpr {
     pointee: *TypeExpr,
 }
 
-struct ArrTypeExpr {
+struct ArrTypeExpr: TypeExpr {
     elem: *TypeExpr,
     size: *Expr,
-}
-
-struct TypeExpr {
-    kind: Int32,
-    pos: Pos,
-    as_named: *Char,
-    as_ptr: PtrTypeExpr,
-    as_array: ArrTypeExpr,
 }
 
 // Literal
@@ -329,10 +328,19 @@ enum {
 
 struct Literal {
     kind: Int32,
-    as_bool: Bool,
-    as_int: Int,
-    as_char: Char,
-    as_string: *Char,
+}
+
+struct BoolLiteral: Literal {
+    value: Bool,
+}
+struct IntLiteral: Literal {
+    value: Int,
+}
+struct CharLiteral: Literal {
+    value: Char,
+}
+struct StringLiteral: Literal {
+    value: *Char,
 }
 
 // Expr
@@ -351,16 +359,26 @@ enum {
     Expr_Cast,
 }
 
-struct IdentExpr {
+struct Expr {
+    kind: Int32,
+    pos: Pos,
+    type: *Type,
+}
+
+struct IdentExpr: Expr {
     name: *Char,
     sym: *Sym,
 }
 
-struct ArrayExpr {
+struct LiteralExpr: Expr {
+    literal: *Literal,
+}
+
+struct ArrayExpr: Expr {
     elems: *List, // List<Expr>
 }
 
-struct CallExpr {
+struct CallExpr: Expr {
     callee: *Expr,
     args: *List, // List<CallArg>
     resolved_callee: *Sym,
@@ -371,64 +389,52 @@ struct CallArg {
     expr: *Expr,
 }
 
-struct IndexExpr {
+struct IndexExpr: Expr {
     indexee: *Expr,
     index: *Expr,
 }
 
-struct MemberExpr {
+struct MemberExpr: Expr {
     left: *Expr,
     name: *Char,
     resolved_field: Int,
 }
 
-struct SizeofExpr {
-    type: *TypeExpr,
+struct SizeofExpr: Expr {
+    type_expr: *TypeExpr,
     size: Int,
 }
 
-struct UnaryExpr {
+struct UnaryExpr: Expr {
     op: Int32,
     right: *Expr,
 }
 
-struct BinaryExpr {
+struct BinaryExpr: Expr {
     op: Int32,
     left: *Expr,
     right: *Expr,
 }
 
-struct TernaryExpr {
+struct TernaryExpr: Expr {
     cond: *Expr,
     then_expr: *Expr,
     else_expr: *Expr,
 }
 
-struct CastExpr {
+struct CastExpr: Expr {
     expr: *Expr,
-    type: *TypeExpr,
-}
-
-struct Expr {
-    kind: Int32,
-    pos: Pos,
-    type: *Type,
-    as_ident: IdentExpr,
-    as_literal: *Literal,
-    as_array: ArrayExpr,
-    as_call: CallExpr,
-    as_index: IndexExpr,
-    as_member: MemberExpr,
-    as_sizeof: SizeofExpr,
-    as_unary: UnaryExpr,
-    as_binary: BinaryExpr,
-    as_ternary: TernaryExpr,
-    as_cast: CastExpr,
+    type_expr: *TypeExpr,
 }
 
 // Stmt
 
 struct Stmt;
+
+struct Stmt {
+    kind: Int32,
+    pos: Pos,
+}
 
 enum {
     Stmt_Block,
@@ -442,53 +448,41 @@ enum {
     Stmt_Expr,
 }
 
-struct BlockStmt {
+struct BlockStmt: Stmt {
     stmts: *List, // List<Stmt>
 }
 
-struct LocalStmt {
+struct LocalStmt: Stmt {
     name: *Char,
     type: *TypeExpr,
     init: *Expr,
-    sym: *Sym,
+    sym: *LocalSym,
 }
 
-struct IfStmt {
+struct IfStmt: Stmt {
     cond: *Expr,
     then_stmt: *Stmt,
     else_stmt: *Stmt,
 }
 
-struct WhileStmt {
+struct WhileStmt: Stmt {
     cond: *Expr,
     body: *Stmt,
 }
 
-struct ForStmt {
+struct ForStmt: Stmt {
     init: *Stmt,
     cond: *Expr,
     step: *Expr,
     body: *Stmt,
 }
 
-struct ReturnStmt {
+struct ReturnStmt: Stmt {
     expr: *Expr,
 }
 
-struct ExprStmt {
+struct ExprStmt: Stmt {
     expr: *Expr,
-}
-
-struct Stmt {
-    kind: Int32,
-    pos: Pos,
-    as_block: BlockStmt,
-    as_local: LocalStmt,
-    as_if: IfStmt,
-    as_while: WhileStmt,
-    as_for: ForStmt,
-    as_return: ReturnStmt,
-    as_expr: ExprStmt,
 }
 
 // Decl
@@ -507,7 +501,12 @@ struct StructFieldDecl {
     type: *TypeExpr,
 }
 
-struct StructDecl {
+struct Decl {
+    kind: Int32,
+    pos: Pos,
+}
+
+struct StructDecl: Decl {
     name: *Char,
     base: *TypeExpr,
     fields: *List, // List<StructFieldDecl>
@@ -519,7 +518,7 @@ struct FuncParamDecl {
     type: *TypeExpr,
 }
 
-struct FuncDecl {
+struct FuncDecl: Decl {
     is_extern: Bool,
     name: *Char,
     params: *List, // List<FuncParam>
@@ -534,40 +533,25 @@ struct EnumMember {
     value: *Expr,
 }
 
-struct EnumDecl {
+struct EnumDecl: Decl {
     members: *List, // List<EnumMember>
 }
 
-struct ConstDecl {
+struct ConstDecl: Decl {
     name: *Char,
     value: *Expr,
 }
 
-struct GlobalDecl {
+struct GlobalDecl: Decl {
     is_extern: Bool,
     name: *Char,
     type: *TypeExpr,
-}
-
-struct Decl {
-    kind: Int32,
-    pos: Pos,
-    as_struct: StructDecl,
-    as_func: FuncDecl,
-    as_enum: EnumDecl,
-    as_const: ConstDecl,
-    as_global: GlobalDecl,
 }
 
 struct Ast {
     decls: *List, // List<Decl>
 }
 
-func mk_type_expr(pos: *Pos, kind: Int32): *TypeExpr;
-func mk_literal(kind: Int32): *Literal;
-func mk_expr(pos: *Pos, kind: Int32): *Expr;
-func mk_stmt(pos: *Pos, kind: Int32): *Stmt;
-func mk_decl(pos: *Pos, kind: Int32): *Decl;
 func is_lvalue(expr: *Expr): Bool;
 
 //==============================================================================
@@ -631,98 +615,96 @@ enum {
     HirExpr_Cast,
 }
 
-struct SeqHirExpr {
+struct HirExpr {
+    kind: Int32,
+    type: *Type,
+    pos: Pos,
+}
+
+struct SeqHirExpr: HirExpr {
     first: *HirExpr,
     second: *HirExpr,
 }
 
-struct LetHirExpr {
+struct LetHirExpr: HirExpr {
     temp: *HirTemp,
     init: *HirExpr,
     body: *HirExpr,
 }
 
-struct CondHirExpr {
+struct IntHirExpr: HirExpr {
+    value: Int,
+}
+
+struct StrHirExpr: HirExpr {
+    value: *Char,
+}
+
+struct VarHirExpr: HirExpr {
+    sym: *Sym,
+}
+
+struct TempHirExpr: HirExpr {
+    temp: *HirTemp,
+}
+
+struct CondHirExpr: HirExpr {
     cond: *HirExpr,
     then_expr: *HirExpr,
     else_expr: *HirExpr,
 }
 
-struct LoopHirExpr {
+struct LoopHirExpr: HirExpr {
     cond: *HirExpr,
     body: *HirExpr,
     step: *HirExpr,
 }
 
-struct ReturnHirExpr {
+struct ReturnHirExpr: HirExpr {
     expr: *HirExpr,
 }
 
-struct JumpHirExpr {
+struct JumpHirExpr: HirExpr {
     is_break: Bool,
 }
 
-struct AssignHirExpr {
+struct AssignHirExpr: HirExpr {
     dst: *HirExpr,
     src: *HirExpr,
 }
 
-struct BinaryOpHirExpr {
+struct BinaryOpHirExpr: HirExpr {
     op: Int32,
     left: *HirExpr,
     right: *HirExpr,
 }
 
-struct CallHirExpr {
+struct CallHirExpr: HirExpr {
     callee: *Sym,
     args: *List, // List<HirExpr>
 }
 
-struct MemberHirExpr {
+struct MemberHirExpr: HirExpr {
     left: *HirExpr,
     name: *Char,
     field_index: Int,
 }
 
-struct IndexHirExpr {
+struct IndexHirExpr: HirExpr {
     indexee: *HirExpr,
     index: *HirExpr,
 }
 
-struct DerefHirExpr {
+struct DerefHirExpr: HirExpr {
     expr: *HirExpr,
 }
 
-struct AddrHirExpr {
+struct AddrHirExpr: HirExpr {
     expr: *HirExpr,
 }
 
-struct CastHirExpr {
+struct CastHirExpr: HirExpr {
     expr: *HirExpr,
-}
-
-struct HirExpr {
-    kind: Int32,
-    type: *Type,
-    pos: Pos,
-    as_seq: SeqHirExpr,
-    as_let: LetHirExpr,
-    as_int: Int,
-    as_str: *Char,
-    as_var: *Sym,
-    as_temp: *HirTemp,
-    as_cond: CondHirExpr,
-    as_loop: LoopHirExpr,
-    as_jump: JumpHirExpr,
-    as_return: ReturnHirExpr,
-    as_assign: AssignHirExpr,
-    as_binary_op: BinaryOpHirExpr,
-    as_call: CallHirExpr,
-    as_member: MemberHirExpr,
-    as_index: IndexHirExpr,
-    as_deref: DerefHirExpr,
-    as_addr: AddrHirExpr,
-    as_cast: CastHirExpr,
 }
 
 //==============================================================================
