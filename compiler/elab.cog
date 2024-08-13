@@ -216,33 +216,35 @@ func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
 //==============================================================================
 //== Type checking
 
-func try_coerce(expr: *Expr, target: *Type) {
-    if (type_eq(expr.type, target))
-        return;
-    if (type_le(expr.type, target)) {
-        var subexpr: *Expr = calloc(1, sizeof(Expr));
-        *subexpr = *expr;
-        expr.kind = Expr_Cast;
-        expr.type = target;
-        expr.as_cast = CastExpr(expr: subexpr, type: null);
-    } else if (expr.kind == Expr_Literal && expr.as_literal.kind == Literal_Int && target.kind == Type_Int) {
-        var integer_value = expr.as_literal.as_int;
+func try_coerce(e: *Expr, target: *Type): *Expr {
+    if (type_eq(e.type, target)) {
+        // Ok
+    } else if (type_le(e.type, target)) {
+        var cast = mk_expr(&e.pos, Expr_Cast);
+        cast.type = target;
+        cast.as_cast = CastExpr(expr: e, type: null);
+        e = cast;
+    } else if (e.kind == Expr_Literal && e.as_literal.kind == Literal_Int && target.kind == Type_Int) {
+        var integer_value = e.as_literal.as_int;
         var size = ilog2(integer_value) + 1;
         if (size < target.as_int.size) {
-            expr.type = target;
+            e.type = target;
         }
+    } else {
+        // Err
     }
+    return e;
 }
 
-func check_type(e: *Expr, expected: *Type) {
-    try_coerce(e, expected);
-    if (expected.kind == Type_Ptr && expected.as_ptr.pointee.kind == Type_Void && e.type.kind == Type_Ptr) {
+func check_type(e: **Expr, expected: *Type) {
+    *e = try_coerce((*e), expected);
+    if (expected.kind == Type_Ptr && expected.as_ptr.pointee.kind == Type_Void && (*e).type.kind == Type_Ptr) {
         return;
     }
-    if (!type_eq(e.type, expected)) {
-        error_at(&e.pos);
+    if (!type_eq((*e).type, expected)) {
+        error_at(&(*e).pos);
         fprintf(stderr, "Type mismatch: ");
-        pretty_type(stderr, e.type);
+        pretty_type(stderr, (*e).type);
         fprintf(stderr, " != ");
         pretty_type(stderr, expected);
         fprintf(stderr, ".\n");
@@ -250,20 +252,20 @@ func check_type(e: *Expr, expected: *Type) {
     }
 }
 
-func check_type_int(e: *Expr) {
-    if (e.type.kind != Type_Int) {
-        die_at(&e.pos, "Integer expression expected");
+func check_type_int(e: **Expr) {
+    if ((*e).type.kind != Type_Int) {
+        die_at(&(*e).pos, "Integer expression expected");
     }
 }
 
-func check_type_bool(e: *Expr) {
+func check_type_bool(e: **Expr) {
     check_type(e, mk_bool_type());
 }
 
-func unify_types(e1: *Expr, e2: *Expr) {
-    try_coerce(e2, e1.type);
-    try_coerce(e1, e2.type);
-    check_type(e2, e1.type);
+func unify_types(e1: **Expr, e2: **Expr) {
+    *e2 = try_coerce(*e2, (*e1).type);
+    *e1 = try_coerce(*e1, (*e2).type);
+    check_type(e2, (*e1).type);
 }
 
 //==============================================================================
@@ -370,17 +372,17 @@ func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
 
 func elab_expr_infer(ctx: *ElabCtx, expr: *Expr);
 
-func elab_expr_expect(ctx: *ElabCtx, expr: *Expr, expected: *Type) {
-    elab_expr_infer(ctx, expr);
+func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type) {
+    elab_expr_infer(ctx, *expr);
     check_type(expr, expected);
 }
 
-func elab_expr_bool(ctx: *ElabCtx, expr: *Expr) {
+func elab_expr_bool(ctx: *ElabCtx, expr: **Expr) {
     elab_expr_expect(ctx, expr, mk_bool_type());
 }
 
-func elab_expr_int(ctx: *ElabCtx, expr: *Expr) {
-    elab_expr_infer(ctx, expr);
+func elab_expr_int(ctx: *ElabCtx, expr: **Expr) {
+    elab_expr_infer(ctx, *expr);
     check_type_int(expr);
 }
 
@@ -438,7 +440,9 @@ func elab_array_expr(ctx: *ElabCtx, expr: *Expr) {
             elem_type = elem.type;
         } else {
             var prev_expr: *Expr = list_get(elems, i - 1);
-            unify_types(elem, prev_expr);
+            unify_types(&elem, &prev_expr);
+            list_set(elems, i, elem);
+            list_set(elems, i - 1, prev_expr);
         }
     }
 
@@ -487,7 +491,7 @@ func elab_call_expr_part2(
         if (arg.label && !str_eq(arg.label, param.name)) {
             die_at(&arg.expr.pos, "Argument label does not match parameter name");
         }
-        elab_expr_expect(ctx, arg.expr, param.type);
+        elab_expr_expect(ctx, &arg.expr, param.type);
     }
     for (; i < arg_count; i += 1) {
         var arg: *CallArg = list_get(args, i);
@@ -556,8 +560,9 @@ func elab_index_expr(ctx: *ElabCtx, expr: *Expr) {
         ? indexee_type.as_arr.elem
         : indexee_type.as_ptr.pointee;
 
-    check_type_int(index);
+    check_type_int(&index);
     expr.type = elem_type;
+    expr.as_index.index = index;
 }
 
 func elab_member_expr(ctx: *ElabCtx, expr: *Expr) {
@@ -600,11 +605,13 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *Expr) {
     elab_expr_infer(ctx, right);
 
     if (op == Tok_Minus || op == Tok_Tilde) {
-        check_type_int(right);
+        check_type_int(&right);
         expr.type = right.type;
+        expr.as_unary.right = right;
     } else if (op == Tok_Bang) {
-        check_type_bool(right);
+        check_type_bool(&right);
         expr.type = mk_bool_type();
+        expr.as_unary.right = right;
     } else if (op == Tok_Star) {
         var pointee_type = right.type;
         if (pointee_type.kind != Type_Ptr) {
@@ -631,32 +638,40 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *Expr) {
             die_at(&left.pos, "L-value expected");
         }
         if (op != Tok_Eq) {
-            elab_expr_int(ctx, left);
+            elab_expr_int(ctx, &left);
         } else {
             elab_expr_infer(ctx, left);
         }
-        elab_expr_expect(ctx, right, left.type);
+        elab_expr_expect(ctx, &right, left.type);
         if (!is_sized(left.type)) {
             die_at(&left.pos, "Cannot assign to an unsized type");
         }
         expr.type = mk_void_type();
+        expr.as_binary.left = left;
+        expr.as_binary.right = right;
     } else if (op == Tok_AmpAmp || op == Tok_BarBar) {
-        elab_expr_bool(ctx, left);
-        elab_expr_bool(ctx, right);
+        elab_expr_bool(ctx, &left);
+        elab_expr_bool(ctx, &right);
         expr.type = mk_bool_type();
+        expr.as_binary.left = left;
+        expr.as_binary.right = right;
     } else if (op == Tok_EqEq || op == Tok_BangEq || op == Tok_Lt || op == Tok_LtEq || op == Tok_Gt || op == Tok_GtEq) {
         elab_expr_infer(ctx, left);
         elab_expr_infer(ctx, right);
-        unify_types(left, right);
+        unify_types(&left, &right);
         if (!is_scalar(left.type)) {
             die_at(&left.pos, "Operands type is not comparable");
         }
         expr.type = mk_bool_type();
+        expr.as_binary.left = left;
+        expr.as_binary.right = right;
     } else if (op == Tok_Amp || op == Tok_Bar || op == Tok_Caret || op == Tok_LtLt || op == Tok_GtGt || op == Tok_Plus || op == Tok_Minus || op == Tok_Star || op == Tok_Slash || op == Tok_Percent) {
-        elab_expr_int(ctx, left);
-        elab_expr_int(ctx, right);
-        unify_types(left, right);
+        elab_expr_int(ctx, &left);
+        elab_expr_int(ctx, &right);
+        unify_types(&left, &right);
         expr.type = left.type;
+        expr.as_binary.left = left;
+        expr.as_binary.right = right;
     } else {
         unreachable("elab_binary_expr");
     }
@@ -667,12 +682,15 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *Expr) {
     var then_expr = expr.as_ternary.then_expr;
     var else_expr = expr.as_ternary.else_expr;
 
-    elab_expr_bool(ctx, cond);
+    elab_expr_bool(ctx, &cond);
     elab_expr_infer(ctx, then_expr);
     elab_expr_infer(ctx, else_expr);
 
-    unify_types(then_expr, else_expr);
+    unify_types(&then_expr, &else_expr);
     expr.type = then_expr.type;
+    expr.as_ternary.cond = cond;
+    expr.as_ternary.then_expr = then_expr;
+    expr.as_ternary.else_expr = else_expr;
 }
 
 func elab_cast_expr(ctx: *ElabCtx, expr: *Expr) {
@@ -750,7 +768,8 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *Stmt) {
             elab_expr_infer(ctx, init);
             type = init.type;
         } else {
-            elab_expr_expect(ctx, init, type);
+            elab_expr_expect(ctx, &init, type);
+            stmt.as_local.init = init;
         }
     } else {
         if (!type) {
@@ -771,7 +790,9 @@ func elab_if_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     var then_stmt = stmt.as_if.then_stmt;
     var else_stmt = stmt.as_if.else_stmt;
 
-    elab_expr_bool(ctx, cond);
+    elab_expr_bool(ctx, &cond);
+    stmt.as_if.cond = cond;
+
     elab_stmt_with_scope(ctx, then_stmt);
     if (else_stmt) {
         elab_stmt_with_scope(ctx, else_stmt);
@@ -782,7 +803,9 @@ func elab_while_stmt(ctx: *ElabCtx, stmt: *Stmt) {
     var cond = stmt.as_while.cond;
     var body = stmt.as_while.body;
 
-    elab_expr_bool(ctx, cond);
+    elab_expr_bool(ctx, &cond);
+    stmt.as_while.cond = cond;
+
     ctx.loop_depth += 1;
     elab_stmt_with_scope(ctx, body);
     ctx.loop_depth -= 1;
@@ -800,7 +823,8 @@ func elab_for_stmt(ctx: *ElabCtx, stmt: *Stmt) {
         elab_stmt(ctx, init);
     }
     if (cond) {
-        elab_expr_bool(ctx, cond);
+        elab_expr_bool(ctx, &cond);
+        stmt.as_for.cond = cond;
     }
     if (step) {
         elab_expr_infer(ctx, step);
@@ -818,7 +842,8 @@ func elab_return_stmt(ctx: *ElabCtx, stmt: *Stmt) {
 
     var return_type = ctx.current_func.as_func.return_type;
     if (return_expr) {
-        elab_expr_expect(ctx, return_expr, return_type);
+        elab_expr_expect(ctx, &return_expr, return_type);
+        stmt.as_return.expr = return_expr;
     } else if (return_type.kind != Type_Void) {
         die_at(&stmt.pos, "Missing return value");
     }
