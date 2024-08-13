@@ -1,5 +1,5 @@
 import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
-import { ElaborationError, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
+import { ElaborationDiag, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { mkErrorType, Type } from '../semantics/type';
 import { typeLayout, TypeLayout } from '../semantics/typeLayout';
@@ -17,14 +17,14 @@ export class ElaborationService {
         private cache: ReactiveCache,
     ) { }
 
-    getErrors(path: string): ElaborationError[] {
-        const elaborationErrors = this.elaborateFile(path).errors;
-        const flowAnalysisErrors = analyzeControlFlow(
+    getDiagnostics(path: string): ElaborationDiag[] {
+        const elaborationDiags = this.elaborateFile(path).diagnostics;
+        const flowAnalysisDiags = analyzeControlFlow(
             path,
             this.parsingService.parse(path),
             this.elaborateFile(path),
         );
-        return [...elaborationErrors, ...flowAnalysisErrors];
+        return [...elaborationDiags, ...flowAnalysisDiags];
     }
 
     getSymbolsAtNode(path: string, node: SyntaxNode): Stream<Sym> {

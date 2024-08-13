@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
+import { ElaborationDiag } from '../semantics/elaborator';
 import { ElaborationService } from '../services/elaborationService';
 import { toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 
-export class ElaborationErrorProvider implements vscode.Disposable {
+export class ElaborationDiagnosticProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
 
     constructor(
@@ -41,21 +42,36 @@ export class ElaborationErrorProvider implements vscode.Disposable {
     }
 
     createDiagnosticsUncached(document: vscode.TextDocument) {
-        const errors = this.elaborationService.getErrors(document.fileName);
-        return stream(errors)
-            .groupBy<string>(error => error.location.file)
-            .map<[vscode.Uri, vscode.Diagnostic[]]>(([path, errors]) => {
+        const diags = this.elaborationService.getDiagnostics(document.fileName);
+        return stream(diags)
+            .groupBy<string>(diag => diag.location.file)
+            .map<[vscode.Uri, vscode.Diagnostic[]]>(([path, diags]) => {
                 return [
                     vscode.Uri.file(path),
-                    errors.map(error => {
-                        return new vscode.Diagnostic(
-                            toVscRange(error.location.range),
-                            error.message,
-                            vscode.DiagnosticSeverity.Error,
-                        );
+                    diags.map(diag => {
+                        return fromElaborationDiag(diag);
                     }),
                 ];
             })
             .toArray();
+    }
+}
+
+function fromElaborationDiag(diag: ElaborationDiag): vscode.Diagnostic {
+    const vscodeDiag = new vscode.Diagnostic(
+        toVscRange(diag.location.range),
+        diag.message,
+        fromElaborationSeverity(diag.severity),
+    );
+    vscodeDiag.tags = diag.unnecessary ? [vscode.DiagnosticTag.Unnecessary] : [];
+    return vscodeDiag;
+}
+
+function fromElaborationSeverity(severity: 'error' | 'warning' | 'info' | 'hint'): vscode.DiagnosticSeverity {
+    switch (severity) {
+        case 'error': return vscode.DiagnosticSeverity.Error;
+        case 'warning': return vscode.DiagnosticSeverity.Warning;
+        case 'info': return vscode.DiagnosticSeverity.Information;
+        case 'hint': return vscode.DiagnosticSeverity.Hint;
     }
 }

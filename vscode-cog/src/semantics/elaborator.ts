@@ -51,6 +51,7 @@ import {
     primitiveTypes,
     tryUnifyTypes,
     Type,
+    typeEq,
     TypeKind,
     typeLe,
 } from './type';
@@ -61,9 +62,17 @@ export type ErrorLocation = {
     range: PointRange;
 };
 
-export type ElaborationError = {
+export type Severity
+    = 'error'
+    | 'warning'
+    | 'info'
+    | 'hint';
+
+export type ElaborationDiag = {
+    severity: Severity;
     message: string;
     location: ErrorLocation;
+    unnecessary?: boolean;
 };
 
 export type SymReference = {
@@ -77,7 +86,7 @@ export type ElaboratorResult = {
     nodeSymMap: WeakMap<SyntaxNode, string>;
     nodeTypeMap: WeakMap<SyntaxNode, Type>;
     references: Map<string, SymReference[]>;
-    errors: ElaborationError[];
+    diagnostics: ElaborationDiag[];
 };
 
 export class Elaborator {
@@ -95,7 +104,7 @@ export class Elaborator {
     // SyntaxNode -> Type
     private nodeTypeMap: WeakMap<SyntaxNode, Type> = new WeakMap();
 
-    private errors: ElaborationError[] = [];
+    private diagnostics: ElaborationDiag[] = [];
 
     // Current function
     private currentFunc: FuncSym | undefined;
@@ -118,7 +127,7 @@ export class Elaborator {
             nodeSymMap: this.nodeSymMap,
             nodeTypeMap: this.nodeTypeMap,
             references: this.references,
-            errors: this.errors,
+            diagnostics: this.diagnostics,
         };
     }
 
@@ -1213,6 +1222,7 @@ export class Elaborator {
 
     private elabCastExpr(node: SyntaxNode): Type {
         const typeNode = node.childForFieldName('type');
+        const keywordNode = node.children.find(n => n.type === 'as')!;
         const exprNode = node.childForFieldName('expr');
 
         const castType = this.typeEval(typeNode);
@@ -1220,6 +1230,9 @@ export class Elaborator {
 
         if (isNonScalarType(castType) || isNonScalarType(exprType)) {
             this.reportError(node, `Invalid cast type.`);
+        }
+        if (typeEq(castType, exprType)) {
+            this.reportWarning(keywordNode, `Redundant cast.`);
         }
 
         return castType;
@@ -1291,14 +1304,23 @@ export class Elaborator {
         return type;
     }
 
-    private reportError(node: SyntaxNode, message: string) {
-        this.errors.push({
+    private reportDiagnostic(node: SyntaxNode, severity: Severity, message: string) {
+        this.diagnostics.push({
+            severity,
             message,
             location: {
                 file: this.path,
                 range: node,
             },
         });
+    }
+
+    private reportError(node: SyntaxNode, message: string) {
+        this.reportDiagnostic(node, 'error', message);
+    }
+
+    private reportWarning(node: SyntaxNode, message: string) {
+        this.reportDiagnostic(node, 'warning', message);
     }
 
     private typeLayout(type: Type): TypeLayout | undefined {

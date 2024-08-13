@@ -14,7 +14,7 @@ import {
 } from '../syntax/nodeTypes';
 import { Nullish } from '../utils';
 import { stream } from '../utils/stream';
-import { ElaborationError, ElaboratorResult } from './elaborator';
+import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
 import { mkVoidType, Type, TypeKind } from './type';
 
 export function analyzeControlFlow(path: string, tree: Tree, elaboratorResult: ElaboratorResult) {
@@ -34,7 +34,7 @@ type ExecutionState = {
 
 class ControlFlowAnalyzer {
     private nodeTypeMap: WeakMap<SyntaxNode, Type>;
-    private errors: ElaborationError[] = [];
+    private diags: ElaborationDiag[] = [];
     private currentLoop: SyntaxNode | null = null;
 
     constructor(
@@ -48,7 +48,7 @@ class ControlFlowAnalyzer {
         for (const node of stream(tree.rootNode.children).filter(node => isTopLevelNode(node))) {
             this.analyzeTopLevelDecl(node);
         }
-        return this.errors;
+        return this.diags;
     }
 
     private analyzeTopLevelDecl(node: SyntaxNode) {
@@ -350,14 +350,20 @@ class ControlFlowAnalyzer {
     //=========================================================================
 
     private reportUnreachableCode(node: SyntaxNode) {
-        this.reportError(node, 'Unreachable code');
+        this.reportDiagnostic(node, 'hint', 'Unreachable code', true);
+    }
+
+    private reportDiagnostic(node: SyntaxNode, severity: Severity, message: string, unnecessary = false) {
+        this.diags.push({
+            severity,
+            location: { file: this.path, range: node },
+            message,
+            unnecessary,
+        });
     }
 
     private reportError(node: SyntaxNode, message: string) {
-        this.errors.push({
-            location: { file: this.path, range: node },
-            message,
-        });
+        this.reportDiagnostic(node, 'error', message);
     }
 }
 

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { CodeActionsProvider } from './features/codeActions';
 import { createCompilerErrorProvider } from './features/compilerErrors';
 import { CompletionProvider } from './features/completion';
-import { ElaborationErrorProvider } from './features/elaborationErrors';
+import { ElaborationDiagnosticProvider } from './features/elaborationDiags';
 import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { ReferenceProvider } from './features/references';
@@ -58,7 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
     const syntaxErrorProvider = new SyntaxErrorProvider(parsingService);
     context.subscriptions.push(syntaxErrorProvider);
 
-    const elaborationErrorProvider = new ElaborationErrorProvider(elaborationService, cache);
+    const elaborationErrorProvider = new ElaborationDiagnosticProvider(elaborationService, cache);
     context.subscriptions.push(elaborationErrorProvider);
 
     const compilerErrorProvider = createCompilerErrorProvider(compilerService);
