@@ -1405,9 +1405,10 @@ export class Elaborator {
         const castType = this.typeEval(typeNode);
         const exprType = this.elabExprInfer(exprNode);
 
-        if (isNonScalarType(castType) || isNonScalarType(exprType)) {
+        if (!isValidCast(castType, exprType)) {
             this.reportError(node, `Invalid cast type.`);
         }
+
         if (typeEq(castType, exprType)) {
             this.reportWarning(keywordNode, `Redundant cast.`);
         }
@@ -1562,6 +1563,14 @@ function isLvalue(node: SyntaxNode | Nullish): boolean {
         default:
             return false;
     }
+}
+
+function isValidCast(targetType: Type, sourceType: Type) {
+    return targetType.kind == TypeKind.Err
+        || sourceType.kind == TypeKind.Err
+        || ((targetType.kind == TypeKind.Bool) && isScalarType(sourceType))
+        || ((targetType.kind == TypeKind.Int) && isScalarType(sourceType))
+        || ((targetType.kind == TypeKind.Ptr) && (sourceType.kind == TypeKind.Ptr || sourceType.kind == TypeKind.Int));
 }
 
 function isNonScalarType(type: Type): boolean {
