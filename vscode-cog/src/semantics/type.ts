@@ -47,9 +47,7 @@ export type ArrayType = Readonly<{
 
 export type StructType = Readonly<{
     kind: TypeKind.Struct;
-    name: string;
-    qualifiedName: string;
-    base: StructType | undefined;
+    sym: StructSym;
 }>;
 
 export type NeverType = Readonly<{
@@ -81,6 +79,8 @@ const NEVER_TYPE: NeverType = { kind: TypeKind.Never };
 const ERROR_TYPE: ErrorType = { kind: TypeKind.Err };
 
 const POINTER_TYPES = new WeakMap<Type, PointerType>();
+
+const STRUCT_TYPES = new WeakMap<StructSym, StructType>();
 
 export function mkVoidType(): Type {
     return VOID_TYPE;
@@ -118,12 +118,12 @@ export function mkNeverType(): Type {
 }
 
 export function mkStructType(sym: StructSym): StructType {
-    return {
-        kind: TypeKind.Struct,
-        name: sym.name,
-        qualifiedName: sym.qualifiedName,
-        base: sym.base ? mkStructType(sym.base) : undefined,
-    };
+    let structType = STRUCT_TYPES.get(sym);
+    if (!structType) {
+        structType = { kind: TypeKind.Struct, sym };
+        STRUCT_TYPES.set(sym, structType);
+    }
+    return structType;
 }
 
 export function mkErrorType(): Type {
@@ -171,7 +171,7 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
         const size = unifySize(t1.size, t2.size, onError);
         return mkArrayType(elemType, size);
     } else if (t1.kind === TypeKind.Struct && t2.kind === t1.kind) {
-        if (t1.name !== t2.name) {
+        if (t1.sym.name !== t2.sym.name) {
             onError();
             return mkErrorType();
         }
@@ -207,7 +207,7 @@ export function typeEq(t1: Type, t2: Type): boolean {
         return typeEq(t1.elemType, t2.elemType) && t1.size === t2.size;
     } else if (t1.kind === TypeKind.Struct) {
         t2 = t2 as StructType;
-        return t1.name === t2.name;
+        return t1.sym.name === t2.sym.name;
     } else {
         return true;
     }
@@ -238,10 +238,10 @@ function pointeeTypeLe(t1: Type, t2: Type): boolean {
     return typeEq(t1, t2)
         || (t1.kind === TypeKind.Err)
         || (t1.kind === TypeKind.Void)
-        || (t1.kind === TypeKind.Struct && t2.kind === TypeKind.Struct && structLe(t1, t2));
+        || (t1.kind === TypeKind.Struct && t2.kind === TypeKind.Struct && structLe(t1.sym, t2.sym));
 }
 
-function structLe(s1: StructType, s2: StructType): boolean {
+function structLe(s1: StructSym, s2: StructSym): boolean {
     if (s1.qualifiedName === s2.qualifiedName) {
         return true;
     }
@@ -258,7 +258,7 @@ export function prettyType(t: Type): string {
         case TypeKind.Int: return `Int${t.size ?? ''}`;
         case TypeKind.Ptr: return '*' + prettyType(t.pointeeType);
         case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
-        case TypeKind.Struct: return t.name;
+        case TypeKind.Struct: return t.sym.name;
         case TypeKind.Never: return '!';
         case TypeKind.Err: return '{unknown}';
     }

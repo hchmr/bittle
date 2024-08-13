@@ -74,7 +74,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         // Get fields
-        const structSym = this.elaborationService.getSymbol(filePath, structType.name);
+        const structSym = this.elaborationService.getSymbol(filePath, structType.sym.name);
         if (structSym?.kind !== SymKind.Struct) {
             return;
         }

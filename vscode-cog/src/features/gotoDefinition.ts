@@ -174,7 +174,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         if (type.kind !== TypeKind.Struct) {
             return;
         }
-        return this.elaborationService.getSymbol(filePath, type.qualifiedName);
+        return this.elaborationService.getSymbol(filePath, type.sym.qualifiedName);
     }
 }
 

@@ -31,7 +31,7 @@ export function typeLayout(type: Type, ctx: TypeLayoutContext): TypeLayout | und
             return elemLayout && { size: elemLayout.size * type.size!, align: elemLayout.align };
         }
         case TypeKind.Struct: {
-            const sym = ctx.getStruct(type.qualifiedName);
+            const sym = ctx.getStruct(type.sym.qualifiedName);
             if (sym?.kind !== SymKind.Struct) {
                 return undefined;
             }

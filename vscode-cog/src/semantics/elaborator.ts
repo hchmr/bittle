@@ -731,7 +731,7 @@ export class Elaborator {
             this.reportError(baseTypeNode!, `Base type must be a struct.`);
             return;
         }
-        if (baseType.qualifiedName === structSym.qualifiedName) {
+        if (baseType.sym.qualifiedName === structSym.qualifiedName) {
             this.reportError(baseTypeNode!, `Struct cannot inherit from itself.`);
             return;
         }
@@ -743,7 +743,7 @@ export class Elaborator {
             this.reportError(baseTypeNode!, `A forward-declaration cannot specify a base type.`);
             return;
         }
-        const baseSym = this.symbols.get(baseType.qualifiedName);
+        const baseSym = this.symbols.get(baseType.sym.qualifiedName);
         assert(baseSym?.kind === SymKind.Struct);
         structSym.base = baseSym;
         structSym.fields = [...baseSym?.fields ?? []];
@@ -1392,7 +1392,7 @@ export class Elaborator {
         if (!nameNode) {
             return;
         }
-        return this.resolveStructField(leftType.qualifiedName, nameNode);
+        return this.resolveStructField(leftType.sym.qualifiedName, nameNode);
     }
 
     private elabFieldExpr(node: SyntaxNode): Type {
