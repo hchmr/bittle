@@ -693,7 +693,7 @@ export class Elaborator {
         this.enterScope(node);
 
         if (baseTypeNode) {
-            this.elabStructBase(baseTypeNode, bodyNode, sym);
+            this.elabStructBase(baseTypeNode, sym);
         }
 
         if (bodyNode) {
@@ -711,7 +711,9 @@ export class Elaborator {
             if (sym.fields.length === 0) {
                 this.reportError(bodyNode, `Struct must have at least one field.`);
             }
+        }
 
+        if (sym.fields) {
             sym.isDefined = true;
         }
 
@@ -720,7 +722,6 @@ export class Elaborator {
 
     private elabStructBase(
         baseTypeNode: SyntaxNode,
-        bodyNode: SyntaxNode | Nullish,
         structSym: StructSym,
     ): StructSym | undefined {
         const baseType = this.typeEval(baseTypeNode);
@@ -737,10 +738,6 @@ export class Elaborator {
         }
         if (this.isUnsizedType(baseType)) {
             this.reportError(baseTypeNode!, `Base type has incomplete type.`);
-            return;
-        }
-        if (baseType && !bodyNode) {
-            this.reportError(baseTypeNode!, `A forward-declaration cannot specify a base type.`);
             return;
         }
         const baseSym = this.symbols.get(baseType.sym.qualifiedName);
