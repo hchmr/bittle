@@ -1,7 +1,5 @@
-import assert from 'assert';
 import { SyntaxNode } from '../syntax';
-import { stream } from '../utils/stream';
-import { mkErrorType, mkIntType, mkStructType, prettyType, Type, typeEq, TypeKind } from './type';
+import { mkIntType, mkStructType, prettyType, Type } from './type';
 
 export enum SymKind {
     Struct = 'Struct',
@@ -33,6 +31,7 @@ export type StructSym = SymBase & {
     kind: SymKind.Struct;
     base: StructSym | undefined;
     fields: StructFieldSym[] | undefined;
+    isDefined: boolean;
 };
 
 export type StructFieldSym = SymBase & {
@@ -77,9 +76,7 @@ export type Origin = {
 };
 
 export function isDefined(sym: Sym): boolean {
-    if (sym.kind === SymKind.Struct) {
-        return !!sym.fields;
-    } else if (sym.kind === SymKind.Func || sym.kind === SymKind.Global) {
+    if (sym.kind === SymKind.Struct || sym.kind === SymKind.Func || sym.kind === SymKind.Global) {
         return sym.isDefined;
     } else {
         return true;
@@ -146,185 +143,4 @@ export function prettyCallableSym(sym: FuncSym | StructSym): string {
 
 function prettyBase(sym: StructSym) {
     return sym.base ? `: ${sym.base.name}` : '';
-}
-
-//================================================================================
-//== Symbol merging
-
-type ErrorSignal = () => void;
-
-export function tryMergeSym(existing: Sym, sym: Sym): [sym: Sym, err: boolean] {
-    assert(existing.name === sym.name);
-    assert(existing.kind === sym.kind);
-
-    let err = false;
-    const onError = () => {
-        err = true;
-    };
-
-    const merged = (() => {
-        switch (existing.kind) {
-            case SymKind.Struct:
-                return tryMergeStructSym(existing, <StructSym>sym, onError);
-            case SymKind.Func:
-                return tryMergeFuncSym(existing, <FuncSym>sym, onError);
-            case SymKind.Global:
-                return tryMergeGlobalSym(existing, <GlobalSym>sym, onError);
-            case SymKind.Const:
-                return tryMergeConstSym(existing, <ConstSym>sym, onError);
-            case SymKind.StructField:
-                return tryMergeStructFieldSym(existing, <StructFieldSym>sym, onError);
-            case SymKind.FuncParam:
-                return tryMergeFuncParamSym(existing, <FuncParamSym>sym, onError);
-            case SymKind.Local:
-                return tryMergeLocalSym(existing, <LocalSym>sym, onError);
-            default: {
-                const unreachable: never = existing;
-                throw new Error(`Unexpected symbol kind: ${unreachable}`);
-            }
-        }
-    })();
-
-    return [merged, err];
-}
-
-export function tryMergeStructSym(existing: StructSym, sym: StructSym, onError: ErrorSignal): StructSym {
-    return {
-        kind: SymKind.Struct,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        base: existing.base || sym.base,
-        fields: tryMergeStructFields(existing, sym, onError),
-    };
-
-    function tryMergeStructFields(existing: StructSym, sym: StructSym, onError: ErrorSignal): StructFieldSym[] | undefined {
-        if (!existing.fields || !sym.fields) {
-            return existing.fields || sym.fields;
-        }
-
-        onError();
-        return stream(existing.fields).concat(sym.fields)
-            .groupBy(field => field.name)
-            .map(([_, fields]) => fields.reduce((a, b) => tryMergeStructFieldSym(a, b, () => { })))
-            .toArray();
-    }
-}
-
-export function tryMergeStructFieldSym(field1: StructFieldSym, field2: StructFieldSym, onError: ErrorSignal): StructFieldSym {
-    return {
-        kind: SymKind.StructField,
-        name: field1.name,
-        qualifiedName: field1.qualifiedName,
-        origins: mergeOrigins(field1.origins, field2.origins),
-        type: tryMergeTypes(field1.type, field2.type, onError),
-    };
-}
-
-export function tryMergeFuncSym(existing: FuncSym, sym: FuncSym, onError: ErrorSignal): FuncSym {
-    return {
-        kind: SymKind.Func,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        params: tryMergeFuncParams(existing.params, sym.params, onError),
-        returnType: tryMergeTypes(existing.returnType, sym.returnType, onError),
-        isVariadic: tryMergeIsVariadic(),
-        isDefined: tryMergeIsDefined(),
-    };
-
-    function tryMergeIsVariadic(): boolean {
-        if (existing.isVariadic !== sym.isVariadic) {
-            onError();
-        }
-        return existing.isVariadic || sym.isVariadic;
-    }
-
-    function tryMergeIsDefined(): boolean {
-        if (existing.isDefined && sym.isDefined) {
-            onError();
-        }
-        return existing.isDefined || sym.isDefined;
-    }
-}
-
-export function tryMergeFuncParams(params1: FuncParamSym[], params2: FuncParamSym[], onError: ErrorSignal): FuncParamSym[] {
-    if (params1.length !== params2.length) {
-        onError();
-    }
-    return stream(params1).zipLongest(params2)
-        .map(([p1, p2]) => p1 && p2 ? tryMergeFuncParamSym(p1, p2, onError) : p1 || p2)
-        .toArray();
-}
-
-export function tryMergeFuncParamSym(param1: FuncParamSym, param2: FuncParamSym, onError: ErrorSignal): FuncParamSym {
-    return {
-        kind: SymKind.FuncParam,
-        name: param1.name === param2.name ? param1.name : '{unknown}',
-        qualifiedName: param1.qualifiedName,
-        origins: mergeOrigins(param1.origins, param2.origins),
-        type: tryMergeTypes(param1.type, param2.type, onError),
-    };
-}
-
-export function tryMergeGlobalSym(existing: GlobalSym, sym: GlobalSym, onError: ErrorSignal): GlobalSym {
-    if (existing.isDefined && sym.isDefined) {
-        onError();
-    }
-    return {
-        kind: SymKind.Global,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        type: tryMergeTypes(existing.type, sym.type, onError),
-        isDefined: existing.isDefined || sym.isDefined,
-    };
-}
-
-export function tryMergeConstSym(existing: ConstSym, sym: ConstSym, onError: ErrorSignal): ConstSym {
-    return {
-        kind: SymKind.Const,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        value: mergeValue(existing.value, sym.value),
-    };
-
-    function mergeValue(x1: number | undefined, x2: number | undefined): number | undefined {
-        if (x1 !== undefined && x2 !== undefined && x1 !== x2) {
-            onError();
-        }
-        x1 ??= x2;
-        x2 ??= x1;
-        return x1 === x2 ? x1 : undefined;
-    }
-}
-
-export function tryMergeLocalSym(existing: LocalSym, sym: LocalSym, onError: ErrorSignal): LocalSym {
-    onError();
-    return {
-        kind: SymKind.Local,
-        name: existing.name,
-        qualifiedName: existing.qualifiedName,
-        origins: mergeOrigins(existing.origins, sym.origins),
-        type: tryMergeTypes(existing.type, sym.type, onError),
-    };
-}
-
-function tryMergeTypes(t1: Type, t2: Type, onError: ErrorSignal): Type {
-    if (t1.kind === TypeKind.Err) {
-        return t2;
-    } else if (t2.kind === TypeKind.Err) {
-        return t1;
-    }
-    if (!typeEq(t1, t2)) {
-        onError();
-        return mkErrorType();
-    }
-    return t1;
-}
-
-// Should be good enough for now. It's only structs that add the same symbol twice.
-function mergeOrigins(origins1: Origin[], origins2: Origin[]): Origin[] {
-    return origins1 === origins2 ? origins1 : [...origins1, ...origins2];
 }

@@ -28,13 +28,13 @@ import {
     FuncParamSym,
     FuncSym,
     GlobalSym,
+    isDefined,
     LocalSym,
     Origin,
     StructFieldSym,
     StructSym,
     Sym,
     SymKind,
-    tryMergeSym,
 } from './sym';
 import {
     isScalarType,
@@ -166,35 +166,6 @@ export class Elaborator {
         return this.symbols.get(qname);
     }
 
-    private addSymbol<T extends Sym>(nameNode: SyntaxNode | Nullish, sym: T): T {
-        if (!sym.name)
-            return sym;
-
-        const origin = nameNode ?? sym.origins[0].node;
-
-        const existing = this.lookupExistingSymbol(sym.name);
-        if (!existing) {
-            this.scope.add(sym.name, sym.qualifiedName);
-            this.symbols.set(sym.qualifiedName, sym);
-        } else if (sym.kind === existing.kind) {
-            const [merged, mergeErr] = tryMergeSym(existing, sym);
-            if (mergeErr) {
-                this.reportError(origin, `Conflicting declaration of '${sym.name}'.`);
-            }
-            assert(existing.qualifiedName === merged.qualifiedName);
-            this.symbols.set(merged.qualifiedName, merged);
-            sym = merged as T;
-        } else {
-            this.reportError(origin, `Another symbol with the same name already exists.`);
-        }
-
-        if (nameNode) {
-            this.recordNameIntroduction(sym, nameNode);
-        }
-
-        return sym;
-    }
-
     private resolveName(nameNode: SyntaxNode): Sym | undefined {
         const name = nameNode.text;
         const sym = this.lookupSymbol(name);
@@ -234,6 +205,270 @@ export class Elaborator {
         const references = this.references.get(sym.qualifiedName) ?? [];
         references.push({ file: this.path, nameNode: nameNode });
         this.references.set(sym.qualifiedName, references);
+    }
+
+    private addSym(sym: Sym) {
+        this.scope.add(sym.name, sym.qualifiedName);
+        this.symbols.set(sym.qualifiedName, sym);
+        const nameNode = sym.origins[0].nameNode;
+        if (nameNode) {
+            this.recordNameIntroduction(sym, nameNode);
+        }
+    }
+
+    private declareStructSym(declNode: SyntaxNode, nameNode: SyntaxNode | Nullish, isDefinition: boolean): StructSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.Struct,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                base: undefined,
+                fields: undefined,
+                isDefined: false,
+            };
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.Struct) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else if (isDefined(existing) && isDefinition) {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            } else {
+                existing.origins.push(this.createOrigin(declNode, nameNode, !isDefinition));
+                return existing;
+            }
+        }
+        const sym: StructSym = {
+            kind: SymKind.Struct,
+            name: nameNode.text,
+            qualifiedName: 'struct:' + nameNode.text,
+            origins: [this.createOrigin(declNode, nameNode, !isDefinition)],
+            base: undefined,
+            fields: undefined,
+            isDefined: false,
+        };
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
+    private defineStructFieldSym(declNode: SyntaxNode, nameNode: SyntaxNode, type: Type, structSym: StructSym): StructFieldSym {
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.StructField) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            }
+        }
+        const sym: StructFieldSym = {
+            kind: SymKind.StructField,
+            name: nameNode.text,
+            qualifiedName: `${structSym.name}.${nameNode.text}`,
+            origins: [this.createOrigin(declNode, nameNode)],
+            type,
+        };
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
+    private declareFuncSym(declNode: SyntaxNode, nameNode: SyntaxNode | Nullish, params: FuncParamSym[], returnType: Type, isVariadic: boolean, isDefinition: boolean): FuncSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.Func,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                params,
+                returnType,
+                isVariadic,
+                isDefined: false,
+            };
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.Func) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else if (!paramsLooseEq(existing.params, params) || !typeLooseEq(existing.returnType, returnType) || existing.isVariadic !== isVariadic) {
+                this.reportError(nameNode, `Redefinition of '${existing.name}' with different signature.`);
+            } else if (isDefined(existing) && isDefinition) {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            } else {
+                existing.origins.push(this.createOrigin(declNode, nameNode, !isDefinition));
+                return existing;
+            }
+        }
+        const sym: FuncSym = {
+            kind: SymKind.Func,
+            name: nameNode.text,
+            qualifiedName: 'func:' + nameNode.text,
+            origins: [this.createOrigin(declNode, nameNode, !isDefinition)],
+            params,
+            returnType,
+            isVariadic,
+            isDefined: false,
+        };
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
+    private defineFuncParamSym(declNode: SyntaxNode, nameNode: SyntaxNode | Nullish, funcName: string, paramIndex: number, type: Type): FuncParamSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.FuncParam,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                type,
+            };
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.FuncParam) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            }
+        }
+
+        const sym: FuncParamSym = {
+            kind: SymKind.FuncParam,
+            name: nameNode.text,
+            qualifiedName: `func:${funcName}.param:${paramIndex}`,
+            origins: [this.createOrigin(declNode, nameNode)],
+            type,
+        };
+
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
+    private declareGlobalSym(declNode: SyntaxNode, nameNode: SyntaxNode | Nullish, type: Type, isDefinition: boolean): GlobalSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.Global,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                isDefined: false,
+                type,
+            };
+        }
+
+        if (!nameNode) {
+            return {
+                kind: SymKind.Global,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                isDefined: false,
+                type,
+            };
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.Global) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else if (!typeLooseEq(existing.type, type)) {
+                this.reportError(nameNode, `Redefinition of '${existing.name}' with different type.`);
+            } else if (isDefined(existing) && isDefinition) {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            } else {
+                existing.origins.push(this.createOrigin(declNode, nameNode, !isDefinition));
+                return existing;
+            }
+        }
+        const sym: GlobalSym = {
+            kind: SymKind.Global,
+            name: nameNode.text,
+            qualifiedName: 'global:' + nameNode.text,
+            origins: [this.createOrigin(declNode, nameNode, !isDefinition)],
+            isDefined: false,
+            type,
+        };
+
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
+    private defineConstSym(declNode: SyntaxNode, nameNode: SyntaxNode | Nullish, value: number | undefined): ConstSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.Const,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                value: undefined,
+            };
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.Const) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            }
+        }
+        const sym: ConstSym = {
+            kind: SymKind.Const,
+            name: nameNode.text,
+            qualifiedName: 'const:' + nameNode.text,
+            origins: [this.createOrigin(declNode, nameNode)],
+            value,
+        };
+
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
+    private defineLocalSym(declNode: SyntaxNode, nameNode: SyntaxNode | Nullish, type: Type): LocalSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.Local,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                type,
+            };
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.Local) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            }
+        }
+        const sym: LocalSym = {
+            kind: SymKind.Local,
+            name: nameNode.text,
+            qualifiedName: `${this.currentFunc!.name}.local:${this.nextLocalIndex++}`,
+            origins: [this.createOrigin(declNode, nameNode)],
+            type,
+        };
+
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
     }
 
     //==============================================================================
@@ -454,17 +689,8 @@ export class Elaborator {
         const baseTypeNode = node.childForFieldName('base');
         const bodyNode = node.childForFieldName('body');
 
-        const name = nameNode?.text ?? '';
-        const sym: StructSym = {
-            kind: SymKind.Struct,
-            name,
-            qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode, !bodyNode)],
-            base: undefined,
-            fields: undefined,
-        };
-
-        this.addSymbol<StructSym>(nameNode, { ...sym });
+        const sym = this.declareStructSym(node, nameNode, !!bodyNode);
+        this.enterScope(node);
 
         if (baseTypeNode) {
             this.elabStructBase(baseTypeNode, bodyNode, sym);
@@ -473,21 +699,23 @@ export class Elaborator {
         if (bodyNode) {
             sym.fields ??= [];
 
-            this.enterScope(bodyNode);
-
             // Add base fields to the scope
             for (const field of sym.fields ?? []) {
-                this.addSymbol(field.origins[0].nameNode, field);
+                this.addSym(field);
             }
 
             for (const fieldNode of stream(bodyNode.children).filter(n => n.type === 'struct_member')) {
                 this.elabStructField(fieldNode, sym);
             }
 
-            this.exitScope();
+            if (sym.fields.length === 0) {
+                this.reportError(bodyNode, `Struct must have at least one field.`);
+            }
+
+            sym.isDefined = true;
         }
 
-        this.addSymbol(nameNode, sym);
+        this.exitScope();
     }
 
     private elabStructBase(
@@ -531,14 +759,7 @@ export class Elaborator {
         if (!fieldName)
             return;
 
-        const fieldSym: StructFieldSym = {
-            kind: SymKind.StructField,
-            name: fieldName,
-            qualifiedName: `${structSym.name}.${fieldName}`,
-            origins: [this.createOrigin(fieldNode, nameNode)],
-            type: fieldType,
-        };
-        this.addSymbol(nameNode, fieldSym);
+        const fieldSym = this.defineStructFieldSym(fieldNode, nameNode, fieldType, structSym);
         structSym.fields!.push(fieldSym);
     }
 
@@ -557,17 +778,8 @@ export class Elaborator {
         const nameNode = memberNode.childForFieldName('name');
         const valueNode = memberNode.childForFieldName('value');
 
-        const name = nameNode?.text ?? '';
         const value = valueNode ? this.constEval(valueNode) : nextValue;
-
-        this.addSymbol<ConstSym>(nameNode, {
-            kind: SymKind.Const,
-            name,
-            qualifiedName: name,
-            origins: [this.createOrigin(memberNode, nameNode)],
-            value,
-        });
-
+        this.defineConstSym(memberNode, nameNode, value);
         return (value ?? nextValue) + 1;
     }
 
@@ -576,11 +788,15 @@ export class Elaborator {
         const paramNodes = node.childrenForFieldName('params');
         const bodyNode = node.childForFieldName('body');
 
+        this.enterScope(node);
+
         const name = nameNode?.text ?? '';
         const params = stream(paramNodes)
             .filter(n => n.type === 'param_decl')
             .map<FuncParamSym>((paramNode, index) => this.elabFuncParam(paramNode, name, index))
             .toArray();
+
+        this.exitScope();
 
         const isVariadic = !!paramNodes.some(child => child.type === 'variadic_param');
 
@@ -591,25 +807,15 @@ export class Elaborator {
             this.reportError(returnTypeNode!, `Function return type must be void or of scalar type.`);
         }
 
-        const unmergedSym: FuncSym = {
-            kind: SymKind.Func,
-            name,
-            qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode, !bodyNode)],
-            params,
-            returnType,
-            isVariadic,
-            isDefined: !!bodyNode,
-        };
-        const mergedSym = this.addSymbol(nameNode, unmergedSym);
+        const sym = this.declareFuncSym(node, nameNode, params, returnType, isVariadic, !!bodyNode);
 
         this.enterScope(node);
 
         for (const param of params) {
-            this.addSymbol(param.origins[0].nameNode, param);
+            this.addSym(param);
         }
 
-        this.currentFunc = mergedSym.kind === SymKind.Func ? mergedSym : unmergedSym;
+        this.currentFunc = sym;
         this.nextLocalIndex = 0;
 
         if (bodyNode) {
@@ -620,26 +826,21 @@ export class Elaborator {
         this.nextLocalIndex = undefined!;
 
         this.exitScope();
+
+        sym.isDefined = !!bodyNode;
     }
 
     private elabFuncParam(paramNode: SyntaxNode, funcName: string, paramIndex: number): FuncParamSym {
         const nameNode = paramNode.childForFieldName('name');
         const typeNode = paramNode.childForFieldName('type');
 
-        const name = nameNode?.text ?? '';
-
         const type = this.typeEval(typeNode);
         if (isNonScalarType(type)) {
             this.reportError(paramNode, `Function parameter must be of scalar type.`);
         }
 
-        return {
-            kind: SymKind.FuncParam,
-            name,
-            qualifiedName: `${funcName}.${paramIndex}`,
-            origins: [this.createOrigin(paramNode, nameNode)],
-            type,
-        };
+        // TODO: funcName may be empty
+        return this.defineFuncParamSym(paramNode, nameNode, funcName, paramIndex, type);
     }
 
     private elabGlobal(node: SyntaxNode) {
@@ -648,21 +849,14 @@ export class Elaborator {
         const typeNode = node.childForFieldName('type');
 
         const isExtern = !!externNode;
-        const name = nameNode?.text ?? '';
 
         const type = this.typeEval(typeNode);
         if (this.isUnsizedType(type)) {
             this.reportError(node, `Variable must have a known size.`);
         }
 
-        this.addSymbol<GlobalSym>(nameNode, {
-            kind: SymKind.Global,
-            name,
-            qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode, isExtern)],
-            isDefined: !isExtern,
-            type,
-        });
+        const sym = this.declareGlobalSym(node, nameNode, type, !isExtern);
+        sym.isDefined = !isExtern;
     }
 
     private elabConst(node: SyntaxNode) {
@@ -672,13 +866,7 @@ export class Elaborator {
         const name = nameNode?.text ?? '';
         const value = this.constEval(valueNode);
 
-        this.addSymbol<ConstSym>(nameNode, {
-            kind: SymKind.Const,
-            name,
-            qualifiedName: name,
-            origins: [this.createOrigin(node, nameNode)],
-            value,
-        });
+        this.defineConstSym(node, nameNode, value);
     }
 
     //==============================================================================
@@ -764,15 +952,7 @@ export class Elaborator {
             this.reportError(node, `Variable must have a known size.`);
         }
 
-        const qname = `${this.currentFunc!.name}.x${this.nextLocalIndex++}`;
-
-        this.addSymbol<LocalSym>(nameNode, {
-            kind: SymKind.Local,
-            name,
-            qualifiedName: qname,
-            origins: [this.createOrigin(node, nameNode)],
-            type,
-        });
+        this.defineLocalSym(node, nameNode, type);
     }
 
     private elabIfStmt(node: SyntaxNode) {
@@ -1398,4 +1578,12 @@ function isInvalidReturnType(type: Type): boolean {
 function isIntegerLiteralExpr(node: SyntaxNode): boolean {
     return node.type === ExprNodeTypes.LiteralExpr
         && node.firstChild!.type === LiteralNodeTypes.Number;
+}
+
+function typeLooseEq(t1: Type, t2: Type): boolean {
+    return t1.kind === TypeKind.Err || t2.kind === TypeKind.Err || typeEq(t1, t2);
+}
+
+function paramsLooseEq(p1: FuncParamSym[], p2: FuncParamSym[]): boolean {
+    return stream(p1).zipLongest(p2).every(([a, b]) => a && b && typeLooseEq(a.type, b.type));
 }
