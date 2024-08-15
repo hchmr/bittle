@@ -1,4 +1,5 @@
 import { SyntaxNode } from '../syntax';
+import { AstNodeTypes } from './generated';
 import { TokenKind, tokenKinds } from './token';
 
 export type ValuesOf<T extends Record<string, string>> = T[keyof T];
@@ -8,95 +9,66 @@ export type TypeNodeType = ValuesOf<typeof TypeNodeTypes>;
 export type StmtNodeType = ValuesOf<typeof StmtNodeTypes>;
 export type ExprNodeType = ValuesOf<typeof ExprNodeTypes>;
 export type LiteralNodeType = ValuesOf<typeof LiteralNodeTypes>;
-export type ErrorNodeType = typeof NodeTypes.Error;
+export type ErrorNodeType = 'Error';
 export type TokenNodeType = ValuesOf<typeof TokenNodeTypes>;
 export type CompositeNodeType = ValuesOf<typeof CompositeNodeTypes>;
-export type NodeType = ValuesOf<typeof NodeTypes>;
+export type NodeType = ValuesOf<typeof NodeTypes> | ErrorNodeType;
 
 export const TopLevelNodeTypes = {
-    Include: 'include_decl',
-    Enum: 'enum_decl',
-    Struct: 'struct_decl',
-    Func: 'func_decl',
-    Global: 'global_decl',
-    Const: 'const_decl',
+    Include: AstNodeTypes.IncludeDecl,
+    Enum: AstNodeTypes.EnumDecl,
+    Struct: AstNodeTypes.StructDecl,
+    Func: AstNodeTypes.FuncDecl,
+    Global: AstNodeTypes.GlobalDecl,
+    Const: AstNodeTypes.ConstDecl,
 } as const;
 
 export const TypeNodeTypes = {
-    GroupedType: 'grouped_type',
-    NameType: 'name_type',
-    PointerType: 'pointer_type',
-    ArrayType: 'array_type',
-    NeverType: 'never_type',
+    GroupedType: AstNodeTypes.GroupedType,
+    NameType: AstNodeTypes.NameType,
+    PointerType: AstNodeTypes.PointerType,
+    ArrayType: AstNodeTypes.ArrayType,
+    NeverType: AstNodeTypes.NeverType,
 } as const;
 
 export const StmtNodeTypes = {
-    BlockStmt: 'block_stmt',
-    LocalDecl: 'local_decl',
-    IfStmt: 'if_stmt',
-    WhileStmt: 'while_stmt',
-    ForStmt: 'for_stmt',
-    ReturnStmt: 'return_stmt',
-    BreakStmt: 'break_stmt',
-    ContinueStmt: 'continue_stmt',
-    ExprStmt: 'expr_stmt',
+    BlockStmt: AstNodeTypes.BlockStmt,
+    LocalDecl: AstNodeTypes.LocalDecl,
+    IfStmt: AstNodeTypes.IfStmt,
+    WhileStmt: AstNodeTypes.WhileStmt,
+    ForStmt: AstNodeTypes.ForStmt,
+    ReturnStmt: AstNodeTypes.ReturnStmt,
+    BreakStmt: AstNodeTypes.BreakStmt,
+    ContinueStmt: AstNodeTypes.ContinueStmt,
+    ExprStmt: AstNodeTypes.ExprStmt,
 } as const;
 
 export const ExprNodeTypes = {
-    GroupedExpr: 'grouped_expr',
-    NameExpr: 'name_expr',
-    SizeofExpr: 'sizeof_expr',
-    LiteralExpr: 'literal_expr',
-    ArrayExpr: 'array_expr',
-    BinaryExpr: 'binary_expr',
-    TernaryExpr: 'ternary_expr',
-    UnaryExpr: 'unary_expr',
-    CallExpr: 'call_expr',
-    IndexExpr: 'index_expr',
-    FieldExpr: 'field_expr',
-    CastExpr: 'cast_expr',
+    GroupedExpr: AstNodeTypes.GroupedExpr,
+    NameExpr: AstNodeTypes.NameExpr,
+    SizeofExpr: AstNodeTypes.SizeofExpr,
+    LiteralExpr: AstNodeTypes.LiteralExpr,
+    ArrayExpr: AstNodeTypes.ArrayExpr,
+    BinaryExpr: AstNodeTypes.BinaryExpr,
+    TernaryExpr: AstNodeTypes.TernaryExpr,
+    UnaryExpr: AstNodeTypes.UnaryExpr,
+    CallExpr: AstNodeTypes.CallExpr,
+    IndexExpr: AstNodeTypes.IndexExpr,
+    FieldExpr: AstNodeTypes.FieldExpr,
+    CastExpr: AstNodeTypes.CastExpr,
 } as const;
 
 export const LiteralNodeTypes = {
-    Bool: 'bool_literal',
-    Number: 'number_literal',
-    Char: 'char_literal',
-    String: 'string_literal',
-    Null: 'null_literal',
+    Bool: AstNodeTypes.BoolLiteral,
+    Number: AstNodeTypes.IntLiteral,
+    Char: AstNodeTypes.CharLiteral,
+    String: AstNodeTypes.StringLiteral,
+    Null: AstNodeTypes.NullLiteral,
 } as const;
 
 export const CompositeNodeTypes = {
-    // Root
-    Root: 'root',
-    // Top-level declarations
-    IncludeDecl: TopLevelNodeTypes.Include,
-    EnumDecl: TopLevelNodeTypes.Enum,
-    EnumBody: 'enum_body',
-    EnumMember: 'enum_member',
-    StructDecl: TopLevelNodeTypes.Struct,
-    StructBody: 'struct_body',
-    StructMember: 'struct_member',
-    FuncDecl: TopLevelNodeTypes.Func,
-    FuncParam: 'param_decl',
-    VariadicParam: 'variadic_param',
-    GlobalDecl: TopLevelNodeTypes.Global,
-    ConstDecl: TopLevelNodeTypes.Const,
-    // Statements
-    ...StmtNodeTypes,
-    // Expressions
-    ...ExprNodeTypes,
-    CallArgList: 'call_arg_list',
-    CallArg: 'call_arg',
-    // Types
-    ...TypeNodeTypes,
-    // Literals
-    IntLiteral: LiteralNodeTypes.Number,
-    CharLiteral: LiteralNodeTypes.Char,
-    StringLiteral: LiteralNodeTypes.String,
-    BoolLiteral: LiteralNodeTypes.Bool,
-    NullLiteral: LiteralNodeTypes.Null,
-    // Error
-    Error: 'error',
+    ...AstNodeTypes,
+    'Error': 'Error',
 } as const;
 
 export const TokenNodeTypes: Record<TokenKind, TokenKind>
@@ -108,19 +80,6 @@ export const NodeTypes = Object.freeze({
     ...CompositeNodeTypes,
     ...TokenNodeTypes,
 });
-
-// TODO: Temporary measure to match the tree-sitter grammar
-export const NamedTokenKinds: Partial<Record<TokenKind, NodeType>>
- = Object.freeze({
-     'true': LiteralNodeTypes.Bool,
-     'false': LiteralNodeTypes.Bool,
-     'char_literal': LiteralNodeTypes.Char,
-     'identifier': TokenNodeTypes['identifier'],
-     'null': LiteralNodeTypes.Null,
-     'number_literal': LiteralNodeTypes.Number,
-     'string_literal': LiteralNodeTypes.String,
-     '...': CompositeNodeTypes.VariadicParam,
- });
 
 export function isTopLevelNode(node: SyntaxNode): boolean {
     return Object.values(<Record<string, string>>TopLevelNodeTypes).includes(node.type);

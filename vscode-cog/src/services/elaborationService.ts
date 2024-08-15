@@ -21,7 +21,7 @@ export class ElaborationService {
         const elaborationDiags = this.elaborateFile(path).diagnostics;
         const flowAnalysisDiags = analyzeControlFlow(
             path,
-            this.parsingService.parse(path),
+            this.parsingService.parseAsAst(path),
             this.elaborateFile(path),
         );
         return [...elaborationDiags, ...flowAnalysisDiags];

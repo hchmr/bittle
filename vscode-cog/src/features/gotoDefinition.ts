@@ -6,7 +6,7 @@ import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
 import { Point, SyntaxNode } from '../syntax';
-import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
+import { isExprNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
 import { fromVscPosition, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
@@ -29,7 +29,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
         const position = fromVscPosition(vscPosition);
         return stream(getNodesAtPosition(tree, position))
             .filter(node => node.type === 'string_literal'
-            && node.parent?.type === 'include_decl')
+            && node.parent?.type === NodeTypes.IncludeDecl)
             .filterMap(node => {
                 const stringValue = JSON.parse(node.text);
                 const includePath = this.resolveInclude(document.uri.fsPath, stringValue);

@@ -1,5 +1,6 @@
 import { parser } from '../parser';
 import { Error, Tree } from '../syntax';
+import { RootNode } from '../syntax/generated';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { VirtualFileSystem } from '../vfs';
 
@@ -10,6 +11,7 @@ interface ParseResult {
 
 export interface ParsingService {
     parse(path: string): Tree;
+    parseAsAst(path: string): RootNode;
     parseErrors(path: string): Error[];
 }
 
@@ -21,6 +23,10 @@ export class ParsingServiceImpl implements ParsingService {
 
     parse(path: string): Tree {
         return this.runParser(path).tree;
+    }
+
+    parseAsAst(path: string): RootNode {
+        return new RootNode(this.parse(path).rootNode);
     }
 
     parseErrors(path: string): Error[] {

@@ -256,18 +256,20 @@ export class CompositeNodeImpl extends SyntaxNodeImpl {
     }
 }
 
-export class TokenNodeImpl extends SyntaxNodeImpl {
+export class TokenNodeImpl<Kind extends TokenKind> extends SyntaxNodeImpl {
     private _token: Token;
 
     constructor(
         tree: Tree,
-        token: Token,
-        overrideType?: string,
+        public token: Token<Kind>,
     ) {
-        const type = overrideType ?? token.kind;
-        const isNamed = !!overrideType;
-        super(type, isNamed, token.startPosition, token.startIndex, tree);
+        const type = token.kind;
+        super(type, false, token.startPosition, token.startIndex, tree);
         this._token = token;
+    }
+
+    override get type(): Kind {
+        return super.type as Kind;
     }
 
     override get endPosition(): Point {
@@ -283,7 +285,7 @@ export class TokenNodeImpl extends SyntaxNodeImpl {
         return this.startIndex + this._token.lexeme.length;
     }
 
-    override pretty(level: number): string {
+    override pretty(level: number = 0): string {
         let text = '';
         text += indent(level);
         text += JSON.stringify(this.text);

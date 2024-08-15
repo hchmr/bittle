@@ -6,8 +6,12 @@
     "publisher": "anon",
     "scripts": {
         "vscode:prepublish": "npm run build",
-        "build": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
+        "source-gen": "ts-node ./src/prebuild.ts",
+        "source-gen:watch": "chokidar --initial 'src/**/*.ts' '!src/syntax/generated.ts' -c 'npm run source-gen'",
+        "tsc:build": "tsc -p ./",
+        "tsc:watch": "tsc -watch -p ./",
+        "build": "npm run source-gen && npm run tsc:build",
+        "watch": "concurrently \"npm run source-gen:watch\" \"npm run tsc:watch\"",
         "test": "vitest",
         "lint": "eslint . --max-warnings 0"
     },
@@ -47,6 +51,8 @@
         "@types/eslint__js": "^8.42.3",
         "@types/node": "^20.14.10",
         "@types/vscode": "^1.91.0",
+        "chokidar-cli": "^3.0.0",
+        "concurrently": "^8.2.2",
         "eslint": "^8.57.0",
         "eslint-plugin-only-warn": "^1.1.0",
         "fuzzysort": "3.0.2",

@@ -1,7 +1,7 @@
 import { Point } from './tree.js';
 
-export type Token = {
-    kind: TokenKind;
+export interface Token<Kind extends TokenKind = TokenKind> {
+    kind: Kind;
     lexeme: string;
     startPosition: Point;
     startIndex: number;

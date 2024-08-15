@@ -1,24 +1,13 @@
-import { SyntaxNode, Tree } from '../syntax';
-import {
-    ErrorNodeType,
-    ExprNodeType,
-    ExprNodeTypes,
-    isExprNode,
-    isStmtNode,
-    isTopLevelNode,
-    NodeTypes,
-    StmtNodeType,
-    StmtNodeTypes,
-    TopLevelNodeType,
-    TopLevelNodeTypes,
-} from '../syntax/nodeTypes';
-import { Nullish } from '../utils';
-import { stream } from '../utils/stream';
+import { SyntaxNode } from '../syntax';
+import { AstNode } from '../syntax/ast';
+import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
+import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
+import { Nullish, PointRange } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
 import { mkVoidType, Type, TypeKind } from './type';
 
-export function analyzeControlFlow(path: string, tree: Tree, elaboratorResult: ElaboratorResult) {
-    return new ControlFlowAnalyzer(path, elaboratorResult).analyze(tree);
+export function analyzeControlFlow(path: string, rootNode: RootNode, elaboratorResult: ElaboratorResult) {
+    return new ControlFlowAnalyzer(path, elaboratorResult).analyze(rootNode);
 }
 
 enum ExitLevel {
@@ -35,7 +24,7 @@ type ExecutionState = {
 class ControlFlowAnalyzer {
     private nodeTypeMap: WeakMap<SyntaxNode, Type>;
     private diags: ElaborationDiag[] = [];
-    private currentLoop: SyntaxNode | null = null;
+    private currentLoop: StmtNode | null = null;
 
     constructor(
         private path: string,
@@ -44,29 +33,27 @@ class ControlFlowAnalyzer {
         this.nodeTypeMap = elaboratorResult.nodeTypeMap;
     }
 
-    analyze(tree: Tree) {
-        for (const node of stream(tree.rootNode.children).filter(node => isTopLevelNode(node))) {
+    analyze(rootNode: RootNode) {
+        for (const node of rootNode.declNodes) {
             this.analyzeTopLevelDecl(node);
         }
         return this.diags;
     }
 
-    private analyzeTopLevelDecl(node: SyntaxNode) {
-        const nodeType = node.type as TopLevelNodeType | ErrorNodeType;
-        switch (nodeType) {
-            case TopLevelNodeTypes.Func:
-                return this.analyzeFunc(node);
+    private analyzeTopLevelDecl(node: DeclNode) {
+        if (node instanceof FuncDeclNode) {
+            this.analyzeFunc(node);
         }
     }
 
-    private analyzeFunc(node: SyntaxNode) {
-        const bodyNode = node.childForFieldName('body');
-        const returnTypeNode = node.childForFieldName('return_type');
+    private analyzeFunc(node: FuncDeclNode) {
+        const bodyNode = node.body;
+        const returnTypeNode = node.returnType;
         if (!bodyNode) {
             return;
         }
 
-        const returnType: Type = returnTypeNode ? this.nodeTypeMap.get(returnTypeNode)! : mkVoidType();
+        const returnType: Type = returnTypeNode ? this.getType(returnTypeNode)! : mkVoidType();
 
         const initialState: ExecutionState = {
             exitLevel: 0,
@@ -79,41 +66,35 @@ class ControlFlowAnalyzer {
         }
     }
 
-    private analyzeStmt(node: SyntaxNode | Nullish, state: ExecutionState): ExecutionState {
+    private analyzeStmt(node: StmtNode | Nullish, state: ExecutionState): ExecutionState {
         if (!node) {
             return state;
         }
-        const nodeType = node.type as StmtNodeType | ErrorNodeType;
-        switch (nodeType) {
-            case StmtNodeTypes.BlockStmt:
-                return this.analyzeBlockStmt(node, state);
-            case StmtNodeTypes.LocalDecl:
-                return this.analyzeLocalDecl(node, state);
-            case StmtNodeTypes.IfStmt:
-                return this.analyzeIfStmt(node, state);
-            case StmtNodeTypes.WhileStmt:
-                return this.analyzeWhileStmt(node, state);
-            case StmtNodeTypes.ForStmt:
-                return this.analyzeForStmt(node, state);
-            case StmtNodeTypes.ReturnStmt:
-                return this.analyzeReturnStmt(node, state);
-            case StmtNodeTypes.BreakStmt:
-            case StmtNodeTypes.ContinueStmt:
-                return this.analyzeJumpStmt(node, state);
-            case StmtNodeTypes.ExprStmt:
-                return this.analyzeExprStmt(node, state);
-            case NodeTypes.Error:
-                return state;
-            default: {
-                const unreachable: never = nodeType;
-                throw new Error(`Unexpected node type: ${unreachable}`);
-            }
+        if (node instanceof BlockStmtNode) {
+            return this.analyzeBlockStmt(node, state);
+        } else if (node instanceof LocalDeclNode) {
+            return this.analyzeLocalDecl(node, state);
+        } else if (node instanceof IfStmtNode) {
+            return this.analyzeIfStmt(node, state);
+        } else if (node instanceof WhileStmtNode) {
+            return this.analyzeWhileStmt(node, state);
+        } else if (node instanceof ForStmtNode) {
+            return this.analyzeForStmt(node, state);
+        } else if (node instanceof ReturnStmtNode) {
+            return this.analyzeReturnStmt(node, state);
+        } else if (node instanceof BreakStmtNode || node instanceof ContinueStmtNode) {
+            return this.analyzeJumpStmt(node, state);
+        } else if (node instanceof ExprStmtNode) {
+            return this.analyzeExprStmt(node, state);
+        } else {
+            const unreachable: never = node;
+            throw new Error(`Unexpected node type: ${unreachable}`);
         }
     }
 
-    private analyzeBlockStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
+    private analyzeBlockStmt(node: BlockStmtNode, state: ExecutionState): ExecutionState {
         const unreachableStatements = [];
-        for (const stmtNode of node.namedChildren.filter(n => isStmtNode(n))) {
+        for (const stmtNode of node.stmtNodes) {
             if (state.exitLevel !== ExitLevel.None) {
                 unreachableStatements.push(stmtNode);
             } else {
@@ -126,18 +107,18 @@ class ControlFlowAnalyzer {
         return state;
     }
 
-    private analyzeLocalDecl(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const valueNode = node.childForFieldName('value');
+    private analyzeLocalDecl(node: LocalDeclNode, state: ExecutionState): ExecutionState {
+        const valueNode = node.value;
         if (valueNode) {
             state = this.analyzeExpr(valueNode, state);
         }
         return state;
     }
 
-    private analyzeIfStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const condNode = node.childForFieldName('cond');
-        const thenNode = node.childForFieldName('then');
-        const elseNode = node.childForFieldName('else');
+    private analyzeIfStmt(node: IfStmtNode, state: ExecutionState): ExecutionState {
+        const condNode = node.cond;
+        const thenNode = node.then;
+        const elseNode = node.else;
 
         state = this.analyzeExpr(condNode, state);
         if (isTriviallyTrue(condNode)) {
@@ -153,9 +134,9 @@ class ControlFlowAnalyzer {
         }
     }
 
-    private analyzeWhileStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const condNode = node.childForFieldName('cond');
-        const bodyNode = node.childForFieldName('body');
+    private analyzeWhileStmt(node: WhileStmtNode, state: ExecutionState): ExecutionState {
+        const condNode = node.cond;
+        const bodyNode = node.body;
 
         state = this.analyzeExpr(condNode, state);
 
@@ -174,11 +155,11 @@ class ControlFlowAnalyzer {
         return state;
     }
 
-    private analyzeForStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const initNode = node.childForFieldName('init');
-        const condNode = node.childForFieldName('cond');
-        const stepNode = node.childForFieldName('step');
-        const bodyNode = node.childForFieldName('body');
+    private analyzeForStmt(node: ForStmtNode, state: ExecutionState): ExecutionState {
+        const initNode = node.init;
+        const condNode = node.cond;
+        const stepNode = node.step;
+        const bodyNode = node.body;
 
         const outerLoop = this.currentLoop;
         this.currentLoop = node;
@@ -192,8 +173,8 @@ class ControlFlowAnalyzer {
         return state;
     }
 
-    private analyzeReturnStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const valueNode = node.childForFieldName('value');
+    private analyzeReturnStmt(node: ReturnStmtNode, state: ExecutionState): ExecutionState {
+        const valueNode = node.value;
         if (valueNode) {
             state = this.analyzeExpr(valueNode, state);
         }
@@ -202,9 +183,9 @@ class ControlFlowAnalyzer {
         };
     }
 
-    private analyzeJumpStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
+    private analyzeJumpStmt(node: BreakStmtNode | ContinueStmtNode, state: ExecutionState): ExecutionState {
         if (!this.currentLoop) {
-            const keyword = node.type === StmtNodeTypes.BreakStmt ? 'Break' : 'Continue';
+            const keyword = node instanceof BreakStmtNode ? 'Break' : 'Continue';
             this.reportError(node, `${keyword} statement outside of loop`);
         }
         return {
@@ -212,86 +193,82 @@ class ControlFlowAnalyzer {
         };
     }
 
-    private analyzeExprStmt(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const exprNode = node.childForFieldName('expr');
+    private analyzeExprStmt(node: ExprStmtNode, state: ExecutionState): ExecutionState {
+        const exprNode = node.expr;
         return this.analyzeExpr(exprNode, state);
     }
 
-    analyzeExpr(node: SyntaxNode | Nullish, state: ExecutionState): ExecutionState {
+    analyzeExpr(node: ExprNode | Nullish, state: ExecutionState): ExecutionState {
         if (!node) {
             return state;
         }
-        const nodeType = node.type as ExprNodeType | ErrorNodeType;
-        switch (nodeType) {
-            case ExprNodeTypes.GroupedExpr:
-                return this.analyzeGroupedExpr(node, state);
-            case ExprNodeTypes.NameExpr:
-                return this.analyzeNameExpr(node, state);
-            case ExprNodeTypes.SizeofExpr:
-                return this.analyzeSizeofExpr(node, state);
-            case ExprNodeTypes.LiteralExpr:
-                return this.analyzeLiteralExpr(node, state);
-            case ExprNodeTypes.ArrayExpr:
-                return this.analyzeArrayExpr(node, state);
-            case ExprNodeTypes.BinaryExpr:
-                return this.analyzeBinaryExpr(node, state);
-            case ExprNodeTypes.TernaryExpr:
-                return this.analyzeTernaryExpr(node, state);
-            case ExprNodeTypes.UnaryExpr:
-                return this.analyzeUnaryExpr(node, state);
-            case ExprNodeTypes.CallExpr:
-                return this.analyzeCallExpr(node, state);
-            case ExprNodeTypes.IndexExpr:
-                return this.analyzeIndexExpr(node, state);
-            case ExprNodeTypes.FieldExpr:
-                return this.analyzeFieldExpr(node, state);
-            case ExprNodeTypes.CastExpr:
-                return this.analyzeCastExpr(node, state);
-            case NodeTypes.Error:
-                return state;
-            default: {
-                const unreachable: never = nodeType;
-                throw new Error(`Unexpected node type: ${unreachable}`);
-            }
+        if (node instanceof GroupedExprNode) {
+            return this.analyzeGroupedExpr(node, state);
+        } else if (node instanceof NameExprNode) {
+            return this.analyzeNameExpr(node, state);
+        } else if (node instanceof SizeofExprNode) {
+            return this.analyzeSizeofExpr(node, state);
+        } else if (node instanceof LiteralExprNode) {
+            return this.analyzeLiteralExpr(node, state);
+        } else if (node instanceof ArrayExprNode) {
+            return this.analyzeArrayExpr(node, state);
+        } else if (node instanceof BinaryExprNode) {
+            return this.analyzeBinaryExpr(node, state);
+        } else if (node instanceof TernaryExprNode) {
+            return this.analyzeTernaryExpr(node, state);
+        } else if (node instanceof UnaryExprNode) {
+            return this.analyzeUnaryExpr(node, state);
+        } else if (node instanceof CallExprNode) {
+            return this.analyzeCallExpr(node, state);
+        } else if (node instanceof IndexExprNode) {
+            return this.analyzeIndexExpr(node, state);
+        } else if (node instanceof FieldExprNode) {
+            return this.analyzeFieldExpr(node, state);
+        } else if (node instanceof CastExprNode) {
+            return this.analyzeCastExpr(node, state);
+        } else {
+            const unreachable: never = node;
+            throw new Error(`Unexpected node type: ${unreachable}`);
         }
     }
 
-    private analyzeGroupedExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        return this.analyzeExpr(node.childForFieldName('expr'), state);
+    private analyzeGroupedExpr(node: GroupedExprNode, state: ExecutionState): ExecutionState {
+        return this.analyzeExpr(node.exprNode, state);
     }
 
-    private analyzeNameExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+    private analyzeNameExpr(node: NameExprNode, state: ExecutionState): ExecutionState {
         return state;
     }
 
-    private analyzeSizeofExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+    private analyzeSizeofExpr(node: SizeofExprNode, state: ExecutionState): ExecutionState {
         return state;
     }
 
-    private analyzeLiteralExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
+    private analyzeLiteralExpr(node: LiteralExprNode, state: ExecutionState): ExecutionState {
         return state;
     }
 
-    private analyzeArrayExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        return node.children
-            .filter(isExprNode)
-            .reduce((state, child) => this.analyzeExpr(child, state), state);
+    private analyzeArrayExpr(node: ArrayExprNode, state: ExecutionState): ExecutionState {
+        return node.exprNodes.reduce(
+            (state, child) => this.analyzeExpr(child, state),
+            state,
+        );
     }
 
-    private analyzeBinaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const leftNode = node.childForFieldName('left');
-        const rightNode = node.childForFieldName('right');
+    private analyzeBinaryExpr(node: BinaryExprNode, state: ExecutionState): ExecutionState {
+        const leftNode = node.left;
+        const rightNode = node.right;
         state = this.analyzeExpr(leftNode, state);
         state = this.analyzeExpr(rightNode, state);
         return state;
     }
 
-    private analyzeTernaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const condNode = node.childForFieldName('cond');
-        const thenNode = node.childForFieldName('then');
-        const elseNode = node.childForFieldName('else');
+    private analyzeTernaryExpr(node: TernaryExprNode, state: ExecutionState): ExecutionState {
+        const condNode = node.cond;
+        const thenNode = node.then;
+        const elseNode = node.else;
 
-        state = this.analyzeExpr(node.childForFieldName('cond'), state);
+        state = this.analyzeExpr(node.cond, state);
         if (isTriviallyTrue(condNode)) {
             elseNode && this.reportUnreachableCode(elseNode);
             return this.analyzeExpr(thenNode, state);
@@ -305,22 +282,22 @@ class ControlFlowAnalyzer {
         }
     }
 
-    private analyzeUnaryExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const operandNode = node.childForFieldName('operand');
+    private analyzeUnaryExpr(node: UnaryExprNode, state: ExecutionState): ExecutionState {
+        const operandNode = node.right;
         return this.analyzeExpr(operandNode, state);
     }
 
-    private analyzeCallExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const calleeNode = node.childForFieldName('callee');
-        const argsNodes = node.childrenForFieldName('args');
-        if (!argsNodes || !calleeNode) {
+    private analyzeCallExpr(node: CallExprNode, state: ExecutionState): ExecutionState {
+        const calleeNode = node.callee;
+        const argNodes = node.args?.callArgNodes;
+        if (!argNodes || !calleeNode) {
             return state;
         }
         state = this.analyzeExpr(calleeNode, state);
-        for (const argNode of argsNodes.filter(x => isExprNode(x))) {
-            state = this.analyzeExpr(argNode, state);
+        for (const argNode of argNodes) {
+            state = this.analyzeExpr(argNode.value, state);
         }
-        const returnType = this.nodeTypeMap.get(node)!;
+        const returnType = this.getType(node)!;
         if (returnType.kind === TypeKind.Never) {
             return {
                 exitLevel: ExitLevel.Function,
@@ -329,56 +306,61 @@ class ControlFlowAnalyzer {
         return state;
     }
 
-    private analyzeIndexExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const indexeeNode = node.childForFieldName('indexee');
-        const indexNode = node.childForFieldName('index');
+    private analyzeIndexExpr(node: IndexExprNode, state: ExecutionState): ExecutionState {
+        const indexeeNode = node.indexee;
+        const indexNode = node.index;
         state = this.analyzeExpr(indexeeNode, state);
         state = this.analyzeExpr(indexNode, state);
         return state;
     }
 
-    private analyzeFieldExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const leftNode = node.childForFieldName('left');
+    private analyzeFieldExpr(node: FieldExprNode, state: ExecutionState): ExecutionState {
+        const leftNode = node.left;
         return this.analyzeExpr(leftNode, state);
     }
 
-    private analyzeCastExpr(node: SyntaxNode, state: ExecutionState): ExecutionState {
-        const exprNode = node.childForFieldName('expr');
+    private analyzeCastExpr(node: CastExprNode, state: ExecutionState): ExecutionState {
+        const exprNode = node.expr;
         return this.analyzeExpr(exprNode, state);
     }
 
     //=========================================================================
 
-    private reportUnreachableCode(node: SyntaxNode) {
-        this.reportDiagnostic(node, 'hint', 'Unreachable code', true);
+    private getType(node: AstNode): Type | undefined {
+        return this.nodeTypeMap.get(node.syntax);
     }
 
-    private reportDiagnostic(node: SyntaxNode, severity: Severity, message: string, unnecessary = false) {
+    private reportUnreachableCode(range: PointRange) {
+        this.reportDiagnostic(range, 'hint', 'Unreachable code', true);
+    }
+
+    private reportDiagnostic(range: PointRange, severity: Severity, message: string, unnecessary = false) {
         this.diags.push({
             severity,
-            location: { file: this.path, range: node },
+            location: { file: this.path, range: range },
             message,
             unnecessary,
         });
     }
 
-    private reportError(node: SyntaxNode, message: string) {
-        this.reportDiagnostic(node, 'error', message);
+    private reportError(range: PointRange, message: string) {
+        this.reportDiagnostic(range, 'error', message);
     }
 }
 
-function isTriviallyTrue(node: SyntaxNode | Nullish): boolean {
+function isTriviallyTrue(node: ExprNode | Nullish): boolean {
     return isBoolLiteral('true', node);
 }
 
-function isTriviallyFalse(node: SyntaxNode | Nullish): boolean {
+function isTriviallyFalse(node: ExprNode | Nullish): boolean {
     return isBoolLiteral('false', node);
 }
 
-function isBoolLiteral(value: string, node: SyntaxNode | Nullish): boolean {
-    return node?.type === NodeTypes.LiteralExpr
-        && node.firstChild?.type === NodeTypes.BoolLiteral
-        && node.firstChild.text === value;
+function isBoolLiteral(value: string, node: ExprNode | Nullish): boolean {
+    const syntaxNode = node?.syntax;
+    return syntaxNode?.type === NodeTypes.LiteralExpr
+        && syntaxNode.firstChild?.type === LiteralNodeTypes.Bool
+        && syntaxNode.firstChild.text === value;
 }
 
 function isNonVoidType(type: Type): boolean {

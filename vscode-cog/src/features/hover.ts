@@ -30,7 +30,7 @@ export class HoverProvider implements vscode.HoverProvider {
     getDetailForPosition(document: vscode.TextDocument, position: vscode.Position) {
         const tree = this.parsingService.parse(document.fileName);
         const treePosition = { row: position.line, column: position.character };
-        const hoveredNode = tree.rootNode.namedDescendantForPosition(treePosition);
+        const hoveredNode = tree.rootNode.descendantForPosition(treePosition);
 
         for (let node: SyntaxNode | null = hoveredNode; node; node = node.parent) {
             const detail = this.getDetailForNode(document, node);

@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { pointEq } from '../utils/index.js';
 import { ErrorSink } from './errorSink.js';
-import { CompositeNodeType, CompositeNodeTypes, NamedTokenKinds } from './nodeTypes.js';
+import { CompositeNodeType, CompositeNodeTypes, NodeTypes } from './nodeTypes.js';
 import { Token, TokenKind } from './token.js';
 import { Point, Tree } from './tree.js';
 import {
@@ -32,7 +32,7 @@ type IncompleteNode =
     | IncompleteCompositeNode;
 
 function tokenToSyntaxNode(tree: Tree, token: Token): SyntaxNodeImpl {
-    return new TokenNodeImpl(tree, token, NamedTokenKinds[token.kind]);
+    return new TokenNodeImpl(tree, token);
 }
 
 function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point, startIndex: number): SyntaxNodeImpl {
@@ -262,9 +262,9 @@ class ParserBase extends NodeBuilder {
             return;
         }
 
-        this.beginNode(CompositeNodeTypes.Error);
+        this.beginNode(NodeTypes.Error);
         this.bump();
-        this.finishNode(CompositeNodeTypes.Error);
+        this.finishNode(NodeTypes.Error);
     }
 
     addErrorAndBump(message: string) {
@@ -462,9 +462,9 @@ export class Parser extends ParserBase {
         this.finishField('params');
         if (this.match(':')) {
             this.expect(':');
-            this.beginField('return_type');
+            this.beginField('returnType');
             this.type();
-            this.finishField('return_type');
+            this.finishField('returnType');
         }
         if (!this.match('{') && !this.match(';')) {
             this.addErrorAndTryBump(`Expected function body or ';'`);
@@ -480,17 +480,21 @@ export class Parser extends ParserBase {
     }
 
     private paramList() {
+        this.beginNode(CompositeNodeTypes.FuncParamList);
         if (!this.match('(')) {
             this.addErrorAndTryBump(`Expected parameter list.`);
         }
         if (this.match('(')) {
             this.delimited('(', ')', ',', () => this.funcParam());
         }
+        this.finishNode(CompositeNodeTypes.FuncParamList);
     }
 
     private funcParam() {
         if (this.match('...')) {
+            this.beginNode(CompositeNodeTypes.FuncParam);
             this.bump('...');
+            this.finishNode(CompositeNodeTypes.FuncParam);
         } else {
             this.paramDecl();
         }
@@ -761,12 +765,12 @@ export class Parser extends ParserBase {
 
     unaryExpr(op: TokenKind) {
         this.beginNode(CompositeNodeTypes.UnaryExpr);
-        this.beginField('operator');
+        this.beginField('op');
         this.bump(op);
-        this.finishField('operator');
-        this.beginField('operand');
+        this.finishField('op');
+        this.beginField('right');
         this.expr(Prec.Unary);
-        this.finishField('operand');
+        this.finishField('right');
         this.finishNode(CompositeNodeTypes.UnaryExpr);
     }
 
@@ -782,9 +786,9 @@ export class Parser extends ParserBase {
     binaryExpr(op: TokenKind, rbp: number, checkpoint: Checkpoint) {
         this.beginNodeAt(CompositeNodeTypes.BinaryExpr, checkpoint);
         this.groupExistingChildren('left');
-        this.beginField('operator');
+        this.beginField('op');
         this.expect(op);
-        this.finishField('operator');
+        this.finishField('op');
         this.beginField('right');
         this.expr(rbp);
         this.finishField('right');
@@ -845,7 +849,7 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.IndexExpr);
     }
 
-    memberExpr(checkpoint: Checkpoint) {
+    fieldExpr(checkpoint: Checkpoint) {
         this.beginNodeAt(CompositeNodeTypes.FieldExpr, checkpoint);
         this.groupExistingChildren('left');
         this.expect('.');
@@ -1071,7 +1075,7 @@ const ledTable: Record<TokenKind, Led> = (function () {
         ...(['+', '-'] as const).map(op => mkBinaryOp(op, Prec.Add, Assoc.Left)),
         ...(['*', '/', '%'] as const).map(op => mkBinaryOp(op, Prec.Mul, Assoc.Left)),
         mkRow('as', Prec.Cast, Assoc.Left, (parser, _, checkpoint) => parser.castExpr(checkpoint)),
-        mkRow('.', Prec.Postfix, Assoc.Left, (parser, _, checkpoint) => parser.memberExpr(checkpoint)),
+        mkRow('.', Prec.Postfix, Assoc.Left, (parser, _, checkpoint) => parser.fieldExpr(checkpoint)),
         mkRow('(', Prec.Postfix, Assoc.Left, (parser, _, checkpoint) => parser.callExpr(checkpoint)),
         mkRow('[', Prec.Postfix, Assoc.Left, (parser, _, checkpoint) => parser.indexExpr(checkpoint)),
     );
