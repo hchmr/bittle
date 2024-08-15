@@ -80,7 +80,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     private generateDocumentSymbol(node: SyntaxNode) {
         const nameNode = node.children.find(child => child.type === 'identifier');
         const symbol = new vscode.DocumentSymbol(
-            nameNode?.text || '{unknown}',
+            makeSymbolName(node, nameNode),
             isForwardDeclaration(node) ? '(declaration)' : '',
             this.convertSymbolKind(node.type),
             toVscRange(node),
@@ -117,4 +117,15 @@ function isForwardDeclaration(node: SyntaxNode) {
     } else {
         return false;
     }
+}
+
+function makeSymbolName(node: SyntaxNode, nameNode: SyntaxNode | undefined) {
+    if (!nameNode) {
+        return '{unknown}';
+    }
+    let name = nameNode.text;
+    if (node.type == NodeTypes.FuncDecl) {
+        name += '()';
+    }
+    return name;
 }
