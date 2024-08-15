@@ -1451,12 +1451,14 @@ function parseChar(text: string): number {
 function isLvalue(node: ExprNode | Nullish): boolean {
     if (!node)
         return true;
-    if (node instanceof NameExprNode) {
+    if (node instanceof GroupedExprNode) {
+        return isLvalue(node.exprNode);
+    } else if (node instanceof NameExprNode) {
         return true;
     } else if (node instanceof IndexExprNode) {
-        return isLvalue(node.index);
+        return true;
     } else if (node instanceof FieldExprNode) {
-        return isLvalue(node.left);
+        return true;
     } else if (node instanceof UnaryExprNode) {
         return node.op?.text === '*';
     } else {
