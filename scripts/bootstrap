@@ -5,13 +5,24 @@ set -u
 set -o pipefail
 
 script_dir=$(dirname "$(realpath "$0")")
-root_dir="$script_dir/.."
+root_dir=$(realpath "$script_dir/..")
 bootstrap_dir="$root_dir/out/bootstrap"
 src_dir="$bootstrap_dir/src"
 build_dir="$bootstrap_dir/build"
-repo_url="${COG_REPO:-file://$root_dir}"
 
-prev_stage=
+prev_stage=-1
+prev_stage_ref=
+
+usage() {
+    cat <<HERE
+usage: $0 [options]
+
+options:
+  -h,--help         Show this help
+  --next            Include latest commit from master
+  -o,--output FILE  Output file
+HERE
+}
 
 section() {
     echo
@@ -37,68 +48,107 @@ checkout() {
 }
 
 stage() {
-    local i="$1"
-    local ref="$2"
+    local stage=$(($prev_stage + 1))
 
-    section "Building stage $i"
+    local ref="$1"
 
-    local stage_dir="$build_dir/stage$i/"
+    section "Building stage $stage"
+
+    local stage_dir="$build_dir/stage$stage/"
     mkdir -p "$stage_dir"
 
     checkout "$ref"
 
     local cogc=""
-    if [ -n "$prev_stage" ]; then
-        cogc=$(realpath "$build_dir/$prev_stage/cogc")
+    if [ "$prev_stage" != "-1" ]; then
+        cogc=$(realpath "$build_dir/stage$prev_stage/cogc")
     fi
 
     make -C compiler "BUILD_DIR=$stage_dir" "COGC=$cogc"
 
-    prev_stage="stage$i"
+    prev_stage="$stage"
+    prev_stage_ref="$ref"
 }
 
 verify() {
-    section "Verifying final stage"
+    section "Compiling compiler with itself"
+
+    stage "$prev_stage_ref"
+
+    section "Compiling compiler with compiler compiled with itself"
 
     mkdir -p "$build_dir/verify"
 
-    make -C compiler "BUILD_DIR=$build_dir/verify" "COGC=$(realpath "$build_dir/$prev_stage/cogc")"
+    make -C compiler "BUILD_DIR=$build_dir/verify" "COGC=$(realpath "$build_dir/stage$prev_stage/cogc")"
 
-    echo "Comparing executables"
+    echo "Comparing executables $build_dir/stage$prev_stage/cogc and $build_dir/verify/cogc"
 
-    objdump -dr -j .rodata -j .text "$build_dir/$prev_stage/cogc" | tail -n +3 >"$build_dir/verify/cogc.objdump"
+    objdump -dr -j .rodata -j .text "$build_dir/stage$prev_stage/cogc" | tail -n +3 >"$build_dir/verify/cogc.objdump"
     objdump -dr -j .rodata -j .text "$build_dir/verify/cogc" | tail -n +3 >"$build_dir/verify/cogc.verify.objdump"
     diff "$build_dir/verify/cogc.objdump" "$build_dir/verify/cogc.verify.objdump" && echo "No difference" || echo "^^^ Difference found"
 }
+
+bootstrap_next=0
+output_file=
+
+while test $# -gt 0; do
+    case "$1" in
+    -h | --help)
+        usage
+        exit 0
+        ;;
+    --next)
+        bootstrap_next=1
+        ;;
+    -o | --output)
+        shift
+        output_file="$1"
+        ;;
+    *)
+        echo "Unexpected argument: $1"
+        usage
+        exit 1
+        ;;
+    esac
+    shift
+done
 
 rm -rf "$bootstrap_dir"
 mkdir -p "$bootstrap_dir" "$src_dir" "$build_dir"
 cd "$src_dir"
 
-git clone --quiet --filter=tree:0 "$repo_url" .
+if [ -z "$output_file" ]; then
+    mkdir -p "$bootstrap_dir/bin"
+    output_file="$bootstrap_dir/bin/cogc"
+fi
+output_file=$(realpath "$output_file")
 
-stage 0 "Make compilation of bootstrap compiler stricter"
+git clone --quiet "file://$root_dir" .
 
-stage 1 "Replace bootstrap compiler with self-host compiler"
+stage "Make compilation of bootstrap compiler stricter"
 
-stage 2 "feat: Add support for include files"
+stage "Replace bootstrap compiler with self-host compiler"
 
-stage 3 "feat(compiler): Add never type"
+stage "feat: Add support for include files"
 
-stage 4 "Merge branch 'compiler-rewrite'"
+stage "feat(compiler): Add never type"
 
-stage 5 "feat(compiler): Add for loops"
+stage "Merge branch 'compiler-rewrite'"
 
-stage 6 "feat(compiler): Add struct initializer expressions"
+stage "feat(compiler): Add for loops"
 
-stage 7 "feat(compiler): Add struct inheritance"
+stage "feat(compiler): Add struct initializer expressions"
 
-stage 8 "feat(compiler): Add struct inheritance"
+stage "feat(compiler): Add struct inheritance"
+
+if [ "$bootstrap_next" = "1" ]; then
+    stage "master"
+fi
 
 verify
 
-mkdir -p "$bootstrap_dir/bin"
+section "Copying final executable to $output_file"
 
-cp "$build_dir/$prev_stage/cogc" "$bootstrap_dir/bin/cogc"
+cp "$build_dir/stage$prev_stage/cogc" "$output_file"
 
 section "Done"
