@@ -10,17 +10,6 @@ import { stream } from '../utils/stream';
 import { VirtualFileSystem } from '../vfs';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, vscode.WorkspaceSymbolProvider {
-    private readonly symbolKindMapping = {
-        [NodeTypes.EnumMember]: vscode.SymbolKind.Constant,
-        [NodeTypes.StructDecl]: vscode.SymbolKind.Struct,
-        [NodeTypes.StructMember]: vscode.SymbolKind.Field,
-        [NodeTypes.FuncDecl]: vscode.SymbolKind.Function,
-        [NodeTypes.FuncParam]: vscode.SymbolKind.Variable,
-        [NodeTypes.GlobalDecl]: vscode.SymbolKind.Variable,
-        [NodeTypes.ConstDecl]: vscode.SymbolKind.Constant,
-        [NodeTypes.LocalDecl]: vscode.SymbolKind.Variable,
-    };
-
     constructor(
         private parsingService: ParsingService,
         private vfs: VirtualFileSystem,
@@ -41,11 +30,11 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
     private getDocumentSymbols(path: string) {
         const tree = this.parsingService.parse(path);
 
-        const rootSymbols: vscode.DocumentSymbol[] = [];
+        const rootSymbols: DocumentSymbol[] = [];
 
-        const visit = (node: SyntaxNode, currentSymbol: vscode.DocumentSymbol | null) => {
-            if (node.type in this.symbolKindMapping) {
-                const symbol = this.generateDocumentSymbol(node);
+        const visit = (node: SyntaxNode, currentSymbol: DocumentSymbol | null) => {
+            if (node.type in symbolKindMapping) {
+                const symbol = DocumentSymbol.fromNode(node);
                 (currentSymbol?.children ?? rootSymbols).push(symbol);
                 currentSymbol = symbol;
             }
@@ -73,40 +62,77 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
         // Cached to avoid recomputing if another file in the file list is invalidated.
         return this.cache.compute(`workspaceSymbols:${file}`, () =>
             this.getDocumentSymbols(file)
-                .flatMap(symbol => this.fromDocumentSymbol(vscode.Uri.file(file), symbol)),
+                .flatMap(symbol => fromDocumentSymbol(vscode.Uri.file(file), symbol)),
         );
     }
+}
 
-    private generateDocumentSymbol(node: SyntaxNode) {
+const symbolKindMapping = {
+    [NodeTypes.EnumMember]: vscode.SymbolKind.Constant,
+    [NodeTypes.StructDecl]: vscode.SymbolKind.Struct,
+    [NodeTypes.StructMember]: vscode.SymbolKind.Field,
+    [NodeTypes.FuncDecl]: vscode.SymbolKind.Function,
+    [NodeTypes.FuncParam]: vscode.SymbolKind.Variable,
+    [NodeTypes.GlobalDecl]: vscode.SymbolKind.Variable,
+    [NodeTypes.ConstDecl]: vscode.SymbolKind.Constant,
+    [NodeTypes.LocalDecl]: vscode.SymbolKind.Variable,
+};
+
+function convertSymbolKind(type: string) {
+    const mapping: Record<string, vscode.SymbolKind> = symbolKindMapping;
+    return mapping[type] ?? null;
+}
+
+class DocumentSymbol extends vscode.DocumentSymbol {
+    constructor(
+        name: string,
+        detail: string,
+        kind: vscode.SymbolKind,
+        range: vscode.Range,
+        selectionRange: vscode.Range,
+        public ignoreInWorkspaceSymbols = false,
+    ) {
+        super(name, detail, kind, range, selectionRange);
+    }
+
+    declare children: DocumentSymbol[];
+
+    static fromNode(node: SyntaxNode) {
         const nameNode = node.children.find(child => child.type === 'identifier');
-        const symbol = new vscode.DocumentSymbol(
+        const symbol = new DocumentSymbol(
             makeSymbolName(node, nameNode),
             isForwardDeclaration(node) ? '(declaration)' : '',
-            this.convertSymbolKind(node.type),
+            convertSymbolKind(node.type),
             toVscRange(node),
             toVscRange(nameNode ?? node),
+            ignoreInWorkspaceSymbols(node),
         );
         return symbol;
     }
+}
 
-    private fromDocumentSymbol(uri: vscode.Uri, symbol: vscode.DocumentSymbol, parent?: vscode.DocumentSymbol): vscode.SymbolInformation[] {
-        return [
-            new vscode.SymbolInformation(
-                symbol.name + (symbol.detail ? ` ${symbol.detail}` : ''),
-                symbol.kind,
-                parent?.name ?? '',
-                new vscode.Location(uri, symbol.range),
-            ),
-            ...symbol.children.flatMap(child =>
-                this.fromDocumentSymbol(uri, child, symbol),
-            ),
-        ];
-    }
+function ignoreInWorkspaceSymbols(node: SyntaxNode) {
+    return node.type in {
+        [NodeTypes.LocalDecl]: true,
+        [NodeTypes.FuncParam]: true,
+    };
+}
 
-    private convertSymbolKind(type: string) {
-        const symbolKindMapping: Record<string, vscode.SymbolKind> = this.symbolKindMapping;
-        return symbolKindMapping[type] ?? null;
+function fromDocumentSymbol(uri: vscode.Uri, symbol: DocumentSymbol, parent?: DocumentSymbol): vscode.SymbolInformation[] {
+    if (symbol.ignoreInWorkspaceSymbols) {
+        return [];
     }
+    return [
+        new vscode.SymbolInformation(
+            symbol.name + (symbol.detail ? ` ${symbol.detail}` : ''),
+            symbol.kind,
+            parent?.name ?? '',
+            new vscode.Location(uri, symbol.range),
+        ),
+        ...symbol.children.flatMap(child =>
+            fromDocumentSymbol(uri, child, symbol),
+        ),
+    ];
 }
 
 function isForwardDeclaration(node: SyntaxNode) {
