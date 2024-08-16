@@ -16,11 +16,6 @@ export class IncludeGraphService {
         private includeResolver: IncludeResolver,
     ) { }
 
-    getTransitiveReferences(filePath: string): string[] {
-        const graph = this.getIncludeGraph();
-        return transitiveReferences(filePath, graph);
-    }
-
     getFinalReferences(filePath: string): string[] {
         const graph = this.getIncludeGraph();
         return transitiveReferences(filePath, graph)

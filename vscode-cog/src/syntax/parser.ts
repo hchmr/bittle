@@ -76,21 +76,11 @@ abstract class NodeBuilder {
         return this.currentNodes[this.currentNodes.length - 1];
     }
 
-    set currentNode(node: IncompleteNode) {
-        this.currentNodes[this.currentNodes.length - 1] = node;
-    }
-
     addChild(node: SyntaxNodeImpl) {
         this.currentNode.children.push({
             node,
             field: this.currentNode.currentField,
         });
-    }
-
-    addChildren(nodes: SyntaxNodeImpl[]) {
-        for (const node of nodes) {
-            this.addChild(node);
-        }
     }
 
     beginNode(nodeType: CompositeNodeType) {

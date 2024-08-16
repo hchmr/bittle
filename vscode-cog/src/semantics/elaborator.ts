@@ -14,7 +14,7 @@ import {
     ConstSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
 } from './sym';
 import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, TypeLayout, typeLayout, typeLe,
+    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, typeLayout, typeLe,
 } from './type';
 
 export type ErrorLocation = {
@@ -717,7 +717,7 @@ export class Elaborator {
 
         this.exitScope();
 
-        const isVariadic = !!paramNodes.some(child => child.dotDotDotToken);
+        const isVariadic = paramNodes.some(child => child.dotDotDotToken);
 
         const returnType: Type = node.returnType ? this.typeEval(node.returnType) : mkVoidType();
 
@@ -837,8 +837,6 @@ export class Elaborator {
         const nameNode = node?.name;
         const typeNode = node.type;
         const initNode = node.value;
-
-        const name = nameNode?.text ?? '';
 
         const declaredType = typeNode ? this.typeEval(typeNode) : undefined;
 

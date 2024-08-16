@@ -1,7 +1,7 @@
 import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
 import { ElaborationDiag, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
-import { mkErrorType, Type, typeLayout, TypeLayout } from '../semantics/type';
+import { mkErrorType, Type } from '../semantics/type';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { ReactiveCache } from '../utils/reactiveCache';

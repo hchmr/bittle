@@ -35,6 +35,7 @@ export function getNodesAtPosition(tree: Tree, point: Point): SyntaxNode[] {
 /**
  * Returns the node that contains the range, and optionally the node that exactly matches the range.
  */
+// TODO: Unused
 export function getNodeAtRange(tree: Tree, range: PointRange) {
     const node = tree.rootNode.descendantForPosition(range.startPosition, range.endPosition);
 

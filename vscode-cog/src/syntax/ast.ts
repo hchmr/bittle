@@ -2,15 +2,11 @@ import { PointRange } from '../utils';
 import { stream } from '../utils/stream';
 import { fromSyntaxNode } from './generated';
 import { Token, TokenKind } from './token';
-import { Point, SyntaxNode, Tree } from './tree';
+import { Point, SyntaxNode } from './tree';
 import { TokenNodeImpl } from './treeImpl';
 
 export abstract class AstNode implements PointRange {
     constructor(public readonly syntax: SyntaxNode) {}
-
-    get syntaxType(): string {
-        return this.syntax.type;
-    }
 
     get startPosition(): Point {
         return this.syntax.startPosition;

@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { FuncParamSym, FuncSym, prettyCallableSym, prettySym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
-import { mkStructType, prettyType } from '../semantics/type';
+import { FuncParamSym, FuncSym, prettyCallableSym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { ExprNodeTypes } from '../syntax/nodeTypes';

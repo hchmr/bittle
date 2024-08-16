@@ -117,7 +117,7 @@ export function lowerGrammar(grammar: Grammar): AstDef {
 
     for (const [name, nodeRule] of Object.entries(grammar)) {
         if (tryLowerUnionRule(unions, name, nodeRule)) {
-            continue;
+            // Done
         } else {
             const fields = new FieldsBuilder();
             lowerRule(fields, nodeRule);

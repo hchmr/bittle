@@ -14,7 +14,6 @@ enum ExitLevel {
     None,
     Loop,
     Function,
-    Program,
 }
 
 type ExecutionState = {
