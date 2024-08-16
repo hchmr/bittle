@@ -1,13 +1,13 @@
 import assert from 'assert';
 import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
-import { SyntaxNode } from '../syntax';
+import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
 import {
     ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode,
     LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
 } from '../syntax/generated';
-import { Nullish, PointRange } from '../utils';
+import { Nullish } from '../utils';
 import { stream } from '../utils/stream';
 import { Scope } from './scope';
 import {

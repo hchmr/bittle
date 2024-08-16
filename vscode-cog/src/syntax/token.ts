@@ -1,4 +1,4 @@
-import { Point } from './tree.js';
+import { Point } from './position';
 
 export interface Token<Kind extends TokenKind = TokenKind> {
     kind: Kind;

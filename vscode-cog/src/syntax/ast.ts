@@ -1,8 +1,8 @@
-import { PointRange } from '../utils';
 import { stream } from '../utils/stream';
 import { fromSyntaxNode } from './generated';
+import { Point, PointRange } from './position';
 import { Token, TokenKind } from './token';
-import { Point, SyntaxNode } from './tree';
+import { SyntaxNode } from './tree';
 import { TokenNodeImpl } from './treeImpl';
 
 export abstract class AstNode implements PointRange {

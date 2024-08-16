@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
-import { SyntaxNode, Tree } from '../syntax';
-import { fromVscRange, isRangeEmpty, toVscRange } from '../utils';
+import { isRangeEmpty, SyntaxNode, Tree } from '../syntax';
+import { fromVscRange, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 

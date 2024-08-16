@@ -1,9 +1,9 @@
 import assert from 'assert';
-import { pointEq } from '../utils/index.js';
 import { ErrorSink } from './errorSink.js';
 import { CompositeNodeType, CompositeNodeTypes, NodeTypes } from './nodeTypes.js';
+import { Point, pointEq } from './position';
 import { Token, TokenKind } from './token.js';
-import { Point, Tree } from './tree.js';
+import { Tree } from './tree.js';
 import {
     CompositeNodeImpl,
     MissingTokenNodeImpl,

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { Point } from './tree.js';
+import { Point } from './position';
 
 export class CharCursor {
     private _row: number = 0;

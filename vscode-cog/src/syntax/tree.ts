@@ -1,7 +1,4 @@
-export type Point = {
-    row: number;
-    column: number;
-};
+import { Point } from './position';
 
 export interface SyntaxNode {
     readonly type: string;

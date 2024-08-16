@@ -1,8 +1,8 @@
-import { SyntaxNode } from '../syntax';
+import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
 import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
-import { Nullish, PointRange } from '../utils';
+import { Nullish } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
 import { mkVoidType, Type, TypeKind } from './type';
 

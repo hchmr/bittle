@@ -1,4 +1,4 @@
-import { Point } from './tree.js';
+import { Point } from './position';
 
 export type Error = {
     position: Point;

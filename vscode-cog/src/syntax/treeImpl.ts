@@ -1,7 +1,7 @@
 import util from 'util';
-import { pointLe } from '../utils/index.js';
+import { Point, pointLe } from './position';
 import { Token, TokenKind } from './token.js';
-import { Point, SyntaxNode, Tree } from './tree.js';
+import { SyntaxNode, Tree } from './tree.js';
 
 export abstract class SyntaxNodeImpl implements SyntaxNode {
     private _type: string;

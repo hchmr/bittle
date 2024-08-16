@@ -5,10 +5,10 @@ import { FuncParamSym, isDefined, prettySym, StructFieldSym, Sym, SymKind } from
 import { TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
-import { SyntaxNode } from '../syntax';
+import { rangeContains, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, isArgNode, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
-import { fromVscPosition, rangeContains, toVscRange } from '../utils';
+import { fromVscPosition, toVscRange } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
