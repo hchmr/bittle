@@ -1,8 +1,7 @@
 import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
 import { ElaborationDiag, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
-import { mkErrorType, Type } from '../semantics/type';
-import { typeLayout, TypeLayout } from '../semantics/typeLayout';
+import { mkErrorType, Type, typeLayout, TypeLayout } from '../semantics/type';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { ReactiveCache } from '../utils/reactiveCache';
@@ -85,18 +84,6 @@ export class ElaborationService {
     evalType(path: string, node: SyntaxNode): Type {
         const module = this.elaborateFile(path);
         return module.nodeTypeMap.get(node) ?? mkErrorType();
-    }
-
-    getLayout(path: string, type: Type): TypeLayout | undefined {
-        const module = this.elaborateFile(path);
-        return typeLayout(type, {
-            getStruct: name => {
-                const sym = module.symbols.get(name);
-                if (!sym || sym.kind !== SymKind.Struct)
-                    return;
-                return sym;
-            },
-        });
     }
 
     public references(path: string, qname: string): SymReference[] {

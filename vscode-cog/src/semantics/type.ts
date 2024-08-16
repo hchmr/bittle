@@ -1,3 +1,4 @@
+import { stream } from '../utils/stream';
 import { StructSym } from './sym';
 
 export type Type =
@@ -140,6 +141,62 @@ export const primitiveTypes: Partial<Record<string, Type>> = {
     Int: mkIntType(64),
     Int64: mkIntType(64),
 };
+
+//= Type layout
+
+export type TypeLayout = {
+    size: number;
+    align: number;
+};
+
+export function typeLayout(type: Type): TypeLayout | undefined {
+    switch (type.kind) {
+        case TypeKind.Void: {
+            return undefined;
+        }
+        case TypeKind.Bool: {
+            return { size: 1, align: 1 };
+        }
+        case TypeKind.Int: {
+            const byteCount = type.size! / 8;
+            return { size: byteCount, align: byteCount };
+        }
+        case TypeKind.Ptr: {
+            return { size: 8, align: 8 };
+        }
+        case TypeKind.Arr: {
+            const elemLayout = typeLayout(type.elemType);
+            return elemLayout && { size: elemLayout.size * type.size!, align: elemLayout.align };
+        }
+        case TypeKind.Struct: {
+            const sym = type.sym;
+            if (!sym.fields || sym.fields.length === 0) {
+                return undefined;
+            }
+            return stream(sym.fields)
+                .map(field => typeLayout(field.type))
+                .reduce<TypeLayout | undefined>(
+                    (a, b) => a && b && ({
+                        size: alignUp(a.size, b.align) + b.size,
+                        align: Math.max(a.align, b.align),
+                    }),
+                    { size: 0, align: 0 },
+                );
+        }
+        case TypeKind.Never:
+        case TypeKind.Err: {
+            return undefined;
+        }
+        default: {
+            const unreachable: never = type;
+            throw new Error(`Unexpected type: ${unreachable}`);
+        }
+    }
+
+    function alignUp(size: number, align: number) {
+        return Math.ceil(size / align) * align;
+    }
+}
 
 //= Type merging
 

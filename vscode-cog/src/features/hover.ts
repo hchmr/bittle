@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
-import { prettyType, Type } from '../semantics/type';
-import { TypeLayout } from '../semantics/typeLayout';
+import { prettyType, Type, typeLayout, TypeLayout } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
@@ -71,7 +70,7 @@ export class HoverProvider implements vscode.HoverProvider {
             : hoverDetail.type;
 
         if (type) {
-            hoverDetail.layout = this.elaborationService.getLayout(document.fileName, type);
+            hoverDetail.layout = typeLayout(type);
         }
 
         return hoverDetail;

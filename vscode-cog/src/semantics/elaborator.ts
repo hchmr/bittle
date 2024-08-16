@@ -14,9 +14,8 @@ import {
     ConstSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
 } from './sym';
 import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, typeLe,
+    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, TypeLayout, typeLayout, typeLe,
 } from './type';
-import { TypeLayout, typeLayout } from './typeLayout';
 
 export type ErrorLocation = {
     file: string;
@@ -554,7 +553,7 @@ export class Elaborator {
         } else if (node instanceof SizeofExprNode) {
             const typeNode = node.type;
             const type = this.typeEval(typeNode);
-            return this.typeSize(type);
+            return typeLayout(type)?.size;
         } else {
             reportInvalidConstExpr();
             return;
@@ -1401,24 +1400,9 @@ export class Elaborator {
         this.reportDiagnostic(range, 'warning', message);
     }
 
-    private typeLayout(type: Type): TypeLayout | undefined {
-        return typeLayout(type, {
-            getStruct: name => {
-                const sym = this.symbols.get(name);
-                if (!sym || sym.kind !== SymKind.Struct)
-                    return;
-                return sym;
-            },
-        });
-    }
-
-    private typeSize(type: Type): number | undefined {
-        return this.typeLayout(type)?.size;
-    }
-
     private isUnsizedType(type: Type): boolean {
         return type.kind !== TypeKind.Err
-            && this.typeSize(type) === undefined;
+            && typeLayout(type) === undefined;
     }
 
     private createOrigin(node: SyntaxNode, nameNode: TokenNode | Nullish, isForwardDecl: boolean = false): Origin {
