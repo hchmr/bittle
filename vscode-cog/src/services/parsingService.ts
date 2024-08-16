@@ -1,5 +1,4 @@
-import { parser } from '../parser';
-import { Error, Tree } from '../syntax';
+import { Error, Parser, tokenize, Tree } from '../syntax';
 import { RootNode } from '../syntax/generated';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { VirtualFileSystem } from '../vfs';
@@ -47,7 +46,7 @@ export class ParsingServiceImpl implements ParsingService {
             add: (error: Error) => errors.push(error),
         };
 
-        const tree = parser.parse(text, errorSink);
+        const tree = new Parser(text, tokenize(text, errorSink), errorSink).top();
 
         return { tree, errors };
     }
