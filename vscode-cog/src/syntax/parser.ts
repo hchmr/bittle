@@ -42,7 +42,6 @@ function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point, sta
 function incompleteNodeToSyntaxNode(tree: Tree, node: IncompleteNode): SyntaxNodeImpl {
     return new CompositeNodeImpl(
         node.kind,
-        true,
         node.startPosition,
         node.startIndex,
         tree,
