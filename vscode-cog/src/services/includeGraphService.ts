@@ -1,8 +1,8 @@
 import { Tree } from '../syntax';
 import { TopLevelNodeTypes } from '../syntax/nodeTypes';
-import { VirtualFileSystem } from '../vfs';
 import { IncludeResolver } from './IncludeResolver';
 import { ParsingService } from './parsingService';
+import { VirtualFileSystem } from './vfs';
 
 type IncludeGraph = {
     incoming: Map<string, Set<string>>;

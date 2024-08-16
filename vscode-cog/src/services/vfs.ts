@@ -2,8 +2,8 @@ import * as fs from 'fs';
 import { Minimatch } from 'minimatch';
 import path from 'path';
 import * as vscode from 'vscode';
-import { isCogFile } from './utils';
-import { ReactiveCache } from './utils/reactiveCache';
+import { isCogFile } from '../utils';
+import { ReactiveCache } from '../utils/reactiveCache';
 
 /** A virtual file system that keeps files in with changes in memory. */
 export interface VirtualFileSystem {

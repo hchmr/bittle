@@ -1,6 +1,6 @@
 import path from 'path';
 import { SyntaxNode } from '../syntax';
-import { VirtualFileSystem } from '../vfs';
+import { VirtualFileSystem } from './vfs';
 
 export class IncludeResolver {
     constructor(private vfs: VirtualFileSystem) { }

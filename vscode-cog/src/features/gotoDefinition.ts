@@ -5,13 +5,13 @@ import { Type, TypeKind } from '../semantics/type';
 import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
+import { VirtualFileSystem } from '../services/vfs';
 import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
 import { fromVscPosition, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { getNodesAtPosition } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
-import { VirtualFileSystem } from '../vfs';
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     constructor(

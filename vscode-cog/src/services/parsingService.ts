@@ -1,7 +1,7 @@
 import { Error, Parser, tokenize, Tree } from '../syntax';
 import { RootNode } from '../syntax/generated';
 import { ReactiveCache } from '../utils/reactiveCache';
-import { VirtualFileSystem } from '../vfs';
+import { VirtualFileSystem } from './vfs';
 
 interface ParseResult {
     tree: Tree;

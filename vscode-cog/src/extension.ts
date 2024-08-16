@@ -15,8 +15,8 @@ import { ElaborationService } from './services/elaborationService';
 import { IncludeGraphService } from './services/includeGraphService';
 import { IncludeResolver } from './services/IncludeResolver';
 import { ParsingServiceImpl } from './services/parsingService';
+import { VirtualFileSystemImpl } from './services/vfs';
 import { ReactiveCache } from './utils/reactiveCache';
-import { VirtualFileSystemImpl } from './vfs';
 
 export function activate(context: vscode.ExtensionContext) {
     // Services
