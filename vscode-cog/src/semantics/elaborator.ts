@@ -703,7 +703,11 @@ export class Elaborator {
         const nameNode = fieldNode.name;
         const typeNode = fieldNode.type;
 
-        const fieldType = this.typeEval(typeNode);
+        let fieldType = this.typeEval(typeNode);
+        if (typeNode && this.isUnsizedType(fieldType)) {
+            this.reportError(typeNode, `Field has incomplete type. Consider inserting an indirection.`);
+            fieldType = mkErrorType();
+        }
 
         const fieldName = nameNode?.text;
         if (!fieldName)
