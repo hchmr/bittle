@@ -141,6 +141,8 @@ stage "feat(compiler): Add struct initializer expressions"
 
 stage "feat(compiler): Add struct inheritance"
 
+stage "feat(compiler): Add enum types"
+
 if [ "$bootstrap_next" = "1" ]; then
     stage "master"
 fi
