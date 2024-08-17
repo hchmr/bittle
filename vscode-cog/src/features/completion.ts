@@ -254,6 +254,8 @@ function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
     switch (kind) {
         case SymKind.Func:
             return vscode.CompletionItemKind.Function;
+        case SymKind.Enum:
+            return vscode.CompletionItemKind.Enum;
         case SymKind.Struct:
             return vscode.CompletionItemKind.Struct;
         case SymKind.StructField:

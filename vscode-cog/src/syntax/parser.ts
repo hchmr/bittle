@@ -358,6 +358,11 @@ export class Parser extends ParserBase {
     enumDecl() {
         this.beginNode(CompositeNodeTypes.EnumDecl);
         this.bump('enum');
+        if (this.match('identifier')) {
+            this.beginField('name');
+            this.expect('identifier');
+            this.finishField('name');
+        }
         if (!this.match('{')) {
             this.addErrorAndTryBump(`Expected enum body.`);
         }

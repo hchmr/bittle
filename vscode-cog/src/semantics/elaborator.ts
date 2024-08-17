@@ -11,10 +11,10 @@ import { Nullish } from '../utils';
 import { stream } from '../utils/stream';
 import { Scope } from './scope';
 import {
-    ConstSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
+    ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
 } from './sym';
 import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, typeLayout, typeLe,
+    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, typeLayout, typeLe,
 } from './type';
 
 export type ErrorLocation = {
@@ -237,6 +237,32 @@ export class Elaborator {
         return sym;
     }
 
+    private defineEnumSym(declNode: EnumDeclNode, nameNode: TokenNode | Nullish): EnumSym | undefined {
+        if (!nameNode) {
+            return;
+        }
+
+        const existing = this.lookupExistingSymbol(nameNode.text);
+        if (existing) {
+            if (existing.kind !== SymKind.Enum) {
+                this.reportError(nameNode, `Another symbol with the same name already exists.`);
+            } else {
+                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+            }
+        }
+        const sym: EnumSym = {
+            kind: SymKind.Enum,
+            name: nameNode.text,
+            qualifiedName: 'enum:' + nameNode.text,
+            origins: [this.createOrigin(declNode.syntax, nameNode)],
+            size: 32,
+        };
+        if (!existing) {
+            this.addSym(sym);
+        }
+        return sym;
+    }
+
     private declareFuncSym(declNode: FuncDeclNode, nameNode: TokenNode | Nullish, params: FuncParamSym[], returnType: Type, isVariadic: boolean, isDefinition: boolean): FuncSym {
         if (!nameNode) {
             return {
@@ -365,7 +391,9 @@ export class Elaborator {
         return sym;
     }
 
-    private defineConstSym(declNode: ConstDeclNode | EnumMemberNode, nameNode: TokenNode | Nullish, value: number | undefined): ConstSym {
+    private defineConstSym(declNode: ConstDeclNode | EnumMemberNode, nameNode: TokenNode | Nullish, type: Type, value: number | undefined): ConstSym {
+        assert(isScalarType(type));
+
         if (!nameNode) {
             return {
                 kind: SymKind.Const,
@@ -373,6 +401,7 @@ export class Elaborator {
                 qualifiedName: '',
                 origins: [],
                 value: undefined,
+                type,
             };
         }
 
@@ -389,6 +418,7 @@ export class Elaborator {
             name: nameNode.text,
             qualifiedName: 'const:' + nameNode.text,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
+            type,
             value,
         };
 
@@ -453,11 +483,14 @@ export class Elaborator {
                     if (!sym) {
                         return mkErrorType();
                     }
-                    if (sym.kind !== SymKind.Struct) {
-                        this.reportError(typeNode, `'${sym.name}' is not a struct.`);
+                    if (sym.kind === SymKind.Struct) {
+                        return mkStructType(sym);
+                    } else if (sym.kind === SymKind.Enum) {
+                        return mkEnumType(sym);
+                    } else {
+                        this.reportError(nameNode, `'${sym.name}' is not a type.`);
                         return mkErrorType();
                     }
-                    return mkStructType(sym);
                 }
             } else if (typeNode instanceof PointerTypeNode) {
                 return mkPointerType(this.typeEval(typeNode.pointee));
@@ -683,22 +716,24 @@ export class Elaborator {
     }
 
     private elabEnum(node: EnumDeclNode) {
-        const body = node.body;
-        if (!body)
-            return;
+        const enumSym = this.defineEnumSym(node, node.name);
 
-        let nextValue: number = 0;
-        for (const memberNode of body.enumMemberNodes) {
-            nextValue = this.elabEnumMember(memberNode, nextValue);
+        const type = enumSym ? mkEnumType(enumSym) : mkIntType(32);
+
+        if (node.body) {
+            let nextValue: number = 0;
+            for (const memberNode of node.body.enumMemberNodes) {
+                nextValue = this.elabEnumMember(memberNode, type, nextValue);
+            }
         }
     }
 
-    private elabEnumMember(memberNode: EnumMemberNode, nextValue: number) {
+    private elabEnumMember(memberNode: EnumMemberNode, type: Type, nextValue: number): number {
         const nameNode = memberNode.name;
         const valueNode = memberNode.value;
 
         const value = valueNode ? this.constEval(valueNode) : nextValue;
-        this.defineConstSym(memberNode, nameNode, value);
+        this.defineConstSym(memberNode, nameNode, type, value);
         return (value ?? nextValue) + 1;
     }
 
@@ -782,9 +817,10 @@ export class Elaborator {
         const valueNode = node.value;
 
         const name = nameNode?.text ?? '';
+        const type = mkIntType(32);
         const value = this.constEval(valueNode);
 
-        this.defineConstSym(node, nameNode, value);
+        this.defineConstSym(node, nameNode, type, value);
     }
 
     //==============================================================================
@@ -988,11 +1024,13 @@ export class Elaborator {
 
         switch (sym.kind) {
             case SymKind.Const:
-                return mkIntType(32);
+                return sym.type;
             case SymKind.Global:
             case SymKind.Local:
             case SymKind.FuncParam:
                 return sym.type;
+            case SymKind.Enum:
+                return mkEnumType(sym);
             case SymKind.Struct:
             case SymKind.Func:
             case SymKind.StructField:

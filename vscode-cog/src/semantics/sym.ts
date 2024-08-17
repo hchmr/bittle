@@ -1,9 +1,10 @@
 import { SyntaxNode } from '../syntax';
-import { mkIntType, mkStructType, prettyType, Type } from './type';
+import { mkEnumType, mkIntType, mkStructType, prettyType, Type } from './type';
 
 export enum SymKind {
     Struct = 'Struct',
     StructField = 'StructField',
+    Enum = 'Enum',
     Func = 'Func',
     FuncParam = 'FuncParam',
     Global = 'Global',
@@ -14,6 +15,7 @@ export enum SymKind {
 export type Sym =
     | StructSym
     | StructFieldSym
+    | EnumSym
     | FuncSym
     | FuncParamSym
     | GlobalSym
@@ -25,6 +27,11 @@ type SymBase = {
     name: string;
     qualifiedName: string;
     origins: Origin[];
+};
+
+export type EnumSym = SymBase & {
+    kind: SymKind.Enum;
+    size: number;
 };
 
 export type StructSym = SymBase & {
@@ -60,6 +67,7 @@ export type GlobalSym = SymBase & {
 
 export type ConstSym = SymBase & {
     kind: SymKind.Const;
+    type: Type;
     value: number | undefined;
 };
 
@@ -88,6 +96,8 @@ export function symRelatedType(sym: Sym): Type {
         return mkStructType(sym);
     } else if (sym.kind === SymKind.StructField) {
         return sym.type;
+    } else if (sym.kind === SymKind.Enum) {
+        return mkEnumType(sym);
     } else if (sym.kind === SymKind.Func) {
         return sym.returnType;
     } else if (sym.kind === SymKind.Global) {
@@ -95,7 +105,7 @@ export function symRelatedType(sym: Sym): Type {
     } else if (sym.kind === SymKind.Local) {
         return sym.type;
     } else if (sym.kind === SymKind.Const) {
-        return mkIntType(64);
+        return sym.type!;
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {
@@ -105,7 +115,9 @@ export function symRelatedType(sym: Sym): Type {
 }
 
 export function prettySym(sym: Sym): string {
-    if (sym.kind === SymKind.Struct) {
+    if (sym.kind === SymKind.Enum) {
+        return `enum ${sym.name}`;
+    } else if (sym.kind === SymKind.Struct) {
         return `struct ${sym.name}${prettyBase(sym)}`;
     } else if (sym.kind === SymKind.StructField) {
         return `(field) ${sym.name}: ${prettyType(sym.type)}`;

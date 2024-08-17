@@ -8,12 +8,12 @@ import { SyntaxNode } from './tree';
 export enum AstNodeTypes {
     Root = 'Root',
     IncludeDecl = 'IncludeDecl',
-    StructDecl = 'StructDecl',
-    StructBody = 'StructBody',
-    StructMember = 'StructMember',
     EnumDecl = 'EnumDecl',
     EnumBody = 'EnumBody',
     EnumMember = 'EnumMember',
+    StructDecl = 'StructDecl',
+    StructBody = 'StructBody',
+    StructMember = 'StructMember',
     FuncDecl = 'FuncDecl',
     FuncParamList = 'FuncParamList',
     FuncParam = 'FuncParam',
@@ -58,7 +58,7 @@ export type AstNodeType = AstNodeTypes[keyof AstNodeTypes];
 
 export class RootNode extends AstNode {
     get declNodes(): DeclNode[] {
-        return this.getAstNodesOfType<DeclNode>(undefined, ['IncludeDecl', 'StructDecl', 'EnumDecl', 'FuncDecl', 'GlobalDecl', 'ConstDecl']);
+        return this.getAstNodesOfType<DeclNode>(undefined, ['IncludeDecl', 'EnumDecl', 'StructDecl', 'FuncDecl', 'GlobalDecl', 'ConstDecl']);
     }
 }
 export class IncludeDeclNode extends AstNode {
@@ -67,6 +67,42 @@ export class IncludeDeclNode extends AstNode {
     }
     get path(): TokenNode<'string_literal'> | undefined {
         return this.getTokenOfType('path', ['string_literal']);
+    }
+    get semicolonToken(): TokenNode<';'> | undefined {
+        return this.getTokenOfType(undefined, [';']);
+    }
+}
+export class EnumDeclNode extends AstNode {
+    get enumToken(): TokenNode<'enum'> | undefined {
+        return this.getTokenOfType(undefined, ['enum']);
+    }
+    get name(): TokenNode<'identifier'> | undefined {
+        return this.getTokenOfType('name', ['identifier']);
+    }
+    get body(): EnumBodyNode | undefined {
+        return this.getAstNodeOfType<EnumBodyNode>('body', ['EnumBody']);
+    }
+}
+export class EnumBodyNode extends AstNode {
+    get lBraceToken(): TokenNode<'{'> | undefined {
+        return this.getTokenOfType(undefined, ['{']);
+    }
+    get enumMemberNodes(): EnumMemberNode[] {
+        return this.getAstNodesOfType<EnumMemberNode>(undefined, ['EnumMember']);
+    }
+    get rBraceToken(): TokenNode<'}'> | undefined {
+        return this.getTokenOfType(undefined, ['}']);
+    }
+}
+export class EnumMemberNode extends AstNode {
+    get name(): TokenNode<'identifier'> | undefined {
+        return this.getTokenOfType('name', ['identifier']);
+    }
+    get eqToken(): TokenNode<'='> | undefined {
+        return this.getTokenOfType(undefined, ['=']);
+    }
+    get value(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -109,39 +145,6 @@ export class StructMemberNode extends AstNode {
     }
     get type(): TypeNode | undefined {
         return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType']);
-    }
-}
-export class EnumDeclNode extends AstNode {
-    get enumToken(): TokenNode<'enum'> | undefined {
-        return this.getTokenOfType(undefined, ['enum']);
-    }
-    get body(): EnumBodyNode | undefined {
-        return this.getAstNodeOfType<EnumBodyNode>('body', ['EnumBody']);
-    }
-}
-export class EnumBodyNode extends AstNode {
-    get lBraceToken(): TokenNode<'{'> | undefined {
-        return this.getTokenOfType(undefined, ['{']);
-    }
-    get enumMemberNodes(): EnumMemberNode[] {
-        return this.getAstNodesOfType<EnumMemberNode>(undefined, ['EnumMember']);
-    }
-    get rBraceToken(): TokenNode<'}'> | undefined {
-        return this.getTokenOfType(undefined, ['}']);
-    }
-}
-export class EnumMemberNode extends AstNode {
-    get name(): TokenNode<'identifier'> | undefined {
-        return this.getTokenOfType('name', ['identifier']);
-    }
-    get eqToken(): TokenNode<'='> | undefined {
-        return this.getTokenOfType(undefined, ['=']);
-    }
-    get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
-    }
-    get semicolonToken(): TokenNode<';'> | undefined {
-        return this.getTokenOfType(undefined, [';']);
     }
 }
 export class FuncDeclNode extends AstNode {
@@ -591,8 +594,8 @@ export class StringLiteralNode extends AstNode {
 
 export enum DeclNodeTypes {
     IncludeDecl = 'IncludeDecl',
-    StructDecl = 'StructDecl',
     EnumDecl = 'EnumDecl',
+    StructDecl = 'StructDecl',
     FuncDecl = 'FuncDecl',
     GlobalDecl = 'GlobalDecl',
     ConstDecl = 'ConstDecl',
@@ -600,8 +603,8 @@ export enum DeclNodeTypes {
 
 export type DeclNode =
     | IncludeDeclNode
-    | StructDeclNode
     | EnumDeclNode
+    | StructDeclNode
     | FuncDeclNode
     | GlobalDeclNode
     | ConstDeclNode;
@@ -692,12 +695,12 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
     switch (syntax.type) {
         case AstNodeTypes.Root: return new RootNode(syntax);
         case AstNodeTypes.IncludeDecl: return new IncludeDeclNode(syntax);
-        case AstNodeTypes.StructDecl: return new StructDeclNode(syntax);
-        case AstNodeTypes.StructBody: return new StructBodyNode(syntax);
-        case AstNodeTypes.StructMember: return new StructMemberNode(syntax);
         case AstNodeTypes.EnumDecl: return new EnumDeclNode(syntax);
         case AstNodeTypes.EnumBody: return new EnumBodyNode(syntax);
         case AstNodeTypes.EnumMember: return new EnumMemberNode(syntax);
+        case AstNodeTypes.StructDecl: return new StructDeclNode(syntax);
+        case AstNodeTypes.StructBody: return new StructBodyNode(syntax);
+        case AstNodeTypes.StructMember: return new StructMemberNode(syntax);
         case AstNodeTypes.FuncDecl: return new FuncDeclNode(syntax);
         case AstNodeTypes.FuncParamList: return new FuncParamListNode(syntax);
         case AstNodeTypes.FuncParam: return new FuncParamNode(syntax);

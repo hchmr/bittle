@@ -1,5 +1,5 @@
 import { stream } from '../utils/stream';
-import { StructSym } from './sym';
+import { EnumSym, StructSym } from './sym';
 
 export type Type =
     | VoidType
@@ -7,6 +7,7 @@ export type Type =
     | IntType
     | PointerType
     | ArrayType
+    | EnumType
     | StructType
     | NeverType
     | ErrorType;
@@ -17,6 +18,7 @@ export enum TypeKind {
     Int = 'Int',
     Ptr = 'Ptr',
     Arr = 'Arr',
+    Enum = 'Enum',
     Struct = 'Struct',
     Never = 'Never',
     Err = 'Err',
@@ -44,6 +46,11 @@ export type ArrayType = Readonly<{
     kind: TypeKind.Arr;
     elemType: Type;
     size: number | undefined;
+}>;
+
+export type EnumType = Readonly<{
+    kind: TypeKind.Enum;
+    sym: EnumSym;
 }>;
 
 export type StructType = Readonly<{
@@ -81,6 +88,8 @@ const ERROR_TYPE: ErrorType = { kind: TypeKind.Err };
 
 const POINTER_TYPES = new WeakMap<Type, PointerType>();
 
+const ENUM_TYPES = new WeakMap<EnumSym, EnumType>();
+
 const STRUCT_TYPES = new WeakMap<StructSym, StructType>();
 
 export function mkVoidType(): Type {
@@ -116,6 +125,15 @@ export function mkArrayType(elemType: Type, size: number | undefined): Type {
 
 export function mkNeverType(): Type {
     return NEVER_TYPE;
+}
+
+export function mkEnumType(sym: EnumSym): EnumType {
+    let enumType = ENUM_TYPES.get(sym);
+    if (!enumType) {
+        enumType = { kind: TypeKind.Enum, sym };
+        ENUM_TYPES.set(sym, enumType);
+    }
+    return enumType;
 }
 
 export function mkStructType(sym: StructSym): StructType {
@@ -167,6 +185,9 @@ export function typeLayout(type: Type): TypeLayout | undefined {
         case TypeKind.Arr: {
             const elemLayout = typeLayout(type.elemType);
             return elemLayout && { size: elemLayout.size * type.size!, align: elemLayout.align };
+        }
+        case TypeKind.Enum: {
+            return typeLayout(mkIntType(type.sym.size));
         }
         case TypeKind.Struct: {
             const sym = type.sym;
@@ -222,8 +243,8 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
         const elemType = tryUnifyTypes(t1.elemType, t2.elemType, onError);
         const size = unifySize(t1.size, t2.size, onError);
         return mkArrayType(elemType, size);
-    } else if (t1.kind === TypeKind.Struct && t2.kind === t1.kind) {
-        if (t1.sym.name !== t2.sym.name) {
+    } else if ((t1.kind === TypeKind.Enum || t1.kind === TypeKind.Struct) && t2.kind === t1.kind) {
+        if (t1.sym.qualifiedName !== t2.sym.qualifiedName) {
             onError();
             return mkErrorType();
         }
@@ -257,9 +278,9 @@ export function typeEq(t1: Type, t2: Type): boolean {
     } else if (t1.kind === TypeKind.Arr) {
         t2 = t2 as ArrayType;
         return typeEq(t1.elemType, t2.elemType) && t1.size === t2.size;
-    } else if (t1.kind === TypeKind.Struct) {
-        t2 = t2 as StructType;
-        return t1.sym.name === t2.sym.name;
+    } else if (t1.kind === TypeKind.Enum || t1.kind === TypeKind.Struct) {
+        t2 = t2 as EnumType | StructType;
+        return t1.sym.qualifiedName === t2.sym.qualifiedName;
     } else {
         return true;
     }
@@ -268,7 +289,8 @@ export function typeEq(t1: Type, t2: Type): boolean {
 export function isScalarType(type: Type): boolean {
     return type.kind === TypeKind.Bool
         || type.kind === TypeKind.Int
-        || type.kind === TypeKind.Ptr;
+        || type.kind === TypeKind.Ptr
+        || type.kind === TypeKind.Enum;
 }
 
 export function isValidReturnType(type: Type): boolean {
@@ -283,6 +305,7 @@ export function typeLe(t1: Type, t2: Type): boolean {
         || (t1.kind === TypeKind.Never)
         || (isScalarType(t1) && t2.kind === TypeKind.Bool)
         || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Int && t1.size! <= t2.size!)
+        || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Enum && t1.size! <= t2.sym.size)
         || (t1.kind === TypeKind.Ptr && t2.kind === TypeKind.Ptr && pointeeTypeLe(t1.pointeeType, t2.pointeeType));
 }
 
@@ -310,6 +333,7 @@ export function prettyType(t: Type): string {
         case TypeKind.Int: return `Int${t.size ?? ''}`;
         case TypeKind.Ptr: return '*' + prettyType(t.pointeeType);
         case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
+        case TypeKind.Enum:
         case TypeKind.Struct: return t.sym.name;
         case TypeKind.Never: return '!';
         case TypeKind.Err: return '{unknown}';

@@ -68,6 +68,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
 }
 
 const symbolKindMapping = {
+    [NodeTypes.EnumDecl]: vscode.SymbolKind.Enum,
     [NodeTypes.EnumMember]: vscode.SymbolKind.Constant,
     [NodeTypes.StructDecl]: vscode.SymbolKind.Struct,
     [NodeTypes.StructMember]: vscode.SymbolKind.Field,

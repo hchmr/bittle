@@ -11,8 +11,8 @@ export const grammar = createGrammar({
 
     Decl: $ => choice(
         $.IncludeDecl,
-        $.StructDecl,
         $.EnumDecl,
+        $.StructDecl,
         $.FuncDecl,
         $.GlobalDecl,
         $.ConstDecl,
@@ -21,6 +21,29 @@ export const grammar = createGrammar({
     IncludeDecl: $ => seq(
         'include',
         label('path', 'string_literal'),
+        ';',
+    ),
+
+    EnumDecl: $ => seq(
+        'enum',
+        label('name', 'identifier'),
+        label('body', $.EnumBody),
+    ),
+
+    EnumBody: $ => seq(
+        '{',
+        commaSep($.EnumMember),
+        '}',
+    ),
+
+    EnumMember: $ => seq(
+        optional(
+            label('name', 'identifier'),
+        ),
+        optional(seq(
+            '=',
+            label('value', $.Expr),
+        )),
         ';',
     ),
 
@@ -44,26 +67,6 @@ export const grammar = createGrammar({
         label('name', 'identifier'),
         ':',
         label('type', $.Type),
-    ),
-
-    EnumDecl: $ => seq(
-        'enum',
-        label('body', $.EnumBody),
-    ),
-
-    EnumBody: $ => seq(
-        '{',
-        commaSep($.EnumMember),
-        '}',
-    ),
-
-    EnumMember: $ => seq(
-        label('name', 'identifier'),
-        optional(seq(
-            '=',
-            label('value', $.Expr),
-        )),
-        ';',
     ),
 
     FuncDecl: $ => seq(
