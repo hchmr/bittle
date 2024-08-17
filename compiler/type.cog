@@ -37,6 +37,12 @@ func mk_array_type(elem: *Type, size: Int): *ArrType {
     return type;
 }
 
+func mk_enum_type(sym: *EnumSym): *EnumType {
+    var type: *EnumType = calloc(1, sizeof(EnumType));
+    *type = EnumType(kind: Type_Enum, sym);
+    return type;
+}
+
 func mk_struct_type(sym: *StructSym): *StructType {
     var type: *StructType = calloc(1, sizeof(StructType));
     *type = StructType(kind: Type_Struct, sym);
@@ -59,6 +65,10 @@ func type_eq(t1: *Type, t2: *Type): Bool {
         var t1 = t1 as *ArrType;
         var t2 = t2 as *ArrType;
         return type_eq(t1.elem, t2.elem) && t1.size == t2.size;
+    } else if (t1.kind == Type_Enum) {
+        var t1 = t1 as *EnumType;
+        var t2 = t2 as *EnumType;
+        return t1.sym == t2.sym;
     } else if (t1.kind == Type_Struct) {
         var t1 = t1 as *StructType;
         var t2 = t2 as *StructType;
@@ -109,6 +119,9 @@ func type_size(type: *Type): Int {
     } else if (type.kind == Type_Arr) {
         var type = type as *ArrType;
         return type_size(type.elem) * type.size;
+    } else if (type.kind == Type_Enum) {
+        var type = type as *EnumType;
+        return type_size(mk_int_type(type.sym.size));
     } else if (type.kind == Type_Struct) {
         var type = type as *StructType;
         return type.sym.fields.len == 0 ? -1 : align_up(type.sym.unpadded_size, type_align(type));
@@ -130,7 +143,8 @@ func type_align(type: *Type): Int {
 func is_scalar(type: *Type): Bool {
     return type.kind == Type_Bool
         || type.kind == Type_Int
-        || type.kind == Type_Ptr;
+        || type.kind == Type_Ptr
+        || type.kind == Type_Enum;
 }
 
 func is_sized(type: *Type): Bool {
@@ -152,6 +166,9 @@ func pretty_type(file: *File, type: *Type): Void {
         fprintf(file, "[");
         pretty_type(file, type.elem);
         fprintf(file, "; %d]", type.size);
+    } else if (type.kind == Type_Enum) {
+        var sym = (type as *EnumType).sym;
+        fprintf(file, "%s", sym.name);
     } else if (type.kind == Type_Struct) {
         var sym = (type as *StructType).sym;
         fprintf(file, "%s", sym.name);

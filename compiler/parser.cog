@@ -726,6 +726,10 @@ func p_enum_member(self: *Parser): *EnumMember {
 func p_enum_decl(self: *Parser): *Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Enum);
+    var name: *Char = null;
+    if (at(self, Tok_Ident)) {
+        name = p_ident(self);
+    }
     expect(self, Tok_LBrace);
     var members = list_new();
     while (!at_eof(self) && !eat(self, Tok_RBrace)) {
@@ -737,7 +741,7 @@ func p_enum_decl(self: *Parser): *Decl {
     }
 
     var result: *EnumDecl = calloc(1, sizeof(EnumDecl));
-    *result = EnumDecl(Decl_Enum, pos, members);
+    *result = EnumDecl(Decl_Enum, pos, name, members);
     return result;
 }
 

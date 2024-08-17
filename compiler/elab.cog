@@ -83,6 +83,18 @@ func add_sym(ctx: *ElabCtx, sym: *Sym) {
     list_push(ctx.scope.entries, entry);
 }
 
+func define_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        die_at(pos, "Symbol is already defined");
+    }
+
+    var sym = calloc(1, sizeof(EnumSym)) as *EnumSym;
+    *sym = EnumSym(Sym_Enum, name, size: 4);
+    add_sym(ctx, sym);
+    return sym;
+}
+
 func declare_struct(
     ctx: *ElabCtx,
     pos: *Pos,
@@ -161,14 +173,14 @@ func declare_func(
     return sym as *FuncSym;
 }
 
-func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, value: Int32) {
+func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, value: Int32) {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         die_at(pos, "Symbol is already defined");
     }
 
     var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
-    *sym = ConstSym(Sym_Const, name, value);
+    *sym = ConstSym(Sym_Const, name, type, value);
     add_sym(ctx, sym);
 }
 
@@ -295,10 +307,13 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
             if (!sym) {
                 die_at(&type_expr.pos, "Unknown type");
             }
-            if (sym.kind != Sym_Struct) {
-                die_at(&type_expr.pos, "Expected a struct type");
+            if (sym.kind == Sym_Enum) {
+                return mk_enum_type(sym as *EnumSym);
+            } else if (sym.kind == Sym_Struct) {
+                return mk_struct_type(sym as *StructSym);
+            } else {
+                die_at(&type_expr.pos, "Expected a type");
             }
-            return mk_struct_type(sym as *StructSym);
         }
     } else if (type_expr.kind == TypeExpr_Ptr) {
         var pointee = eval_type(ctx, (type_expr as *PtrTypeExpr).pointee);
@@ -405,7 +420,7 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
     } else if (sym.kind == Sym_Global) {
         type = (sym as *GlobalSym).type;
     } else if (sym.kind == Sym_Const) {
-        type = mk_int_type(4);
+        type = (sym as *ConstSym).type;
     } else {
         die_at(&expr.pos, "Expected a variable or constant");
     }
@@ -900,6 +915,35 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
 //==============================================================================
 //== Top-level declarations
 
+func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, type: *Type, next_value: Int32): Int32 {
+    var name = member_decl.name;
+    var value = member_decl.value
+        ? const_eval(ctx, member_decl.value)
+        : next_value;
+
+    define_const(ctx, &member_decl.pos, name, type, value);
+    return value;
+}
+
+func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
+    var type: *Type;
+    if (decl.name) {
+        var sym = define_enum(ctx, &decl.pos, decl.name);
+        type = mk_enum_type(sym);
+    } else {
+        type = mk_int_type(4);
+    }
+
+    var member_decls = decl.members;
+
+    var next_value: Int32 = 0;
+    for (var i = 0; i < list_len(member_decls); i += 1) {
+        var member_decl: *EnumMember = list_get(member_decls, i);
+        var value = elab_enum_member(ctx, member_decl, type, next_value);
+        next_value = value + 1;
+    }
+}
+
 func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
     var field_name = field_decl.name;
 
@@ -1071,33 +1115,13 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     }
 }
 
-func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, next_value: Int32): Int32 {
-    var name = member_decl.name;
-    var value = member_decl.value
-        ? const_eval(ctx, member_decl.value)
-        : next_value;
-
-    define_const(ctx, &member_decl.pos, name, value);
-    return value;
-}
-
-func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
-    var member_decls = decl.members;
-
-    var next_value: Int32 = 0;
-    for (var i = 0; i < list_len(member_decls); i += 1) {
-        var member_decl: *EnumMember = list_get(member_decls, i);
-        var value = elab_enum_member(ctx, member_decl, next_value);
-        next_value = value + 1;
-    }
-}
-
 func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
     var name = decl.name;
     var value_expr = decl.value;
 
+    var type = mk_int_type(4);
     var value = const_eval(ctx, value_expr);
-    define_const(ctx, &decl.pos, name, value);
+    define_const(ctx, &decl.pos, name, type, value);
 }
 
 func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {

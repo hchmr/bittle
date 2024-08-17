@@ -13,6 +13,16 @@ func is_lvalue_hir(e: *HirExpr): Bool {
         || e.kind == HirExpr_Deref;
 }
 
+func is_int_or_enum(t: *Type, max_size: Int): Bool {
+    if (t.kind == Type_Int) {
+        return (t as *IntType).size <= max_size;
+    } else if (t.kind == Type_Enum) {
+        return (t as *EnumType).sym.size <= max_size;
+    } else {
+        return false;
+    }
+}
+
 struct CodegenCtx {
     frame_size: Int,
     label_count: Int,
@@ -42,11 +52,11 @@ func strx(type: *Type): *Char {
 func ldrx(type: *Type): *Char {
     if (type.kind == Type_Bool)
         return "ldrb w";
-    if (type.kind == Type_Int && (type as *IntType).size == 1)
+    if (is_int_or_enum(type, max_size: 1))
         return "ldrsb x";
-    if (type.kind == Type_Int && (type as *IntType).size == 2)
+    if (is_int_or_enum(type, max_size: 2))
         return "ldrsh x";
-    if (type.kind == Type_Int && (type as *IntType).size == 4)
+    if (is_int_or_enum(type, max_size: 4))
         return "ldrsw x";
     if (type_size(type) == 8)
         return "ldr x";
@@ -84,7 +94,7 @@ func emit_temp_addr(ctx: *CodegenCtx, temp: *HirTemp, reg: Int) {
 
 func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
     assert(is_scalar(source), "emit_sign_extend: source should be a scalar.");
-    if (source.kind == Type_Int && (source as *IntType).size < 8) {
+    if (is_int_or_enum(source, max_size: 4)) {
         var source = source as *IntType;
         var suffix = "_bh_w"[source.size];
         printf("  sxt%c x%d, w%d\n", suffix, t0, t1);
