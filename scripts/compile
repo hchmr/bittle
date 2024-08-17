@@ -3,7 +3,7 @@
 set -e
 
 usage() {
-  CAT <<HERE
+  cat <<HERE
 usage: $0 [options] FILE
 
 options:
