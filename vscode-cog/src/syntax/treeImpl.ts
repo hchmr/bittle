@@ -34,18 +34,6 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         return this._type;
     }
 
-    get isMissing(): boolean {
-        return false;
-    }
-
-    get isExtra(): boolean {
-        return false;
-    }
-
-    get isError(): boolean {
-        return false;
-    }
-
     get text(): string {
         return this.tree.text.slice(this.startIndex, this.endIndex);
     }
@@ -224,30 +212,6 @@ export class TokenNodeImpl<Kind extends TokenKind> extends SyntaxNodeImpl {
         let text = '';
         text += indent(level);
         text += JSON.stringify(this.text);
-        text += prettyPosition(this.startPosition);
-        text += '\n';
-        return text;
-    }
-}
-
-export class MissingTokenNodeImpl extends SyntaxNodeImpl {
-    constructor(
-        kind: TokenKind,
-        startPosition: Point,
-        startIndex: number,
-        tree: Tree,
-    ) {
-        super(kind, startPosition, startIndex, tree);
-    }
-
-    override get isMissing(): boolean {
-        return true;
-    }
-
-    override pretty(level: number): string {
-        let text = '';
-        text += indent(level);
-        text += 'MISSING ' + JSON.stringify(this.type);
         text += prettyPosition(this.startPosition);
         text += '\n';
         return text;

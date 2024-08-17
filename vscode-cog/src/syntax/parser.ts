@@ -6,7 +6,6 @@ import { Token, TokenKind } from './token.js';
 import { Tree } from './tree.js';
 import {
     CompositeNodeImpl,
-    MissingTokenNodeImpl,
     SyntaxNodeImpl,
     TokenNodeImpl,
     TreeImpl,
@@ -33,10 +32,6 @@ type IncompleteNode =
 
 function tokenToSyntaxNode(tree: Tree, token: Token): SyntaxNodeImpl {
     return new TokenNodeImpl(tree, token);
-}
-
-function missingTokenNode(kind: TokenKind, tree: Tree, startPosition: Point, startIndex: number): SyntaxNodeImpl {
-    return new MissingTokenNodeImpl(kind, startPosition, startIndex, tree);
 }
 
 function incompleteNodeToSyntaxNode(tree: Tree, node: IncompleteNode): SyntaxNodeImpl {
@@ -263,7 +258,6 @@ class ParserBase extends NodeBuilder {
     expect(tokenKind: TokenKind) {
         if (!this.match(tokenKind)) {
             this.addError(this.pos, `Expected '${tokenKind}', got '${this.tok.kind}' while parsing ${this.currentNode.kind}`);
-            this.addChild(missingTokenNode(tokenKind, this.tree, this.pos, this.index));
             return false;
         }
         this.bump();

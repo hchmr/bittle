@@ -3,10 +3,6 @@ import { Point } from './position';
 export interface SyntaxNode {
     readonly type: string;
 
-    readonly isMissing: boolean;
-    readonly isExtra: boolean;
-    readonly isError: boolean;
-
     readonly text: string;
 
     readonly startPosition: Point;
