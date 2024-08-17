@@ -143,7 +143,7 @@ export class Elaborator {
         assert(sym?.kind === SymKind.Struct);
 
         const fieldName = nameNode.text;
-        const field = sym.fields?.find(f => f.name === fieldName);
+        const field = sym.fields.find(f => f.name === fieldName);
         if (!field) {
             this.reportError(nameNode, `Unknown field '${fieldName}'.`);
             return undefined;
@@ -184,7 +184,7 @@ export class Elaborator {
                 qualifiedName: '',
                 origins: [],
                 base: undefined,
-                fields: undefined,
+                fields: [],
                 isDefined: false,
             };
         }
@@ -206,7 +206,7 @@ export class Elaborator {
             qualifiedName: 'struct:' + nameNode.text,
             origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
             base: undefined,
-            fields: undefined,
+            fields: [],
             isDefined: false,
         };
         if (!existing) {
@@ -652,10 +652,8 @@ export class Elaborator {
         }
 
         if (bodyNode) {
-            sym.fields ??= [];
-
             // Add base fields to the scope
-            for (const field of sym.fields ?? []) {
+            for (const field of sym.fields) {
                 this.addSym(field);
             }
 
@@ -668,7 +666,7 @@ export class Elaborator {
             }
         }
 
-        if (sym.fields) {
+        if (bodyNode) {
             sym.isDefined = true;
         }
 
@@ -698,7 +696,7 @@ export class Elaborator {
         const baseSym = this.symbols.get(baseType.sym.qualifiedName);
         assert(baseSym?.kind === SymKind.Struct);
         structSym.base = baseSym;
-        structSym.fields = [...baseSym?.fields ?? []];
+        structSym.fields = [...baseSym.fields];
     }
 
     private elabStructField(fieldNode: StructMemberNode, structSym: StructSym) {
@@ -1223,7 +1221,11 @@ export class Elaborator {
         }
         if (sym.kind == SymKind.Func) {
             return this.elabCallExprPart2(node, sym.params, sym.isVariadic, sym.returnType);
-        } else if (sym.kind === SymKind.Struct && sym.fields) {
+        } else if (sym.kind === SymKind.Struct) {
+            if (!sym.isDefined) {
+                this.reportError(calleeNode, `'${calleeName}' has incomplete type.`);
+                return this.elabCallExprUnknown(node);
+            }
             return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym));
         } else {
             this.reportError(calleeNode, `'${calleeName}' is not a function or struct.`);

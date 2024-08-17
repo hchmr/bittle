@@ -191,7 +191,7 @@ export function typeLayout(type: Type): TypeLayout | undefined {
         }
         case TypeKind.Struct: {
             const sym = type.sym;
-            if (!sym.fields || sym.fields.length === 0) {
+            if (!sym.isDefined) {
                 return undefined;
             }
             return stream(sym.fields)

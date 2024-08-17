@@ -37,7 +37,7 @@ export type EnumSym = SymBase & {
 export type StructSym = SymBase & {
     kind: SymKind.Struct;
     base: StructSym | undefined;
-    fields: StructFieldSym[] | undefined;
+    fields: StructFieldSym[];
     isDefined: boolean;
 };
 
@@ -145,7 +145,7 @@ export function prettyCallableSym(sym: FuncSym | StructSym): string {
         const returnType = prettyType(sym.returnType);
         return `${sym.name}(${params}${dots}): ${returnType}`;
     } else if (sym.kind === SymKind.Struct) {
-        const params = sym.fields?.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ') || '';
+        const params = sym.fields.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ') || '';
         return `${sym.name}(${params})`;
     } else {
         const unreachable: never = sym;

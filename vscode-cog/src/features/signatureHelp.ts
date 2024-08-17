@@ -51,7 +51,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
 
         return createSignatureHelp(
             calleeSym,
-            calleeSym.kind === SymKind.Func ? calleeSym.params : calleeSym.fields ?? [],
+            calleeSym.kind === SymKind.Func ? calleeSym.params : calleeSym.fields,
             calleeSym.kind === SymKind.Func && calleeSym.isVariadic,
             argIndex,
         );

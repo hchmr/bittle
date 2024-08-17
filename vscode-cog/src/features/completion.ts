@@ -78,13 +78,12 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         if (structSym?.kind !== SymKind.Struct) {
             return;
         }
-        const fields = structSym?.fields;
-        if (!fields) {
+        if (!structSym.isDefined) {
             return;
         }
 
         // Filter fields
-        const results = fuzzySearch(searchText, fields, { key: 'name' });
+        const results = fuzzySearch(searchText, structSym.fields, { key: 'name' });
         if (results.length === 0) {
             return;
         }
