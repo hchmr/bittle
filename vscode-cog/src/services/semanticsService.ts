@@ -9,7 +9,7 @@ import { Stream, stream } from '../utils/stream';
 import { IncludeResolver } from './IncludeResolver';
 import { ParsingService } from './parsingService';
 
-export class ElaborationService {
+export class SemanticsService {
     constructor(
         private parsingService: ParsingService,
         private includeResolver: IncludeResolver,
@@ -92,7 +92,7 @@ export class ElaborationService {
     }
 
     private elaborateFile(path: string): ElaboratorResult {
-        return this.cache.compute('elaborationService:elaborateFile:' + path, () =>
+        return this.cache.compute('semanticsService:elaborateFile:' + path, () =>
             Elaborator.elaborate(this.parsingService, this.includeResolver, path),
         );
     }

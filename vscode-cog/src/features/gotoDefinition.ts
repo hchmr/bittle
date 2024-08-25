@@ -2,9 +2,9 @@ import path from 'path';
 import * as vscode from 'vscode';
 import { Origin, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { Type, TypeKind } from '../semantics/type';
-import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
+import { SemanticsService } from '../services/semanticsService';
 import { VirtualFileSystem } from '../services/vfs';
 import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
@@ -56,7 +56,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
 export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode.ImplementationProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborator: ElaborationService,
+        private semanticsService: SemanticsService,
         private includeGraphService: IncludeGraphService,
     ) { }
 
@@ -86,7 +86,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
         return getNodesAtPosition(tree, position)
             .filter(node => node.type === 'identifier')
             .flatMap(nameNode => {
-                const symbol = this.elaborator.resolveSymbol(filePath, nameNode);
+                const symbol = this.semanticsService.resolveSymbol(filePath, nameNode);
                 if (!symbol) {
                     return [];
                 }
@@ -102,7 +102,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
 
     private getSameSymbolInReferringFiles(symbol: Sym) {
         return this.findReferringFiles(symbol)
-            .filterMap(filePath => this.elaborator.getSymbol(filePath, symbol.qualifiedName));
+            .filterMap(filePath => this.semanticsService.getSymbol(filePath, symbol.qualifiedName));
     }
 
     // TODO: Copied from references.ts
@@ -118,7 +118,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
 export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService,
+        private semanticsService: SemanticsService,
     ) { }
 
     @interceptExceptions
@@ -155,15 +155,15 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
 
     getTypeForNode(filePath: string, node: SyntaxNode): Type | undefined {
         if (node.type === 'identifier') {
-            const sym = this.elaborationService.resolveSymbol(filePath, node);
+            const sym = this.semanticsService.resolveSymbol(filePath, node);
             if (!sym || sym.kind === SymKind.Func) {
                 return;
             }
             return symRelatedType(sym);
         } else if (isExprNode(node)) {
-            return this.elaborationService.inferType(filePath, node);
+            return this.semanticsService.inferType(filePath, node);
         } else if (isTypeNode(node)) {
-            return this.elaborationService.evalType(filePath, node);
+            return this.semanticsService.evalType(filePath, node);
         }
     }
 
@@ -174,7 +174,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         if (type.kind !== TypeKind.Struct) {
             return;
         }
-        return this.elaborationService.getSymbol(filePath, type.sym.qualifiedName);
+        return this.semanticsService.getSymbol(filePath, type.sym.qualifiedName);
     }
 }
 

@@ -3,8 +3,8 @@ import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
 import { FuncParamSym, isDefined, prettySym, StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
-import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
+import { SemanticsService } from '../services/semanticsService';
 import { rangeContains, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, isArgNode, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
@@ -16,7 +16,7 @@ import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService,
+        private semanticsService: SemanticsService,
     ) { }
 
     @interceptExceptions
@@ -65,7 +65,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         // Infer type
-        let structType = this.elaborationService.inferType(filePath, leftNode);
+        let structType = this.semanticsService.inferType(filePath, leftNode);
         if (structType.kind === TypeKind.Ptr) {
             structType = structType.pointeeType;
         }
@@ -74,7 +74,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         // Get fields
-        const structSym = this.elaborationService.getSymbol(filePath, structType.sym.qualifiedName);
+        const structSym = this.semanticsService.getSymbol(filePath, structType.sym.qualifiedName);
         if (structSym?.kind !== SymKind.Struct) {
             return;
         }
@@ -120,7 +120,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return; // Already has a label
         }
 
-        const calleeSym = this.elaborationService.resolveSymbol(filePath, calleeNameNode);
+        const calleeSym = this.semanticsService.resolveSymbol(filePath, calleeNameNode);
         if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
             return;
         }
@@ -148,7 +148,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
 
-        return this.elaborationService
+        return this.semanticsService
             .getSymbolsAtNode(filePath, nameNode)
             .filter(sym => !isDefined(sym) && !isCurrentDeclaration(sym, nameNode.parent!))
             .map(toDefinitionCompletionItem)
@@ -176,7 +176,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
         const candidates: Array<CompletionCandidate>
-            = this.elaborationService.getSymbolsAtNode(filePath, node)
+            = this.semanticsService.getSymbolsAtNode(filePath, node)
                 .filter(sym => sym.origins.some(origin => origin.nameNode !== node))
                 .concat(generateBuiltins())
                 .toArray();

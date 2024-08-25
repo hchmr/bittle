@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { FuncParamSym, FuncSym, prettyCallableSym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
-import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
+import { SemanticsService } from '../services/semanticsService';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { fromVscPosition } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
@@ -10,7 +10,7 @@ import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService,
+        private semanticsService: SemanticsService,
     ) { }
 
     @interceptExceptions
@@ -44,7 +44,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         const argNodes = callNode.childForFieldName('args')!.children;
         const argIndex = countPrecedingCommas(argNodes, position);
 
-        const calleeSym = this.elaborationService.resolveSymbol(filePath, calleeNameNode);
+        const calleeSym = this.semanticsService.resolveSymbol(filePath, calleeNameNode);
         if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
             return;
         }

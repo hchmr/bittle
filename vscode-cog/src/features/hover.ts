@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { prettySym, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { prettyType, Type, typeLayout, TypeLayout } from '../semantics/type';
-import { ElaborationService } from '../services/elaborationService';
 import { ParsingService } from '../services/parsingService';
+import { SemanticsService } from '../services/semanticsService';
 import { SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
 import { toVscRange } from '../utils';
@@ -11,7 +11,7 @@ import { interceptExceptions } from '../utils/interceptExceptions';
 export class HoverProvider implements vscode.HoverProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService,
+        private semanticsService: SemanticsService,
     ) { }
 
     @interceptExceptions
@@ -41,19 +41,19 @@ export class HoverProvider implements vscode.HoverProvider {
 
     getDetailForNode(document: vscode.TextDocument, node: SyntaxNode): HoverDetail | undefined {
         if (node.type === 'identifier') {
-            const sym = this.elaborationService.resolveSymbol(document.fileName, node);
+            const sym = this.semanticsService.resolveSymbol(document.fileName, node);
             if (sym) {
                 return this.addLayout(document, { kind: 'sym', sym, node });
             }
         }
         if (isExprNode(node)) {
-            const type = this.elaborationService.inferType(document.fileName, node);
+            const type = this.semanticsService.inferType(document.fileName, node);
             if (type) {
                 return this.addLayout(document, { kind: 'type', type, node });
             }
         }
         if (isTypeNode(node)) {
-            const type = this.elaborationService.evalType(document.fileName, node);
+            const type = this.semanticsService.evalType(document.fileName, node);
             if (type) {
                 return this.addLayout(document, { kind: 'type', type, node });
             }

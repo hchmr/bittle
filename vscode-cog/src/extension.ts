@@ -11,10 +11,10 @@ import { SignatureHelpProvider } from './features/signatureHelp';
 import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { CompilerService } from './services/compilerService';
-import { ElaborationService } from './services/elaborationService';
 import { IncludeGraphService } from './services/includeGraphService';
 import { IncludeResolver } from './services/IncludeResolver';
 import { ParsingServiceImpl } from './services/parsingService';
+import { SemanticsService } from './services/semanticsService';
 import { VirtualFileSystemImpl } from './services/vfs';
 import { ReactiveCache } from './utils/reactiveCache';
 
@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const includeResolver = new IncludeResolver(vfs);
 
-    const elaborationService = new ElaborationService(parsingService, includeResolver, cache);
+    const semanticsService = new SemanticsService(parsingService, includeResolver, cache);
 
     const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
 
@@ -39,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Hover
 
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, elaborationService)),
+        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, semanticsService)),
     );
 
     // Semantic tokens
@@ -58,7 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
     const syntaxErrorProvider = new SyntaxErrorProvider(parsingService);
     context.subscriptions.push(syntaxErrorProvider);
 
-    const elaborationErrorProvider = new ElaborationDiagnosticProvider(elaborationService, cache);
+    const elaborationErrorProvider = new ElaborationDiagnosticProvider(semanticsService, cache);
     context.subscriptions.push(elaborationErrorProvider);
 
     const compilerErrorProvider = createCompilerErrorProvider(compilerService);
@@ -96,27 +96,27 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Navigation
 
-    const nameDefinitionProvider = new NameDefinitionProvider(parsingService, elaborationService, includeGraphService);
+    const nameDefinitionProvider = new NameDefinitionProvider(parsingService, semanticsService, includeGraphService);
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
         vscode.languages.registerDefinitionProvider('cog', nameDefinitionProvider),
         vscode.languages.registerImplementationProvider('cog', nameDefinitionProvider),
-        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, elaborationService)),
+        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, semanticsService)),
     );
 
     // Completion
 
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, elaborationService), '.'),
+        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, semanticsService), '.'),
     );
 
     context.subscriptions.push(
-        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, elaborationService), '(', ','),
+        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, semanticsService), '(', ','),
     );
 
     // Rename and references
 
-    const referenceProvider = new ReferenceProvider(parsingService, elaborationService, includeGraphService);
+    const referenceProvider = new ReferenceProvider(parsingService, semanticsService, includeGraphService);
     context.subscriptions.push(
         vscode.languages.registerReferenceProvider('cog', referenceProvider),
         vscode.languages.registerRenameProvider('cog', referenceProvider),

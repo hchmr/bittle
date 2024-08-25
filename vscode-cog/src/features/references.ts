@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { SymReference } from '../semantics/elaborator';
 import { Sym } from '../semantics/sym';
-import { ElaborationService } from '../services/elaborationService';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
+import { SemanticsService } from '../services/semanticsService';
 import { fromVscPosition, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { getIdentifierAtPosition } from '../utils/nodeSearch';
@@ -12,7 +12,7 @@ import { stream } from '../utils/stream';
 export class ReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
     constructor(
         private parsingService: ParsingService,
-        private elaborationService: ElaborationService,
+        private semanticsService: SemanticsService,
         private includeGraphService: IncludeGraphService,
     ) { }
 
@@ -47,7 +47,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             return [];
         }
 
-        const symbol = this.elaborationService.resolveSymbol(path, nameNode);
+        const symbol = this.semanticsService.resolveSymbol(path, nameNode);
         if (!symbol) {
             return [];
         }
@@ -67,12 +67,12 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
 
         // add references in the same file
         references.push(
-            ...this.elaborationService.references(path, symbol.qualifiedName),
+            ...this.semanticsService.references(path, symbol.qualifiedName),
         );
 
         // add references in referring files
         for (const referringFile of referringFiles) {
-            references.push(...this.elaborationService.references(referringFile, symbol.qualifiedName));
+            references.push(...this.semanticsService.references(referringFile, symbol.qualifiedName));
         }
 
         return stream(references)
@@ -88,7 +88,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
 
     private getSameSymbolInReferringFiles(symbol: Sym) {
         return this.findReferringFiles(symbol)
-            .filterMap(filePath => this.elaborationService.getSymbol(filePath, symbol.qualifiedName));
+            .filterMap(filePath => this.semanticsService.getSymbol(filePath, symbol.qualifiedName));
     }
 
     private findReferringFiles(symbol: Sym) {

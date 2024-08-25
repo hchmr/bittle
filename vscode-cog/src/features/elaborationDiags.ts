@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ElaborationDiag } from '../semantics/elaborator';
-import { ElaborationService } from '../services/elaborationService';
+import { SemanticsService } from '../services/semanticsService';
 import { toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { ReactiveCache } from '../utils/reactiveCache';
@@ -10,7 +10,7 @@ export class ElaborationDiagnosticProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
 
     constructor(
-        private elaborationService: ElaborationService,
+        private semanticsService: SemanticsService,
         private cache: ReactiveCache,
     ) { }
 
@@ -42,7 +42,7 @@ export class ElaborationDiagnosticProvider implements vscode.Disposable {
     }
 
     createDiagnosticsUncached(document: vscode.TextDocument) {
-        const diags = this.elaborationService.getDiagnostics(document.fileName);
+        const diags = this.semanticsService.getDiagnostics(document.fileName);
         return stream(diags)
             .groupBy<string>(diag => diag.location.file)
             .map<[vscode.Uri, vscode.Diagnostic[]]>(([path, diags]) => {
