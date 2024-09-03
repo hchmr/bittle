@@ -10,8 +10,10 @@ bootstrap_dir="$root_dir/out/bootstrap"
 src_dir="$bootstrap_dir/src"
 build_dir="$bootstrap_dir/build"
 
+compiler_name=cogc
 prev_stage=-1
 prev_stage_ref=
+prev_compiler_path=
 
 usage() {
     cat <<HERE
@@ -28,6 +30,10 @@ section() {
     echo
     echo "==> $1"
     echo
+}
+
+toupper() {
+    echo "$1" | tr '[:lower:]' '[:upper:]'
 }
 
 checkout() {
@@ -59,15 +65,13 @@ stage() {
 
     checkout "$ref"
 
-    local cogc=""
-    if [ "$prev_stage" != "-1" ]; then
-        cogc=$(realpath "$build_dir/stage$prev_stage/cogc")
-    fi
+    local compiler_var=$(toupper "$compiler_name")
 
-    make -C compiler "BUILD_DIR=$stage_dir" "COGC=$cogc"
+    make -C compiler "BUILD_DIR=$stage_dir" "$compiler_var=$prev_compiler_path"
 
     prev_stage="$stage"
     prev_stage_ref="$ref"
+    prev_compiler_path=$(realpath "$stage_dir/$compiler_name")
 }
 
 verify() {
@@ -79,13 +83,13 @@ verify() {
 
     mkdir -p "$build_dir/verify"
 
-    make -C compiler "BUILD_DIR=$build_dir/verify" "COGC=$(realpath "$build_dir/stage$prev_stage/cogc")"
+    make -C compiler "BUILD_DIR=$build_dir/verify" "BITTLEC=$(realpath "$build_dir/stage$prev_stage/bittlec")"
 
-    echo "Comparing executables $build_dir/stage$prev_stage/cogc and $build_dir/verify/cogc"
+    echo "Comparing executables $build_dir/stage$prev_stage/bittlec and $build_dir/verify/bittlec"
 
-    objdump -dr -j .rodata -j .text "$build_dir/stage$prev_stage/cogc" | tail -n +3 >"$build_dir/verify/cogc.objdump"
-    objdump -dr -j .rodata -j .text "$build_dir/verify/cogc" | tail -n +3 >"$build_dir/verify/cogc.verify.objdump"
-    diff "$build_dir/verify/cogc.objdump" "$build_dir/verify/cogc.verify.objdump" && echo "No difference" || echo "^^^ Difference found"
+    objdump -dr -j .rodata -j .text "$build_dir/stage$prev_stage/bittlec" | tail -n +3 >"$build_dir/verify/bittlec.objdump"
+    objdump -dr -j .rodata -j .text "$build_dir/verify/bittlec" | tail -n +3 >"$build_dir/verify/bittlec.verify.objdump"
+    diff "$build_dir/verify/bittlec.objdump" "$build_dir/verify/bittlec.verify.objdump" && echo "No difference" || echo "^^^ Difference found"
 }
 
 bootstrap_next=0
@@ -119,7 +123,7 @@ cd "$src_dir"
 
 if [ -z "$output_file" ]; then
     mkdir -p "$bootstrap_dir/bin"
-    output_file="$bootstrap_dir/bin/cogc"
+    output_file="$bootstrap_dir/bin/bittlec"
 fi
 output_file=$(realpath "$output_file")
 
@@ -143,6 +147,10 @@ stage "feat(compiler): Add struct inheritance"
 
 stage "feat(compiler): Add enum types"
 
+compiler_name=bittlec
+
+stage "chore: Rename the language from Cog to Bittle"
+
 if [ "$bootstrap_next" = "1" ]; then
     stage "master"
 fi
@@ -151,6 +159,6 @@ verify
 
 section "Copying final executable to $output_file"
 
-cp "$build_dir/stage$prev_stage/cogc" "$output_file"
+cp "$build_dir/stage$prev_stage/$compiler_name" "$output_file"
 
 section "Done"
