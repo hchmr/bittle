@@ -635,89 +635,89 @@ struct HirExpr {
     pos: Pos,
 }
 
-struct SeqHirExpr: HirExpr {
+struct HirSeqExpr: HirExpr {
     first: *HirExpr,
     second: *HirExpr,
 }
 
-struct LetHirExpr: HirExpr {
+struct HirLetExpr: HirExpr {
     temp: *HirTemp,
     init: *HirExpr,
     body: *HirExpr,
 }
 
-struct IntHirExpr: HirExpr {
+struct HirIntExpr: HirExpr {
     value: Int,
 }
 
-struct StrHirExpr: HirExpr {
+struct HirStrExpr: HirExpr {
     value: *Char,
 }
 
-struct VarHirExpr: HirExpr {
+struct HirVarExpr: HirExpr {
     sym: *Sym,
 }
 
-struct TempHirExpr: HirExpr {
+struct HirTempExpr: HirExpr {
     temp: *HirTemp,
 }
 
-struct CondHirExpr: HirExpr {
+struct HirCondExpr: HirExpr {
     cond: *HirExpr,
     then_expr: *HirExpr,
     else_expr: *HirExpr,
 }
 
-struct LoopHirExpr: HirExpr {
+struct HirLoopExpr: HirExpr {
     cond: *HirExpr,
     body: *HirExpr,
     step: *HirExpr,
 }
 
-struct ReturnHirExpr: HirExpr {
+struct HirReturnExpr: HirExpr {
     expr: *HirExpr,
 }
 
-struct JumpHirExpr: HirExpr {
+struct HirJumpExpr: HirExpr {
     is_break: Bool,
 }
 
-struct AssignHirExpr: HirExpr {
+struct HirAssignExpr: HirExpr {
     dst: *HirExpr,
     src: *HirExpr,
 }
 
-struct BinaryOpHirExpr: HirExpr {
+struct HirBinaryOpExpr: HirExpr {
     op: Int32,
     left: *HirExpr,
     right: *HirExpr,
 }
 
-struct CallHirExpr: HirExpr {
+struct HirCallExpr: HirExpr {
     callee: *Sym,
     args: *List, // List<HirExpr>
 }
 
-struct MemberHirExpr: HirExpr {
+struct HirMemberExpr: HirExpr {
     left: *HirExpr,
     name: *Char,
     field_index: Int,
 }
 
-struct IndexHirExpr: HirExpr {
+struct HirIndexExpr: HirExpr {
     indexee: *HirExpr,
     index: *HirExpr,
 }
 
-struct DerefHirExpr: HirExpr {
+struct HirDerefExpr: HirExpr {
     expr: *HirExpr,
 }
 
-struct AddrHirExpr: HirExpr {
+struct HirAddrExpr: HirExpr {
     expr: *HirExpr,
 }
 
-struct CastHirExpr: HirExpr {
+struct HirCastExpr: HirExpr {
     expr: *HirExpr,
 }
 
@@ -743,9 +743,9 @@ func parser_run(self: *Parser): *Ast;
 func elab(ast: *Ast): *List; // *List<*Sym>
 
 //==============================================================================
-//== lower.cog
+//== hir_lower.cog
 
-func lower(func_: *Sym, body: *Stmt): *HirExpr;
+func hir_lower(func_: *Sym, body: *Stmt): *HirExpr;
 
 //==============================================================================
 //== codegen.cog

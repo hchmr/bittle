@@ -5,7 +5,7 @@ const FRAME_TEMP_SIZE = 128;
 const FRAME_ARGS_SIZE = 64;
 const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_ARGS_SIZE - FRAME_TEMP_SIZE;
 
-func is_lvalue_hir(e: *HirExpr): Bool {
+func hir_is_lvalue(e: *HirExpr): Bool {
     return e.kind == HirExpr_Var
         || e.kind == HirExpr_Temp
         || e.kind == HirExpr_Member
@@ -147,12 +147,12 @@ func emit_expr_cmp(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, t0: 
 }
 
 func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
-    if (e.kind == HirExpr_Var && (e as *VarHirExpr).sym.kind == Sym_Local) {
-        var e = e as *VarHirExpr;
+    if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Local) {
+        var e = e as *HirVarExpr;
         var sym = e.sym as *LocalSym;
         printf("  add x%d, sp, #%d // &%s\n", t0, ctx.frame_size - sym.frame_offset, sym.name);
-    } else if (e.kind == HirExpr_Var && (e as *VarHirExpr).sym.kind == Sym_Global) {
-        var e = e as *VarHirExpr;
+    } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
+        var e = e as *HirVarExpr;
         var sym = e.sym as *GlobalSym;
         if (sym.is_defined) {
             printf("  adrp x%d, %s\n", t0, sym.name);
@@ -162,21 +162,21 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
             printf("  ldr x%d, [x%d, :got_lo12:%s] // &%s\n", t0, t0, sym.name, sym.name);
         }
     } else if (e.kind == HirExpr_Temp) {
-        var e = e as *TempHirExpr;
+        var e = e as *HirTempExpr;
         var temp = e.temp;
         assert(temp.offset >= 0, "emit_expr_lvalue: temp should have a valid offset.");
         emit_temp_addr(ctx, temp, t0);
     } else if (e.kind == HirExpr_Member) {
-        var e = e as *MemberHirExpr;
+        var e = e as *HirMemberExpr;
         var fields = (e.left.type as *StructType).sym.fields;
         var field: *StructField = list_get(fields, e.field_index);
         emit_expr_lvalue(ctx, e.left, t0);
         printf("  add x%d, x%d, #%d // &%s\n", t0, t0, field.offset, e.name);
     } else if (e.kind == HirExpr_Deref) {
-        var e = e as *DerefHirExpr;
+        var e = e as *HirDerefExpr;
         emit_expr(ctx, e.expr, t0);
     } else if (e.kind == HirExpr_Index) {
-        var e = e as *IndexHirExpr;
+        var e = e as *HirIndexExpr;
         if (e.indexee.type.kind == Type_Ptr) {
             emit_operands(ctx, e.indexee, e.index, 0, 1);
         } else if (e.indexee.type.kind == Type_Arr) {
@@ -191,14 +191,14 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     }
 }
 
-func emit_seq_expr(ctx: *CodegenCtx, e: *SeqHirExpr, t0: Int) {
+func emit_seq_expr(ctx: *CodegenCtx, e: *HirSeqExpr, t0: Int) {
     var first = e.first;
     var second = e.second;
     emit_expr(ctx, first, 0);
     emit_expr(ctx, second, t0);
 }
 
-func emit_let_expr(ctx: *CodegenCtx, e: *LetHirExpr, t0: Int) {
+func emit_let_expr(ctx: *CodegenCtx, e: *HirLetExpr, t0: Int) {
     var temp = e.temp;
     var init = e.init;
     var body = e.body;
@@ -209,12 +209,12 @@ func emit_let_expr(ctx: *CodegenCtx, e: *LetHirExpr, t0: Int) {
     emit_temp_pop(ctx, temp, 0);
 }
 
-func emit_int_expr(ctx: *CodegenCtx, e: *IntHirExpr, t0: Int) {
+func emit_int_expr(ctx: *CodegenCtx, e: *HirIntExpr, t0: Int) {
     var int_val = e.value;
     printf("  mov x%d, #%d\n", t0, int_val);
 }
 
-func emit_str_expr(ctx: *CodegenCtx, e: *StrHirExpr, t0: Int) {
+func emit_str_expr(ctx: *CodegenCtx, e: *HirStrExpr, t0: Int) {
     var str_val = e.value;
     var label = next_label(ctx);
     printf("  .text\n");
@@ -237,7 +237,7 @@ func emit_str_expr(ctx: *CodegenCtx, e: *StrHirExpr, t0: Int) {
     printf("  add x%d, x%d, :lo12:.str.%d\n", t0, t0, label);
 }
 
-func emit_cond_expr(ctx: *CodegenCtx, e: *CondHirExpr, t0: Int) {
+func emit_cond_expr(ctx: *CodegenCtx, e: *HirCondExpr, t0: Int) {
     var cond = e.cond;
     var then_expr = e.then_expr;
     var else_expr = e.else_expr;
@@ -254,7 +254,7 @@ func emit_cond_expr(ctx: *CodegenCtx, e: *CondHirExpr, t0: Int) {
     printf(".L%d.end:\n", label);
 }
 
-func emit_loop_expr(ctx: *CodegenCtx, e: *LoopHirExpr, t0: Int) {
+func emit_loop_expr(ctx: *CodegenCtx, e: *HirLoopExpr, t0: Int) {
     var cond = e.cond;
     var body = e.body;
     var step = e.step;
@@ -274,7 +274,7 @@ func emit_loop_expr(ctx: *CodegenCtx, e: *LoopHirExpr, t0: Int) {
     ctx.current_loop = outer_loop;
 }
 
-func emit_jump_expr(ctx: *CodegenCtx, e: *JumpHirExpr, t0: Int) {
+func emit_jump_expr(ctx: *CodegenCtx, e: *HirJumpExpr, t0: Int) {
     var is_break = e.is_break;
     if (is_break) {
         printf("  b .L%d.done\n", ctx.current_loop);
@@ -283,7 +283,7 @@ func emit_jump_expr(ctx: *CodegenCtx, e: *JumpHirExpr, t0: Int) {
     }
 }
 
-func emit_return_expr(ctx: *CodegenCtx, e: *ReturnHirExpr, t0: Int) {
+func emit_return_expr(ctx: *CodegenCtx, e: *HirReturnExpr, t0: Int) {
     var subexpr = e.expr;
     if (subexpr) {
         emit_expr(ctx, subexpr, 0);
@@ -291,7 +291,7 @@ func emit_return_expr(ctx: *CodegenCtx, e: *ReturnHirExpr, t0: Int) {
     printf("  b .L.%s.ret\n", ctx.current_func.name);
 }
 
-func emit_binary_op_expr(ctx: *CodegenCtx, e: *BinaryOpHirExpr, t0: Int) {
+func emit_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, t0: Int) {
     var op = e.op;
     var e1 = e.left;
     var e2 = e.right;
@@ -336,7 +336,7 @@ func emit_binary_op_expr(ctx: *CodegenCtx, e: *BinaryOpHirExpr, t0: Int) {
     }
 }
 
-func emit_call_expr(ctx: *CodegenCtx, e: *CallHirExpr, t0: Int) {
+func emit_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, t0: Int) {
     var sym = e.callee;
     var param_count = list_len((sym as *FuncSym).params);
     var args = e.args;
@@ -365,12 +365,12 @@ func emit_call_expr(ctx: *CodegenCtx, e: *CallHirExpr, t0: Int) {
     }
 }
 
-func emit_addr_expr(ctx: *CodegenCtx, e: *AddrHirExpr, t0: Int) {
+func emit_addr_expr(ctx: *CodegenCtx, e: *HirAddrExpr, t0: Int) {
     var subexpr = e.expr;
     emit_expr_lvalue(ctx, subexpr, t0);
 }
 
-func emit_assign_expr(ctx: *CodegenCtx, e: *AssignHirExpr, t0: Int) {
+func emit_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, t0: Int) {
     var dst = e.dst;
     var src = e.src;
     if (is_scalar(dst.type)) {
@@ -386,7 +386,7 @@ func emit_assign_expr(ctx: *CodegenCtx, e: *AssignHirExpr, t0: Int) {
     }
 }
 
-func emit_cast_expr(ctx: *CodegenCtx, e: *CastHirExpr, t0: Int) {
+func emit_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, t0: Int) {
     var subexpr = e.expr;
     var target = e.type;
     var source = subexpr.type;
@@ -407,37 +407,37 @@ func emit_cast_expr(ctx: *CodegenCtx, e: *CastHirExpr, t0: Int) {
 }
 
 func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
-    if (is_lvalue_hir(e)) {
+    if (hir_is_lvalue(e)) {
         emit_expr_lvalue(ctx, e, t0);
         printf("  %s%d, [x%d]\n", ldrx(e.type), t0, t0);
     } else if (e.kind == HirExpr_Skip) {
         // nop
     } else if (e.kind == HirExpr_Seq) {
-        emit_seq_expr(ctx, e as *SeqHirExpr, t0);
+        emit_seq_expr(ctx, e as *HirSeqExpr, t0);
     } else if (e.kind == HirExpr_Let) {
-        emit_let_expr(ctx, e as *LetHirExpr, t0);
+        emit_let_expr(ctx, e as *HirLetExpr, t0);
     } else if (e.kind == HirExpr_Int) {
-        emit_int_expr(ctx, e as *IntHirExpr, t0);
+        emit_int_expr(ctx, e as *HirIntExpr, t0);
     } else if (e.kind == HirExpr_Str) {
-        emit_str_expr(ctx, e as *StrHirExpr, t0);
+        emit_str_expr(ctx, e as *HirStrExpr, t0);
     } else if (e.kind == HirExpr_Cond) {
-        emit_cond_expr(ctx, e as *CondHirExpr, t0);
+        emit_cond_expr(ctx, e as *HirCondExpr, t0);
     } else if (e.kind == HirExpr_Loop) {
-        emit_loop_expr(ctx, e as *LoopHirExpr, t0);
+        emit_loop_expr(ctx, e as *HirLoopExpr, t0);
     } else if (e.kind == HirExpr_Jump) {
-        emit_jump_expr(ctx, e as *JumpHirExpr, t0);
+        emit_jump_expr(ctx, e as *HirJumpExpr, t0);
     } else if (e.kind == HirExpr_Return) {
-        emit_return_expr(ctx, e as *ReturnHirExpr, t0);
+        emit_return_expr(ctx, e as *HirReturnExpr, t0);
     } else if (e.kind == HirExpr_BinaryOp) {
-        emit_binary_op_expr(ctx, e as *BinaryOpHirExpr, t0);
+        emit_binary_op_expr(ctx, e as *HirBinaryOpExpr, t0);
     } else if (e.kind == HirExpr_Call) {
-        emit_call_expr(ctx, e as *CallHirExpr, t0);
+        emit_call_expr(ctx, e as *HirCallExpr, t0);
     } else if (e.kind == HirExpr_Addr) {
-        emit_addr_expr(ctx, e as *AddrHirExpr, t0);
+        emit_addr_expr(ctx, e as *HirAddrExpr, t0);
     } else if (e.kind == HirExpr_Assign) {
-        emit_assign_expr(ctx, e as *AssignHirExpr, t0);
+        emit_assign_expr(ctx, e as *HirAssignExpr, t0);
     } else if (e.kind == HirExpr_Cast) {
-        emit_cast_expr(ctx, e as *CastHirExpr, t0);
+        emit_cast_expr(ctx, e as *HirCastExpr, t0);
     } else {
         unreachable("emit_expr");
     }
@@ -448,7 +448,7 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     var locals = sym.locals;
     var body = sym.body;
 
-    var hir_body = lower(sym, body);
+    var hir_body = hir_lower(sym, body);
     var locals_size = compute_locals_layout(sym);
     if (locals_size > FRAME_LOCALS_SIZE_MAX) {
         error_at(&body.pos);

@@ -42,137 +42,137 @@ func mk_skip_stmt(pos: *Pos): *HirExpr {
     return result;
 }
 
-func mk_seq_hir_expr(first: *HirExpr, second: *HirExpr): *SeqHirExpr {
-    var result: *SeqHirExpr = calloc(1, sizeof(SeqHirExpr));
-    *result = SeqHirExpr(HirExpr_Seq, first.type, first.pos, first, second);
+func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
+    var result: *HirSeqExpr = calloc(1, sizeof(HirSeqExpr));
+    *result = HirSeqExpr(HirExpr_Seq, first.type, first.pos, first, second);
     return result;
 }
 
-func mk_let_hir_expr(temp: *HirTemp, init: *HirExpr, body: *HirExpr, pos: *Pos): *LetHirExpr {
-    var result: *LetHirExpr = calloc(1, sizeof(LetHirExpr));
-    *result = LetHirExpr(HirExpr_Let, body.type, *pos, temp, init, body);
+func hir_mk_let_expr(temp: *HirTemp, init: *HirExpr, body: *HirExpr, pos: *Pos): *HirLetExpr {
+    var result: *HirLetExpr = calloc(1, sizeof(HirLetExpr));
+    *result = HirLetExpr(HirExpr_Let, body.type, *pos, temp, init, body);
     return result;
 }
 
-func mk_int_hir_expr(value: Int, type: *Type, pos: *Pos): *IntHirExpr {
-    var result: *IntHirExpr = calloc(1, sizeof(IntHirExpr));
-    *result = IntHirExpr(HirExpr_Int, type, *pos, value);
+func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
+    var result: *HirIntExpr = calloc(1, sizeof(HirIntExpr));
+    *result = HirIntExpr(HirExpr_Int, type, *pos, value);
     return result;
 }
 
-func mk_str_hir_expr(value: *Char, pos: *Pos): *StrHirExpr {
-    var result: *StrHirExpr = calloc(1, sizeof(StrHirExpr));
-    *result = StrHirExpr(HirExpr_Str, mk_ptr_type(mk_int_type(1)), *pos, value);
+func hir_mk_str_expr(value: *Char, pos: *Pos): *HirStrExpr {
+    var result: *HirStrExpr = calloc(1, sizeof(HirStrExpr));
+    *result = HirStrExpr(HirExpr_Str, mk_ptr_type(mk_int_type(1)), *pos, value);
     return result;
 }
 
-func mk_var_hir_expr(sym: *Sym, type: *Type, pos: *Pos): *VarHirExpr {
-    var result: *VarHirExpr = calloc(1, sizeof(VarHirExpr));
-    *result = VarHirExpr(HirExpr_Var, type, *pos, sym);
+func hir_mk_var_expr(sym: *Sym, type: *Type, pos: *Pos): *HirVarExpr {
+    var result: *HirVarExpr = calloc(1, sizeof(HirVarExpr));
+    *result = HirVarExpr(HirExpr_Var, type, *pos, sym);
     return result;
 }
 
-func mk_temp_hir_expr(temp: *HirTemp, pos: *Pos): *TempHirExpr {
-    var result: *TempHirExpr = calloc(1, sizeof(TempHirExpr));
-    *result = TempHirExpr(HirExpr_Temp, temp.type, *pos, temp);
+func hir_mk_temp_expr(temp: *HirTemp, pos: *Pos): *HirTempExpr {
+    var result: *HirTempExpr = calloc(1, sizeof(HirTempExpr));
+    *result = HirTempExpr(HirExpr_Temp, temp.type, *pos, temp);
     return result;
 }
 
-func mk_cond_hir_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, pos: *Pos): *CondHirExpr {
-    var result: *CondHirExpr = calloc(1, sizeof(CondHirExpr));
-    *result = CondHirExpr(HirExpr_Cond, then_expr.type, *pos, cond, then_expr, else_expr);
+func hir_mk_cond_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, pos: *Pos): *HirCondExpr {
+    var result: *HirCondExpr = calloc(1, sizeof(HirCondExpr));
+    *result = HirCondExpr(HirExpr_Cond, then_expr.type, *pos, cond, then_expr, else_expr);
     return result;
 }
 
-func mk_loop_hir_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos): *LoopHirExpr {
-    var result: *LoopHirExpr = calloc(1, sizeof(LoopHirExpr));
-    *result = LoopHirExpr(HirExpr_Loop, body.type, *pos, cond, body, step);
+func hir_mk_loop_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos): *HirLoopExpr {
+    var result: *HirLoopExpr = calloc(1, sizeof(HirLoopExpr));
+    *result = HirLoopExpr(HirExpr_Loop, body.type, *pos, cond, body, step);
     return result;
 }
 
-func mk_return_hir_expr(expr: *HirExpr, pos: *Pos): *ReturnHirExpr {
-    var result: *ReturnHirExpr = calloc(1, sizeof(ReturnHirExpr));
-    *result = ReturnHirExpr(HirExpr_Return, mk_void_type(), *pos, expr);
+func hir_mk_return_expr(expr: *HirExpr, pos: *Pos): *HirReturnExpr {
+    var result: *HirReturnExpr = calloc(1, sizeof(HirReturnExpr));
+    *result = HirReturnExpr(HirExpr_Return, mk_void_type(), *pos, expr);
     return result;
 }
 
-func mk_jump_hir_expr(is_break: Bool, pos: *Pos): *JumpHirExpr {
-    var result: *JumpHirExpr = calloc(1, sizeof(JumpHirExpr));
-    *result = JumpHirExpr(HirExpr_Jump, mk_void_type(), *pos, is_break);
+func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *HirJumpExpr {
+    var result: *HirJumpExpr = calloc(1, sizeof(HirJumpExpr));
+    *result = HirJumpExpr(HirExpr_Jump, mk_void_type(), *pos, is_break);
     return result;
 }
 
-func mk_assign_hir_expr(dst: *HirExpr, src: *HirExpr): *AssignHirExpr {
-    var result: *AssignHirExpr = calloc(1, sizeof(AssignHirExpr));
-    *result = AssignHirExpr(HirExpr_Assign, mk_void_type(), dst.pos, dst, src);
+func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
+    var result: *HirAssignExpr = calloc(1, sizeof(HirAssignExpr));
+    *result = HirAssignExpr(HirExpr_Assign, mk_void_type(), dst.pos, dst, src);
     return result;
 }
 
-func mk_binary_op_hir_expr(op: Int32, left: *HirExpr, right: *HirExpr, type: *Type): *BinaryOpHirExpr {
-    var result: *BinaryOpHirExpr = calloc(1, sizeof(BinaryOpHirExpr));
-    *result = BinaryOpHirExpr(HirExpr_BinaryOp, type, left.pos, op, left, right);
+func hir_mk_binary_op_expr(op: Int32, left: *HirExpr, right: *HirExpr, type: *Type): *HirBinaryOpExpr {
+    var result: *HirBinaryOpExpr = calloc(1, sizeof(HirBinaryOpExpr));
+    *result = HirBinaryOpExpr(HirExpr_BinaryOp, type, left.pos, op, left, right);
     return result;
 }
 
-func mk_neg_hir_expr(expr: *HirExpr): *HirExpr {
-    var zero = mk_int_hir_expr(0, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(HirOp_Sub, zero, expr, expr.type);
+func hir_mk_neg_expr(expr: *HirExpr): *HirExpr {
+    var zero = hir_mk_int_expr(0, expr.type, &expr.pos);
+    return hir_mk_binary_op_expr(HirOp_Sub, zero, expr, expr.type);
 }
 
-func mk_not_hir_expr(expr: *HirExpr): *HirExpr {
-    var one = mk_int_hir_expr(1, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(HirOp_Xor, expr, one, expr.type);
+func hir_mk_not_expr(expr: *HirExpr): *HirExpr {
+    var one = hir_mk_int_expr(1, expr.type, &expr.pos);
+    return hir_mk_binary_op_expr(HirOp_Xor, expr, one, expr.type);
 }
 
-func mk_bit_not_hir_expr(expr: *HirExpr): *HirExpr {
-    var minus_one = mk_int_hir_expr(-1, expr.type, &expr.pos);
-    return mk_binary_op_hir_expr(HirOp_Xor, expr, minus_one, expr.type);
+func hir_mk_bit_not_expr(expr: *HirExpr): *HirExpr {
+    var minus_one = hir_mk_int_expr(-1, expr.type, &expr.pos);
+    return hir_mk_binary_op_expr(HirOp_Xor, expr, minus_one, expr.type);
 }
 
-func mk_call_hir_expr(callee: *FuncSym, args: *List, pos: *Pos): *CallHirExpr {
-    var result: *CallHirExpr = calloc(1, sizeof(CallHirExpr));
-    *result = CallHirExpr(HirExpr_Call, callee.return_type, *pos, callee, args);
+func hir_mk_call_expr(callee: *FuncSym, args: *List, pos: *Pos): *HirCallExpr {
+    var result: *HirCallExpr = calloc(1, sizeof(HirCallExpr));
+    *result = HirCallExpr(HirExpr_Call, callee.return_type, *pos, callee, args);
     return result;
 }
 
-func mk_member_hir_expr(left: *HirExpr, name: *Char, field_index: Int, field_type: *Type): *MemberHirExpr {
-    var result: *MemberHirExpr = calloc(1, sizeof(MemberHirExpr));
-    *result = MemberHirExpr(HirExpr_Member, field_type, left.pos, left, name, field_index);
+func hir_mk_member_expr(left: *HirExpr, name: *Char, field_index: Int, field_type: *Type): *HirMemberExpr {
+    var result: *HirMemberExpr = calloc(1, sizeof(HirMemberExpr));
+    *result = HirMemberExpr(HirExpr_Member, field_type, left.pos, left, name, field_index);
     return result;
 }
 
-func mk_index_hir_expr(indexee: *HirExpr, index: *HirExpr): *IndexHirExpr {
+func hir_mk_index_expr(indexee: *HirExpr, index: *HirExpr): *HirIndexExpr {
     assert(
         indexee.type.kind == Type_Ptr || indexee.type.kind == Type_Arr,
-        "mk_index_hir_expr: indexee should have a pointer or array type"
+        "hir_mk_index_expr: indexee should have a pointer or array type"
     );
     var result_type = indexee.type.kind == Type_Ptr
         ? (indexee.type as *PtrType).pointee
         : (indexee.type as *ArrType).elem;
 
-    var result: *IndexHirExpr = calloc(1, sizeof(IndexHirExpr));
-    *result = IndexHirExpr(HirExpr_Index, result_type, indexee.pos, indexee, index);
+    var result: *HirIndexExpr = calloc(1, sizeof(HirIndexExpr));
+    *result = HirIndexExpr(HirExpr_Index, result_type, indexee.pos, indexee, index);
     return result;
 }
 
-func mk_deref_hir_expr(expr: *HirExpr, pos: *Pos): *DerefHirExpr {
-    assert(expr.type.kind == Type_Ptr, "mk_deref_hir_expr: expr should have a pointer type");
+func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
+    assert(expr.type.kind == Type_Ptr, "hir_mk_deref_expr: expr should have a pointer type");
     var deref_type = (expr.type as *PtrType).pointee;
 
-    var result: *DerefHirExpr = calloc(1, sizeof(DerefHirExpr));
-    *result = DerefHirExpr(HirExpr_Deref, deref_type, *pos, expr);
+    var result: *HirDerefExpr = calloc(1, sizeof(HirDerefExpr));
+    *result = HirDerefExpr(HirExpr_Deref, deref_type, *pos, expr);
     return result;
 }
 
-func mk_addr_hir_expr(expr: *HirExpr, pos: *Pos): *AddrHirExpr {
-    var result: *AddrHirExpr = calloc(1, sizeof(AddrHirExpr));
-    *result = AddrHirExpr(HirExpr_Addr, mk_ptr_type(expr.type), *pos, expr);
+func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
+    var result: *HirAddrExpr = calloc(1, sizeof(HirAddrExpr));
+    *result = HirAddrExpr(HirExpr_Addr, mk_ptr_type(expr.type), *pos, expr);
     return result;
 }
 
-func mk_cast_hir_expr(expr: *HirExpr, type: *Type): *CastHirExpr {
-    var result: *CastHirExpr = calloc(1, sizeof(CastHirExpr));
-    *result = CastHirExpr(HirExpr_Cast, type, expr.pos, expr);
+func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
+    var result: *HirCastExpr = calloc(1, sizeof(HirCastExpr));
+    *result = HirCastExpr(HirExpr_Cast, type, expr.pos, expr);
     return result;
 }
 
@@ -205,10 +205,10 @@ func lower_assign_expr(ctx: *Context, dest: *HirExpr, src: *Expr, pos: *Pos): *H
 func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
     var sym = expr.sym;
     if (sym.kind == Sym_Global || sym.kind == Sym_Local) {
-        return mk_var_hir_expr(sym, expr.type, &expr.pos);
+        return hir_mk_var_expr(sym, expr.type, &expr.pos);
     } else if (sym.kind == Sym_Const) {
         var value = (sym as *ConstSym).value;
-        return mk_int_hir_expr(value, expr.type, &expr.pos);
+        return hir_mk_int_expr(value, expr.type, &expr.pos);
     } else {
         unreachable("elab_ident_expr");
     }
@@ -219,15 +219,15 @@ func lower_literal_expr(ctx: *Context, expr: *LiteralExpr): *HirExpr {
 
     var result: *HirExpr;
     if (literal.kind == Literal_Null) {
-        result = mk_int_hir_expr(0, expr.type, &expr.pos);
+        result = hir_mk_int_expr(0, expr.type, &expr.pos);
     } else if (literal.kind == Literal_Bool) {
-        result = mk_int_hir_expr((literal as *BoolLiteral).value as Int, expr.type, &expr.pos);
+        result = hir_mk_int_expr((literal as *BoolLiteral).value as Int, expr.type, &expr.pos);
     } else if (literal.kind == Literal_Int) {
-        result = mk_int_hir_expr((literal as *IntLiteral).value, expr.type, &expr.pos);
+        result = hir_mk_int_expr((literal as *IntLiteral).value, expr.type, &expr.pos);
     } else if (literal.kind == Literal_Char) {
-        result = mk_int_hir_expr((literal as *CharLiteral).value, expr.type, &expr.pos);
+        result = hir_mk_int_expr((literal as *CharLiteral).value, expr.type, &expr.pos);
     } else if (literal.kind == Literal_String) {
-        result = mk_str_hir_expr((literal as *StringLiteral).value, &expr.pos);
+        result = hir_mk_str_expr((literal as *StringLiteral).value, &expr.pos);
     } else {
         unreachable("elab_literal_expr");
     }
@@ -249,7 +249,7 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr): *HirExpr {
         var hir_arg = lower_expr(ctx, ast_arg.expr);
         list_push(hir_args, hir_arg);
     }
-    return mk_call_hir_expr(resolved_callee, hir_args, &expr.pos);
+    return hir_mk_call_expr(resolved_callee, hir_args, &expr.pos);
 }
 
 func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
@@ -259,7 +259,7 @@ func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
     var hir_indexee = lower_expr(ctx, ast_indexee);
     var hir_index = lower_expr(ctx, ast_index);
 
-    return mk_index_hir_expr(hir_indexee, hir_index);
+    return hir_mk_index_expr(hir_indexee, hir_index);
 }
 
 func lower_member_expr(ctx: *Context, expr: *MemberExpr): *HirExpr {
@@ -269,15 +269,15 @@ func lower_member_expr(ctx: *Context, expr: *MemberExpr): *HirExpr {
 
     var hir_left = lower_expr(ctx, ast_left);
     if (hir_left.type.kind == Type_Ptr) {
-        hir_left = mk_deref_hir_expr(hir_left, &expr.pos);
+        hir_left = hir_mk_deref_expr(hir_left, &expr.pos);
     }
 
-    return mk_member_hir_expr(hir_left, name, field_index, expr.type);
+    return hir_mk_member_expr(hir_left, name, field_index, expr.type);
 }
 
 func lower_sizeof_expr(ctx: *Context, expr: *SizeofExpr): *HirExpr {
     var size = expr.size;
-    return mk_int_hir_expr(size, expr.type, &expr.pos);
+    return hir_mk_int_expr(size, expr.type, &expr.pos);
 }
 
 func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
@@ -288,15 +288,15 @@ func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
 
     var result: *HirExpr;
     if (op == Tok_Minus) {
-        result = mk_neg_hir_expr(right);
+        result = hir_mk_neg_expr(right);
     } else if (op == Tok_Tilde) {
-        result = mk_bit_not_hir_expr(right);
+        result = hir_mk_bit_not_expr(right);
     } else if (op == Tok_Bang) {
-        result = mk_not_hir_expr(right);
+        result = hir_mk_not_expr(right);
     } else if (op == Tok_Star) {
-        result = mk_deref_hir_expr(right, &expr.pos);
+        result = hir_mk_deref_expr(right, &expr.pos);
     } else if (op == Tok_Amp) {
-        result = mk_addr_hir_expr(right, &expr.pos);
+        result = hir_mk_addr_expr(right, &expr.pos);
     } else {
         unreachable("elab_unary_expr");
     }
@@ -326,23 +326,23 @@ func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
         var typeof_addr_left = mk_ptr_type(left.type);
         var op = translate_assign_op(ast_op);
         var temp_var = mk_temp_var(ctx, typeof_addr_left);
-        var temp = mk_temp_hir_expr(temp_var, &expr.pos);
-        var addr_left = mk_addr_hir_expr(left, &expr.pos);
-        var temp_deref = mk_deref_hir_expr(temp, &expr.pos);
-        var computation = mk_binary_op_hir_expr(op, temp_deref, right, left.type);
-        var assign_temp = mk_assign_hir_expr(temp_deref, computation);
-        result = mk_let_hir_expr(temp_var, addr_left, assign_temp, &expr.pos);
+        var temp = hir_mk_temp_expr(temp_var, &expr.pos);
+        var addr_left = hir_mk_addr_expr(left, &expr.pos);
+        var temp_deref = hir_mk_deref_expr(temp, &expr.pos);
+        var computation = hir_mk_binary_op_expr(op, temp_deref, right, left.type);
+        var assign_temp = hir_mk_assign_expr(temp_deref, computation);
+        result = hir_mk_let_expr(temp_var, addr_left, assign_temp, &expr.pos);
     } else if (ast_op == Tok_AmpAmp || ast_op == Tok_BarBar) {
         var right = lower_expr(ctx, ast_right);
         if (ast_op == Tok_AmpAmp) {
-            result = mk_cond_hir_expr(left, right, mk_int_hir_expr(0, expr.type, &right.pos), &expr.pos);
+            result = hir_mk_cond_expr(left, right, hir_mk_int_expr(0, expr.type, &right.pos), &expr.pos);
         } else {
-            result = mk_cond_hir_expr(left, mk_int_hir_expr(1, expr.type, &right.pos), right, &expr.pos);
+            result = hir_mk_cond_expr(left, hir_mk_int_expr(1, expr.type, &right.pos), right, &expr.pos);
         }
     } else if (ast_op == Tok_EqEq || ast_op == Tok_BangEq || ast_op == Tok_Lt || ast_op == Tok_LtEq || ast_op == Tok_Gt || ast_op == Tok_GtEq || ast_op == Tok_Amp || ast_op == Tok_Bar || ast_op == Tok_Caret || ast_op == Tok_LtLt || ast_op == Tok_GtGt || ast_op == Tok_Plus || ast_op == Tok_Minus || ast_op == Tok_Star || ast_op == Tok_Slash || ast_op == Tok_Percent) {
         var right = lower_expr(ctx, ast_right);
         var op = translate_binary_op(ast_op);
-        result = mk_binary_op_hir_expr(op, left, right, expr.type);
+        result = hir_mk_binary_op_expr(op, left, right, expr.type);
     } else {
         unreachable("elab_binary_expr");
     }
@@ -358,7 +358,7 @@ func lower_ternary_expr(ctx: *Context, expr: *TernaryExpr): *HirExpr {
     var then_expr = lower_expr(ctx, ast_then_expr);
     var else_expr = lower_expr(ctx, ast_else_expr);
 
-    return mk_cond_hir_expr(cond, then_expr, else_expr, &expr.pos);
+    return hir_mk_cond_expr(cond, then_expr, else_expr, &expr.pos);
 }
 
 func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
@@ -367,7 +367,7 @@ func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
 
     var hir_expr = lower_expr(ctx, ast_expr);
 
-    return mk_cast_hir_expr(hir_expr, target_type);
+    return hir_mk_cast_expr(hir_expr, target_type);
 }
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
@@ -419,22 +419,22 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         var structSym = resolved_callee;
         var fields = (structSym as *StructSym).fields;
 
-        var addr_dst = mk_addr_hir_expr(dst, &dst.pos);
+        var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
         var temp_var = mk_temp_var(ctx, addr_dst.type);
-        var temp = mk_temp_hir_expr(temp_var, pos);
+        var temp = hir_mk_temp_expr(temp_var, pos);
         var body = mk_skip_stmt(pos);
 
         for (var i = 0; i < args.len; i += 1) {
             var ast_arg: *CallArg = list_get(args, i);
             var field: *StructField = list_get(fields, i);
 
-            var temp_deref = mk_deref_hir_expr(temp, pos);
-            var field_access = mk_member_hir_expr(temp_deref, field.name, i, field.type);
+            var temp_deref = hir_mk_deref_expr(temp, pos);
+            var field_access = hir_mk_member_expr(temp_deref, field.name, i, field.type);
             var assignment = lower_assign_expr(ctx, field_access, ast_arg.expr, &ast_arg.expr.pos);
-            body = mk_seq_hir_expr(body, assignment);
+            body = hir_mk_seq_expr(body, assignment);
         }
 
-        return mk_let_hir_expr(temp_var, addr_dst, body, pos);
+        return hir_mk_let_expr(temp_var, addr_dst, body, pos);
     } else if (ast_src.kind == Expr_Array) {
         /*
             desugar
@@ -451,30 +451,30 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         assert(elem_type, "lower_assign_expr: array type should have an element type");
         var array_size = (type as *ArrType).size;
 
-        var zero = mk_int_hir_expr(0, mk_int_type(4), pos);
-        var zero_index = mk_index_hir_expr(dst, zero);
-        var addr_zero_index = mk_addr_hir_expr(zero_index, pos);
+        var zero = hir_mk_int_expr(0, mk_int_type(4), pos);
+        var zero_index = hir_mk_index_expr(dst, zero);
+        var addr_zero_index = hir_mk_addr_expr(zero_index, pos);
 
         var temp_var = mk_temp_var(ctx, addr_zero_index.type);
-        var temp = mk_temp_hir_expr(temp_var, pos);
+        var temp = hir_mk_temp_expr(temp_var, pos);
         var body = mk_skip_stmt(pos);
 
         for (var i = 0; i < array_size; i += 1) {
             var ast_elem: *Expr = list_get(elems, i);
-            var index = mk_int_hir_expr(i, mk_int_type(4), pos);
-            var index_expr = mk_index_hir_expr(temp, index);
+            var index = hir_mk_int_expr(i, mk_int_type(4), pos);
+            var index_expr = hir_mk_index_expr(temp, index);
             var assignment = lower_assign_expr(ctx, index_expr, ast_elem, &ast_elem.pos);
-            body = mk_seq_hir_expr(body, assignment);
+            body = hir_mk_seq_expr(body, assignment);
         }
 
         // something is null...
         assert(addr_zero_index.type, "lower_assign_expr: addr_zero_index should have a type");
         assert(addr_zero_index.expr.type, "lower_assign_expr: addr_zero_index should have a type");
 
-        return mk_let_hir_expr(temp_var, addr_zero_index, body, pos);
+        return hir_mk_let_expr(temp_var, addr_zero_index, body, pos);
     } else {
         var src = lower_expr(ctx, ast_src);
-        return mk_assign_hir_expr(dst, src);
+        return hir_mk_assign_expr(dst, src);
     }
 }
 
@@ -490,7 +490,7 @@ func lower_block_stmt(ctx: *Context, stmt: *BlockStmt): *HirExpr {
         var ast_stmt = list_get(stmt.stmts, i);
         var hir_stmt = lower_stmt(ctx, ast_stmt);
 
-        current = mk_seq_hir_expr(current, hir_stmt);
+        current = hir_mk_seq_expr(current, hir_stmt);
     }
 
     return current;
@@ -505,7 +505,7 @@ func lower_local_stmt(ctx: *Context, stmt: *LocalStmt): *HirExpr {
         return mk_skip_stmt(&stmt.pos);
     }
 
-    var var_expr = mk_var_hir_expr(sym, type, &stmt.pos);
+    var var_expr = hir_mk_var_expr(sym, type, &stmt.pos);
     return lower_assign_expr(ctx, var_expr, ast_init, &ast_init.pos);
 }
 
@@ -520,7 +520,7 @@ func lower_if_stmt(ctx: *Context, stmt: *IfStmt): *HirExpr {
         ? lower_stmt(ctx, ast_else_block)
         : mk_skip_stmt(&stmt.pos);
 
-    return mk_cond_hir_expr(cond, then_block, else_block, &stmt.pos);
+    return hir_mk_cond_expr(cond, then_block, else_block, &stmt.pos);
 }
 
 func lower_while_stmt(ctx: *Context, stmt: *WhileStmt): *HirExpr {
@@ -531,7 +531,7 @@ func lower_while_stmt(ctx: *Context, stmt: *WhileStmt): *HirExpr {
     var body = lower_stmt(ctx, ast_body);
     var step = mk_skip_stmt(&stmt.pos);
 
-    return mk_loop_hir_expr(cond, body, step, &stmt.pos);
+    return hir_mk_loop_expr(cond, body, step, &stmt.pos);
 }
 
 func lower_for_stmt(ctx: *Context, stmt: *ForStmt): *HirExpr {
@@ -541,11 +541,11 @@ func lower_for_stmt(ctx: *Context, stmt: *ForStmt): *HirExpr {
     var ast_body = stmt.body;
 
     var init = ast_init ? lower_stmt(ctx, ast_init) : mk_skip_stmt(&stmt.pos);
-    var cond = ast_cond ? lower_expr(ctx, ast_cond) : mk_int_hir_expr(1, mk_int_type(4), &stmt.pos);
+    var cond = ast_cond ? lower_expr(ctx, ast_cond) : hir_mk_int_expr(1, mk_int_type(4), &stmt.pos);
     var step = ast_step ? lower_expr(ctx, ast_step) : mk_skip_stmt(&stmt.pos);
     var body = lower_stmt(ctx, ast_body);
 
-    return mk_seq_hir_expr(init, mk_loop_hir_expr(cond, body, step, &stmt.pos));
+    return hir_mk_seq_expr(init, hir_mk_loop_expr(cond, body, step, &stmt.pos));
 }
 
 func lower_return_stmt(ctx: *Context, stmt: *ReturnStmt): *HirExpr {
@@ -553,15 +553,15 @@ func lower_return_stmt(ctx: *Context, stmt: *ReturnStmt): *HirExpr {
 
     var expr = ast_expr ? lower_expr(ctx, ast_expr) : null;
 
-    return mk_return_hir_expr(expr, &stmt.pos);
+    return hir_mk_return_expr(expr, &stmt.pos);
 }
 
 func lower_break_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
-    return mk_jump_hir_expr(true, &stmt.pos);
+    return hir_mk_jump_expr(true, &stmt.pos);
 }
 
 func lower_continue_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
-    return mk_jump_hir_expr(false, &stmt.pos);
+    return hir_mk_jump_expr(false, &stmt.pos);
 }
 
 func lower_expr_stmt(ctx: *Context, stmt: *ExprStmt): *HirExpr {
@@ -596,7 +596,7 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
 //==============================================================================
 //== Top-level declarations
 
-func lower(func_: *Sym, body: *Stmt): *HirExpr {
+func hir_lower(func_: *Sym, body: *Stmt): *HirExpr {
     var ctx: *Context = calloc(1, sizeof(Context));
     ctx.func_ = func_;
     ctx.temps = list_new();
