@@ -194,15 +194,16 @@ export function typeLayout(type: Type): TypeLayout | undefined {
             if (!sym.isDefined) {
                 return undefined;
             }
-            return stream(sym.fields)
+            const a = stream(sym.fields)
                 .map(field => typeLayout(field.type))
-                .reduce<TypeLayout | undefined>(
-                    (a, b) => a && b && ({
-                        size: alignUp(a.size, b.align) + b.size,
-                        align: Math.max(a.align, b.align),
-                    }),
-                    { size: 0, align: 0 },
-                );
+                .reduce<TypeLayout | undefined>((a, b) => a && b && {
+                    size: alignUp(a.size, b.align) + b.size,
+                    align: Math.max(a.align, b.align),
+                }, { size: 0, align: 0 });
+            return a && {
+                size: alignUp(a.size, a.align),
+                align: a.align,
+            };
         }
         case TypeKind.Never:
         case TypeKind.Err: {
