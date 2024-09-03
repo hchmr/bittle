@@ -2,12 +2,12 @@ import * as fs from 'fs';
 import { Minimatch } from 'minimatch';
 import path from 'path';
 import * as vscode from 'vscode';
-import { isCogFile } from '../utils';
+import { isBittleFile } from '../utils';
 import { ReactiveCache } from '../utils/reactiveCache';
 
 /** A virtual file system that keeps files in with changes in memory. */
 export interface VirtualFileSystem {
-    /** Get the content of a cog file */
+    /** Get the content of a bittle file */
     readFile(path: string): string;
     /** Checks if a file exists */
     exists(path: string): boolean;
@@ -25,7 +25,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
         this.excludes = getExcludes();
 
         vscode.workspace.onDidChangeTextDocument((event) => {
-            if (event.document.languageId !== 'cog'
+            if (event.document.languageId !== 'bittle'
                 || event.contentChanges.length === 0
                 || this.isExcluded(event.document.uri.fsPath)
             )
@@ -35,7 +35,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
             this.invalidateContents(path);
         }, this.disposables);
 
-        const watcher = vscode.workspace.createFileSystemWatcher('**/*.{cog,cogs}');
+        const watcher = vscode.workspace.createFileSystemWatcher('**/*.{btl,btls}');
         watcher.onDidChange((uri) => {
             if (vscode.workspace.textDocuments.some(doc => doc.uri.fsPath === uri.fsPath)) {
                 return; // Already handled by onDidChangeTextDocument
@@ -113,7 +113,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
         files.push(
             ...vscode.workspace.textDocuments
                 .map(doc => doc.uri.fsPath)
-                .filter(filePath => isCogFile(filePath) && !this.isExcluded(filePath)),
+                .filter(filePath => isBittleFile(filePath) && !this.isExcluded(filePath)),
         );
 
         for (const folder of vscode.workspace.workspaceFolders ?? []) {
@@ -126,7 +126,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
 
     private *listFilesInWorkspaceFolder(folder: string): Iterable<string> {
         for (const entry of fs.readdirSync(folder, { withFileTypes: true, recursive: true })) {
-            if (entry.isFile() && isCogFile(entry.name)) {
+            if (entry.isFile() && isBittleFile(entry.name)) {
                 const filePath = path.join(entry.parentPath, entry.name);
                 if (!this.isExcluded(filePath)) {
                     yield filePath;
@@ -141,6 +141,6 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
 }
 
 function getExcludes(): Minimatch[] {
-    const excludes = vscode.workspace.getConfiguration('cog').get<string[]>('exclude', []);
+    const excludes = vscode.workspace.getConfiguration('bittle').get<string[]>('exclude', []);
     return excludes.map(pattern => new Minimatch(pattern, { dot: true, optimizationLevel: 2 }));
 }

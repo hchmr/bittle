@@ -33,6 +33,6 @@ export function toVscRange(...args: [Point, Point] | [PointRange]): vscode.Range
 
 export type Nullish = null | undefined;
 
-export function isCogFile(name: string) {
-    return name.endsWith('.cog') || name.endsWith('.cogs');
+export function isBittleFile(name: string) {
+    return name.endsWith('.btl') || name.endsWith('.btls');
 }

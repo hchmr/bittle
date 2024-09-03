@@ -1,4 +1,4 @@
-include "cog.cogs";
+include "bittle.btls";
 
 func sym_is_defined(sym: *Sym): Bool {
     if (sym.kind == Sym_Struct) {

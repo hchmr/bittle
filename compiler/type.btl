@@ -1,4 +1,4 @@
-include "cog.cogs";
+include "bittle.btls";
 
 struct Type;
 func mk_void_type(): *VoidType {

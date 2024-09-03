@@ -91,5 +91,5 @@ function toHover(hoverDetail: HoverDetail): vscode.Hover {
         text += ` // size = ${size}, align = ${align}`;
     }
 
-    return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(text, 'cog'), toVscRange(hoverDetail.node));
+    return new vscode.Hover(new vscode.MarkdownString().appendCodeblock(text, 'bittle'), toVscRange(hoverDetail.node));
 }

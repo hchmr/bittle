@@ -1,7 +1,7 @@
-include "libc.cogs";
+include "libc.btls";
 
 //==============================================================================
-//== misc.cog
+//== misc.btl
 
 struct Pos {
     file: *Char,
@@ -63,7 +63,7 @@ func parse_char(c: *Char): Char;
 func parse_string(s: *Char): *Char;
 
 //==============================================================================
-//== type.cog
+//== type.btl
 
 const MAX_PARAMS = 8;
 
@@ -136,7 +136,7 @@ func is_sized(type: *Type): Bool;
 func pretty_type(file: *File, type: *Type): Void;
 
 //==============================================================================
-//== sym.cog
+//== sym.btl
 
 struct Sym;
 struct Stmt;
@@ -205,7 +205,7 @@ func sym_is_defined(sym: *Sym): Bool;
 func find_struct_field(sym: *Sym, name: *Char): Int;
 
 //==============================================================================
-//== tok.cog
+//== tok.btl
 
 // NOTE: When updating this declaration, remember to also update `pretty_tok_kind` and `lookup_keyword`.
 enum {
@@ -294,7 +294,7 @@ struct Tok {
 func pretty_tok_kind(kind: Int32): *Char;
 
 //==============================================================================
-//== ast.cog
+//== ast.btl
 
 struct Expr;
 
@@ -569,7 +569,7 @@ struct Ast {
 func is_lvalue(expr: *Expr): Bool;
 
 //==============================================================================
-//== hir.cog
+//== hir.btl
 
 struct HirTemp {
     id: Int,
@@ -722,7 +722,7 @@ struct HirCastExpr: HirExpr {
 }
 
 //==============================================================================
-//== lexer.cog
+//== lexer.btl
 
 struct Lexer;
 
@@ -730,7 +730,7 @@ func lexer_new(file_name: *Char, input: *Char): *Lexer;
 func lexer_next(self: *Lexer, out: *Tok);
 
 //==============================================================================
-//== parser.cog
+//== parser.btl
 
 struct Parser;
 
@@ -738,16 +738,16 @@ func parser_new(lexer: *Lexer): *Parser;
 func parser_run(self: *Parser): *Ast;
 
 //==============================================================================
-//== elab.cog
+//== elab.btl
 
 func elab(ast: *Ast): *List; // *List<*Sym>
 
 //==============================================================================
-//== hir_lower.cog
+//== hir_lower.btl
 
 func hir_lower(func_: *Sym, body: *Stmt): *HirExpr;
 
 //==============================================================================
-//== codegen.cog
+//== codegen.btl
 
 func emit_program(syms: *List);

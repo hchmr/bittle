@@ -54,8 +54,8 @@ exe_file="${output_file:-a.out}"
 
 out_dir=$(dirname "$exe_file")
 
-asm_file="$out_dir/$(basename "$input_file" .cog).s"
-obj_file="$out_dir/$(basename "$input_file" .cog).o"
+asm_file="$out_dir/$(basename "$input_file" .btl).s"
+obj_file="$out_dir/$(basename "$input_file" .btl).o"
 
 # Compile compiler
 
@@ -66,7 +66,7 @@ make -C compiler BUILD_DIR=../out
 # Compile
 
 echo "Compiling $input_file to $asm_file"
-out/cogc "$input_file" >"$asm_file"
+out/bittlec "$input_file" >"$asm_file"
 
 if [ -n "$compile_only" ]; then
   exit 0

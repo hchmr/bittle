@@ -7,7 +7,7 @@ import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 
 export class ElaborationDiagnosticProvider implements vscode.Disposable {
-    private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
+    private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Bittle');
 
     constructor(
         private semanticsService: SemanticsService,
@@ -22,7 +22,7 @@ export class ElaborationDiagnosticProvider implements vscode.Disposable {
     updateDiagnostics() {
         this.diagnosticsCollection.clear();
         stream(vscode.workspace.textDocuments)
-            .filter(doc => doc.languageId === 'cog')
+            .filter(doc => doc.languageId === 'bittle')
             .flatMap<[vscode.Uri, vscode.Diagnostic[]]>(doc => this.createDiagnostics(doc))
             .groupBy(([uri, _]) => uri.toString())
             .map<[vscode.Uri, vscode.Diagnostic[]]>(([_key, pairs]) => [

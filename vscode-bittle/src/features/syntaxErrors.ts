@@ -5,7 +5,7 @@ import { toVscPosition } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 
 export class SyntaxErrorProvider implements vscode.Disposable {
-    private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
+    private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Bittle');
 
     constructor(private parsingService: ParsingService) { }
 

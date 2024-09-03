@@ -5,9 +5,9 @@ export class CompilerService {
     async compile(filePath: string) {
         console.log(`Invoking compiler for ${filePath}`);
 
-        const cogc = vscode.workspace.getConfiguration().get<string>('cog.compilerPath', 'cogc');
+        const bittlec = vscode.workspace.getConfiguration().get<string>('bittle.compilerPath', 'bittlec');
         const process = spawn(
-            cogc,
+            bittlec,
             [filePath],
             {
                 stdio: ['ignore', 'ignore', 'pipe'],

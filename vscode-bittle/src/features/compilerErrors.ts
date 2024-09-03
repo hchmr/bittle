@@ -21,7 +21,7 @@ class DummyErrorProvider implements CompilerErrorProvider {
 }
 
 class CompilerErrorProviderImpl implements CompilerErrorProvider {
-    private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Cog');
+    private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Bittle');
 
     constructor(
         private compilerService: CompilerService,
@@ -37,7 +37,7 @@ class CompilerErrorProviderImpl implements CompilerErrorProvider {
 
         const fileDiagnostics = [];
         for (const document of vscode.workspace.textDocuments) {
-            if (!document.isDirty && document.fileName.endsWith('.cog') && document.uri.scheme === 'file') {
+            if (!document.isDirty && document.fileName.endsWith('.btl') && document.uri.scheme === 'file') {
                 const fileDiagnostic = await this.getFileDiagnostic(document);
                 if (fileDiagnostic) {
                     fileDiagnostics.push(fileDiagnostic);
@@ -84,7 +84,7 @@ function makeDiagnostic(stderr: string, document: vscode.TextDocument): FileDiag
             match[4].trim(),
             vscode.DiagnosticSeverity.Error,
         );
-        diagnostic.source = 'Cog compiler';
+        diagnostic.source = 'Bittle compiler';
         if (fileName !== document.fileName) {
             diagnostic.relatedInformation = [
                 new vscode.DiagnosticRelatedInformation(
@@ -103,7 +103,7 @@ function makeDiagnostic(stderr: string, document: vscode.TextDocument): FileDiag
             stderr,
             vscode.DiagnosticSeverity.Error,
         );
-        diagnostic.source = 'Cog compiler';
+        diagnostic.source = 'Bittle compiler';
         return {
             fileName: document.fileName,
             diagnostic,

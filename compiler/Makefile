@@ -1,18 +1,18 @@
-COGC ?= cogc
+BITTLEC ?= bittlec
 BUILD_DIR ?= .
-COG_HEADERS = $(wildcard *.cogs)
-COG_FILES = $(wildcard *.cog)
-ASM_FILES = $(patsubst %.cog, $(BUILD_DIR)/%.s, $(COG_FILES))
+BITTLE_HEADERS = $(wildcard *.btls)
+BITTLE_FILES = $(wildcard *.btl)
+ASM_FILES = $(patsubst %.btl, $(BUILD_DIR)/%.s, $(BITTLE_FILES))
 OBJ_FILES = $(ASM_FILES:.s=.o)
 
-build: $(BUILD_DIR)/cogc
+build: $(BUILD_DIR)/bittlec
 
-$(BUILD_DIR)/cogc: $(OBJ_FILES)
+$(BUILD_DIR)/bittlec: $(OBJ_FILES)
 	gcc -g $^ -o $@
 
 $(BUILD_DIR)/%.o: $(BUILD_DIR)/%.s
 	gcc -g -c $< -o $@
 
 .PRECIOUS: $(BUILD_DIR)/%.s
-$(BUILD_DIR)/%.s: %.cog $(COG_HEADERS)
-	$(COGC) $< > $@
+$(BUILD_DIR)/%.s: %.btl $(BITTLE_HEADERS)
+	$(BITTLEC) $< > $@

@@ -39,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Hover
 
     context.subscriptions.push(
-        vscode.languages.registerHoverProvider('cog', new HoverProvider(parsingService, semanticsService)),
+        vscode.languages.registerHoverProvider('bittle', new HoverProvider(parsingService, semanticsService)),
     );
 
     // Semantic tokens
@@ -47,7 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
     const semanticTokensProvider = new SemanticTokensProvider(parsingService);
     context.subscriptions.push(
         vscode.languages.registerDocumentSemanticTokensProvider(
-            'cog',
+            'bittle',
             semanticTokensProvider,
             semanticTokensProvider.legend,
         ),
@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(compilerErrorProvider);
 
     function refreshDiagnostics(document: vscode.TextDocument) {
-        if (document.languageId !== 'cog')
+        if (document.languageId !== 'bittle')
             return;
 
         syntaxErrorProvider.updateDiagnostics(document);
@@ -84,42 +84,42 @@ export function activate(context: vscode.ExtensionContext) {
 
     const symbolProvider = new SymbolProvider(parsingService, vfs, cache);
     context.subscriptions.push(
-        vscode.languages.registerDocumentSymbolProvider('cog', symbolProvider),
+        vscode.languages.registerDocumentSymbolProvider('bittle', symbolProvider),
         vscode.languages.registerWorkspaceSymbolProvider(symbolProvider),
     );
 
     // Code actions
 
     context.subscriptions.push(
-        vscode.languages.registerCodeActionsProvider('cog', new CodeActionsProvider(parsingService)),
+        vscode.languages.registerCodeActionsProvider('bittle', new CodeActionsProvider(parsingService)),
     );
 
     // Navigation
 
     const nameDefinitionProvider = new NameDefinitionProvider(parsingService, semanticsService, includeGraphService);
     context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('cog', new IncludeDefinitionProvider(vfs, parsingService)),
-        vscode.languages.registerDefinitionProvider('cog', nameDefinitionProvider),
-        vscode.languages.registerImplementationProvider('cog', nameDefinitionProvider),
-        vscode.languages.registerTypeDefinitionProvider('cog', new TypeDefinitionProvider(parsingService, semanticsService)),
+        vscode.languages.registerDefinitionProvider('bittle', new IncludeDefinitionProvider(vfs, parsingService)),
+        vscode.languages.registerDefinitionProvider('bittle', nameDefinitionProvider),
+        vscode.languages.registerImplementationProvider('bittle', nameDefinitionProvider),
+        vscode.languages.registerTypeDefinitionProvider('bittle', new TypeDefinitionProvider(parsingService, semanticsService)),
     );
 
     // Completion
 
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider('cog', new CompletionProvider(parsingService, semanticsService), '.'),
+        vscode.languages.registerCompletionItemProvider('bittle', new CompletionProvider(parsingService, semanticsService), '.'),
     );
 
     context.subscriptions.push(
-        vscode.languages.registerSignatureHelpProvider('cog', new SignatureHelpProvider(parsingService, semanticsService), '(', ','),
+        vscode.languages.registerSignatureHelpProvider('bittle', new SignatureHelpProvider(parsingService, semanticsService), '(', ','),
     );
 
     // Rename and references
 
     const referenceProvider = new ReferenceProvider(parsingService, semanticsService, includeGraphService);
     context.subscriptions.push(
-        vscode.languages.registerReferenceProvider('cog', referenceProvider),
-        vscode.languages.registerRenameProvider('cog', referenceProvider),
+        vscode.languages.registerReferenceProvider('bittle', referenceProvider),
+        vscode.languages.registerRenameProvider('bittle', referenceProvider),
     );
 
     // TODO:

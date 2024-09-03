@@ -1,12 +1,12 @@
-# Cog
+# Bittle
 
-Cog is a minimalist programming language inspired by C, designed for simplicity and expressiveness. It's a hobby project that serves as a playground for exploring programming language design and implementation. The goal is to create a language that's as simple as C but more fun, while also providing a platform to learn about compiler techniques and language tooling.
+Bittle is a minimalist programming language inspired by C, designed for simplicity and expressiveness. It's a hobby project that serves as a playground for exploring programming language design and implementation. The goal is to create a language that's as simple as C but more fun, while also providing a platform to learn about compiler techniques and language tooling.
 
 ## Feature overview
 
 ### Language
 
-Cog resembles a smaller, more modern C, with the following core features:
+Bittle resembles a smaller, more modern C, with the following core features:
 
 - Data types:
     - Primitives: Booleans and integers.
@@ -17,9 +17,9 @@ Cog resembles a smaller, more modern C, with the following core features:
     - Functions
     - Local and global variables
 
-Cog supports separate compilation for modular programming, using header files to reference symbols from other units (for now).
+Bittle supports separate compilation for modular programming, using header files to reference symbols from other units (for now).
 
-Cog can also interoperate with C. Currently, there’s no standard library, so basic functionality like I/O is best handled via libc.
+Bittle can also interoperate with C. Currently, there’s no standard library, so basic functionality like I/O is best handled via libc.
 
 **Example: "Hello, World!"**
 
@@ -34,7 +34,7 @@ func main(): Int32 {
 
 ### Compiler
 
-The compiler is self-hosting, meaning its compiler is written in Cog itself. The only supported platform is Arm64 Linux, which was chosen because it is an easily available, reproducible environment to bootstrap the compiler. The compiler is fairly basic, emitting naive Arm assembly code directly to stdout and halting on the first error encountered. Memory management is minimal—no deallocation, but given that the compiler is short-lived, this is fine.
+The compiler is self-hosting, meaning its compiler is written in Bittle itself. The only supported platform is Arm64 Linux, which was chosen because it is an easily available, reproducible environment to bootstrap the compiler. The compiler is fairly basic, emitting naive Arm assembly code directly to stdout and halting on the first error encountered. Memory management is minimal—no deallocation, but given that the compiler is short-lived, this is fine.
 
 ### Language Extension
 
@@ -50,7 +50,7 @@ The language extension for Visual Studio Code provides the following features:
 
 ## Bootstrapping
 
-The initial implementation of the compiler was written in C and then rewritten in Cog. Subsequent versions of the compiler are written in Cog and are bootstrapped from the previous version. This is done to avoid having to maintain two separate compilers. This strategy implies a bootstrapping chain of compilers, where each compiler is written in the previous version of the language. The chain is maintained by a bootstrapping script which builds the compiler entirely from source. Previous versions of the compiler are retrieved from the git history of the source repository.
+The initial implementation of the compiler was written in C and then rewritten in Bittle. Subsequent versions of the compiler are written in Bittle and are bootstrapped from the previous version. This is done to avoid having to maintain two separate compilers. This strategy implies a bootstrapping chain of compilers, where each compiler is written in the previous version of the language. The chain is maintained by a bootstrapping script which builds the compiler entirely from source. Previous versions of the compiler are retrieved from the git history of the source repository.
 
 To build from source, you will need a system running Arm64 Linux with the following software installed: GCC, Make, Bash, and Git. The bootstrapping script in the `scripts` directory checks out each revision in the bootstrap chain, builds the compiler using the previous version, and eventually produces a fully bootstrapped executable verified against itself.
 

@@ -1,4 +1,4 @@
-include "cog.cogs";
+include "bittle.btls";
 
 func not_found(kind: Int32): ! {
     fprintf(stderr, "\n*** Unreachable: Unknown token kind %d\n", kind);

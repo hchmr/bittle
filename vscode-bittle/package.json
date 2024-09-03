@@ -1,7 +1,7 @@
 {
-    "name": "vscode-cog",
-    "displayName": "Cog",
-    "description": "Cog language support for Visual Studio Code",
+    "name": "vscode-bittle",
+    "displayName": "Bittle",
+    "description": "Bittle language support for Visual Studio Code",
     "version": "0.0.1",
     "publisher": "anon",
     "scripts": {
@@ -25,23 +25,23 @@
     "contributes": {
         "languages": [
             {
-                "id": "cog",
+                "id": "bittle",
                 "aliases": [
-                    "Cog",
-                    "cog"
+                    "Bittle",
+                    "bittle"
                 ],
                 "extensions": [
-                    ".cog",
-                    ".cogs"
+                    ".btl",
+                    ".btls"
                 ],
                 "configuration": "./language-configuration.json"
             }
         ],
         "grammars": [
             {
-                "language": "cog",
-                "scopeName": "source.cog",
-                "path": "./cog.tmLanguage.json"
+                "language": "bittle",
+                "scopeName": "source.btl",
+                "path": "./bittle.tmLanguage.json"
             }
         ]
     },

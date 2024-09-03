@@ -1,4 +1,4 @@
-include "cog.cogs";
+include "bittle.btls";
 
 func is_lvalue(expr: *Expr): Bool {
     return expr.kind == Expr_Ident

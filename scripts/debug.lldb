@@ -1,2 +1,2 @@
-target create ./out/cogc
-settings set target.input-path compiler/main.cog
+target create ./out/bittlec
+settings set target.input-path compiler/main.btl

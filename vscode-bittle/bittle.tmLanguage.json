@@ -1,56 +1,56 @@
 {
     "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "scopeName": "source.cog",
+    "scopeName": "source.btl",
     "patterns": [
         {
-            "name": "comment.line.cog",
+            "name": "comment.line.btl",
             "match": "//.*"
         },
         {
-            "name": "comment.block.cog",
+            "name": "comment.block.btl",
             "begin": "/\\*",
             "end": "\\*/"
         },
         {
-            "name": "string.quoted.double.cog",
+            "name": "string.quoted.double.btl",
             "begin": "\"",
             "end": "\"",
             "patterns": [
                 {
-                    "name": "constant.character.escape.cog",
+                    "name": "constant.character.escape.btl",
                     "match": "\\\\."
                 }
             ]
         },
         {
-            "name": "string.quoted.single.cog",
+            "name": "string.quoted.single.btl",
             "begin": "'",
             "end": "'",
             "patterns": [
                 {
-                    "name": "constant.character.escape.cog",
+                    "name": "constant.character.escape.btl",
                     "match": "\\\\."
                 }
             ]
         },
         {
-            "name": "keyword.control.cog",
+            "name": "keyword.control.btl",
             "match": "(?:break|continue|do|else|for|if|return|while)\\b"
         },
         {
-            "name": "keyword.cog",
+            "name": "keyword.btl",
             "match": "(?:as|const|enum|extern|false|func|include|null|sizeof|struct|true|var)\\b"
         },
         {
-            "name": "constant.language.cog",
+            "name": "constant.language.btl",
             "match": "(?:true|false)\\b"
         },
         {
-            "name": "variable.other.cog",
+            "name": "variable.other.btl",
             "match": "[^\\W\\d]\\w*"
         },
         {
-            "name": "constant.numeric.cog",
+            "name": "constant.numeric.btl",
             "match": "\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?"
         }
     ]

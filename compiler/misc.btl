@@ -1,4 +1,4 @@
-include "cog.cogs";
+include "bittle.btls";
 
 func assert(cond: Bool, because: *Char) {
     if (!cond) {
