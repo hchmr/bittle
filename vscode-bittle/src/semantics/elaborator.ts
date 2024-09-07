@@ -767,7 +767,9 @@ export class Elaborator {
         this.enterScope(node);
 
         for (const param of params) {
-            this.addSym(param);
+            if (param.name) {
+                this.addSym(param);
+            }
         }
 
         this.currentFunc = sym;
@@ -794,7 +796,6 @@ export class Elaborator {
             this.reportError(paramNode, `Function parameter must be of scalar type.`);
         }
 
-        // TODO: funcName may be empty
         return this.defineFuncParamSym(paramNode, nameNode, funcName, paramIndex, type);
     }
 
