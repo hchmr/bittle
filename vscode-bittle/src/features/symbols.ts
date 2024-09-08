@@ -33,7 +33,7 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
         const rootSymbols: DocumentSymbol[] = [];
 
         const visit = (node: SyntaxNode, currentSymbol: DocumentSymbol | null) => {
-            if (node.type in symbolKindMapping) {
+            if (node.type in symbolKindMapping && !isUnnamedEnum(node)) {
                 const symbol = DocumentSymbol.fromNode(node);
                 (currentSymbol?.children ?? rootSymbols).push(symbol);
                 currentSymbol = symbol;
@@ -155,4 +155,8 @@ function makeSymbolName(node: SyntaxNode, nameNode: SyntaxNode | undefined) {
         name += '()';
     }
     return name;
+}
+
+function isUnnamedEnum(node: SyntaxNode) {
+    return node.type === NodeTypes.EnumDecl && !node.childForFieldName('name');
 }
