@@ -2,8 +2,7 @@ include "bittle.btls";
 
 const FRAME_SIZE_MAX = 4096;
 const FRAME_TEMP_SIZE = 128;
-const FRAME_ARGS_SIZE = 64;
-const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_ARGS_SIZE - FRAME_TEMP_SIZE;
+const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_TEMP_SIZE;
 
 func hir_is_lvalue(e: *HirExpr): Bool {
     return e.kind == HirExpr_Var
@@ -70,11 +69,11 @@ func emit_push(ctx: *CodegenCtx, reg: Int) {
         exit(1);
     }
     ctx.temp_size += 8;
-    printf("  str x%d, [sp, #%d] // push\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - ctx.temp_size);
+    printf("  str x%d, [sp, #%d] // push\n", reg, FRAME_TEMP_SIZE - ctx.temp_size);
 }
 
 func emit_pop(ctx: *CodegenCtx, reg: Int) {
-    printf("  ldr x%d, [sp, #%d] // pop\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - ctx.temp_size);
+    printf("  ldr x%d, [sp, #%d] // pop\n", reg, FRAME_TEMP_SIZE - ctx.temp_size);
     ctx.temp_size -= 8;
 }
 
@@ -89,7 +88,7 @@ func emit_temp_pop(ctx: *CodegenCtx, temp: *HirTemp, reg: Int) {
 }
 
 func emit_temp_addr(ctx: *CodegenCtx, temp: *HirTemp, reg: Int) {
-    printf("  add x%d, sp, #%d // &temp%d\n", reg, FRAME_ARGS_SIZE + FRAME_TEMP_SIZE - temp.offset, temp.id);
+    printf("  add x%d, sp, #%d // &temp%d\n", reg, FRAME_TEMP_SIZE - temp.offset, temp.id);
 }
 
 func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
@@ -347,14 +346,9 @@ func emit_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, t0: Int) {
     while (i < arg_count) {
         var arg = list_get(args, i);
         emit_expr(ctx, arg, 0);
-        if (i >= MAX_PARAMS) {
-            printf("  str x0, [sp, #%d]\n", 8 * (i - param_count));
-        } else {
-            emit_push(ctx, 0);
-        }
+        emit_push(ctx, 0);
         i += 1;
     }
-    i = int_min(arg_count, MAX_PARAMS);
     while (i > 0) {
         i -= 1;
         emit_pop(ctx, i);
@@ -457,7 +451,7 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     }
 
     ctx.current_func = sym;
-    ctx.frame_size = align_up(locals_size, 16) + FRAME_TEMP_SIZE + FRAME_ARGS_SIZE;
+    ctx.frame_size = align_up(locals_size, 16) + FRAME_TEMP_SIZE;
 
     printf("  .text\n");
     printf("  .align 2\n");
