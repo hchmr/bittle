@@ -1268,13 +1268,16 @@ export class Elaborator {
                 if (argValueNode) {
                     this.elabExpr(argValueNode, params[i].type);
                 }
-            } else if (isVariadic) {
-                if (argLabelNode) {
-                    this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
-                }
+            } else {
+                let argType = mkErrorType();
                 if (argValueNode) {
-                    const argType = this.elabExprInfer(argValueNode);
-                    if (isNonScalarType(argType)) {
+                    argType = this.elabExprInfer(argValueNode);
+                }
+                if (isVariadic) {
+                    if (argLabelNode) {
+                        this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
+                    }
+                    if (argValueNode && isNonScalarType(argType)) {
                         this.reportError(node, `Variadic argument must be scalar type.`);
                     }
                 }
