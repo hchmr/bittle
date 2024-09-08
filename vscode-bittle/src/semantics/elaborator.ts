@@ -112,6 +112,14 @@ export class Elaborator {
         this.scope = this.scope.parent;
     }
 
+    private inOuterScope<T>(fn: () => T): T {
+        const innerScope = this.scope;
+        this.scope = this.scope.parent!;
+        const result = fn();
+        this.scope = innerScope;
+        return result;
+    }
+
     private lookupSymbol(name: string) {
         const qname = this.scope.lookup(name);
         if (!qname)
@@ -752,8 +760,6 @@ export class Elaborator {
             .map<FuncParamSym>((paramNode, index) => this.elabFuncParam(paramNode, name, index))
             .toArray();
 
-        this.exitScope();
-
         const isVariadic = paramNodes.some(child => child.dotDotDotToken);
 
         const returnType: Type = node.returnType ? this.typeEval(node.returnType) : mkVoidType();
@@ -762,15 +768,9 @@ export class Elaborator {
             this.reportError(node.returnType!, `Function return type must be void or of scalar type.`);
         }
 
-        const sym = this.declareFuncSym(node, nameNode, params, returnType, isVariadic, !!bodyNode);
-
-        this.enterScope(node);
-
-        for (const param of params) {
-            if (param.name) {
-                this.addSym(param);
-            }
-        }
+        const sym = this.inOuterScope(() => {
+            return this.declareFuncSym(node, nameNode, params, returnType, isVariadic, !!bodyNode);
+        });
 
         this.currentFunc = sym;
         this.nextLocalIndex = 0;
