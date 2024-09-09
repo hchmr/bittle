@@ -193,12 +193,13 @@ struct FuncSym: Sym {
     is_variadic: Bool,
     is_defined: Bool,
     locals: *List, // List<Sym>
+    temps: *List, // List<HirTemp>
     body: *Stmt,
 }
 
 struct LocalSym: Sym {
     type: *Type,
-    frame_offset: Int,
+    slot_index: Int,
 }
 
 func sym_is_defined(sym: *Sym): Bool;
@@ -572,9 +573,8 @@ func is_lvalue(expr: *Expr): Bool;
 //== hir.btl
 
 struct HirTemp {
-    id: Int,
     type: *Type,
-    offset: Int,
+    slot_index: Int,
 }
 
 enum {
@@ -602,7 +602,6 @@ enum {
     // Composition primitives
     HirExpr_Skip,
     HirExpr_Seq,
-    HirExpr_Let,
 
     // Constants
     HirExpr_Int,
@@ -638,12 +637,6 @@ struct HirExpr {
 struct HirSeqExpr: HirExpr {
     first: *HirExpr,
     second: *HirExpr,
-}
-
-struct HirLetExpr: HirExpr {
-    temp: *HirTemp,
-    init: *HirExpr,
-    body: *HirExpr,
 }
 
 struct HirIntExpr: HirExpr {
@@ -745,7 +738,7 @@ func elab(ast: *Ast): *List; // *List<*Sym>
 //==============================================================================
 //== hir_lower.btl
 
-func hir_lower(func_: *Sym, body: *Stmt): *HirExpr;
+func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr;
 
 //==============================================================================
 //== codegen.btl

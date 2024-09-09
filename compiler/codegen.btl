@@ -22,13 +22,19 @@ func is_int_or_enum(t: *Type, max_size: Int): Bool {
     }
 }
 
+struct Slot {
+    offset: Int,
+    name: *Char,
+}
+
 struct CodegenCtx {
     frame_size: Int,
     label_count: Int,
     temp_size: Int,
-    current_func: *Sym,
+    current_func: *FuncSym,
     current_loop: Int,
-    temp_offsets: *List,
+    slots: *Slot,
+    n_slots: Int,
 }
 
 func next_label(ctx: *CodegenCtx): Int {
@@ -77,18 +83,31 @@ func emit_pop(ctx: *CodegenCtx, reg: Int) {
     ctx.temp_size -= 8;
 }
 
-func emit_temp_push(ctx: *CodegenCtx, temp: *HirTemp, reg: Int) {
-    emit_push(ctx, reg);
-    temp.offset = ctx.temp_size;
+func get_slot_sp_offset(ctx: *CodegenCtx, type: *Type, slot_index: Int): Int {
+    var slot = &ctx.slots[slot_index];
+    return ctx.frame_size - slot.offset - type_size(type);
 }
 
-func emit_temp_pop(ctx: *CodegenCtx, temp: *HirTemp, reg: Int) {
-    emit_pop(ctx, reg);
-    temp.offset = -1;
+func print_slot_name(ctx: *CodegenCtx, slot_index: Int) {
+    if (ctx.slots[slot_index].name) {
+        printf("%s", ctx.slots[slot_index].name);
+    } else {
+        printf("$slot%d", slot_index);
+    }
 }
 
-func emit_temp_addr(ctx: *CodegenCtx, temp: *HirTemp, reg: Int) {
-    printf("  add x%d, sp, #%d // &temp%d\n", reg, FRAME_TEMP_SIZE - temp.offset, temp.id);
+func emit_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Int) {
+    var sp_offset = get_slot_sp_offset(ctx, type, slot_index);
+    printf("  %s%d, [sp, #%d] // ", strx(type), reg, sp_offset);
+    print_slot_name(ctx, slot_index);
+    printf("\n");
+}
+
+func emit_slot_addr(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Int) {
+    var sp_offset = get_slot_sp_offset(ctx, type, slot_index);
+    printf("  add x%d, sp, #%d // &", reg, sp_offset);
+    print_slot_name(ctx, slot_index);
+    printf("\n");
 }
 
 func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
@@ -104,16 +123,48 @@ func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
     }
 }
 
-func compute_locals_layout(sym: *FuncSym): Int {
+func compute_frame_layout(ctx: *CodegenCtx) {
+    var sym = ctx.current_func;
+    var n_locals = list_len(sym.locals);
+    var n_temps = list_len(sym.temps);
+
+    var n_slots = n_locals + n_temps;
+    var slots: *Slot = calloc(n_slots, sizeof(Slot));
+
     var size = 0;
-    for (var i = 0; i < list_len(sym.locals); i += 1) {
+    for (var i = 0; i < n_locals; i += 1) {
         var local_sym: *LocalSym = list_get(sym.locals, i);
         var type = local_sym.type;
 
-        size = align_up(size + type_size(type), type_align(type));
-        local_sym.frame_offset = size;
+
+        var offset = align_up(size, type_align(type));
+        slots[local_sym.slot_index] = Slot(offset, name: local_sym.name);
+
+        size = offset + type_size(type);
     }
-    return size;
+
+    for (var i = 0; i < n_temps; i += 1) {
+        var temp: *HirTemp = list_get(sym.temps, i);
+        var type = temp.type;
+
+
+        var offset = align_up(size, type_align(type));
+        slots[temp.slot_index] = Slot(offset, name: null);
+
+        size = offset + type_size(type);
+    }
+
+    size = align_up(size, 16) + FRAME_TEMP_SIZE;
+
+    if (size > FRAME_SIZE_MAX) {
+        error_at(&sym.body.pos);
+        fprintf(stderr, "Frame size of function %s exceeds the maximum allowed size.\n", sym.name);
+        exit(1);
+    }
+
+    ctx.frame_size = size;
+    ctx.n_slots = n_slots;
+    ctx.slots = slots;
 }
 
 func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int);
@@ -149,7 +200,7 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Local) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *LocalSym;
-        printf("  add x%d, sp, #%d // &%s\n", t0, ctx.frame_size - sym.frame_offset, sym.name);
+        emit_slot_addr(ctx, sym.type, sym.slot_index, t0);
     } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *GlobalSym;
@@ -163,8 +214,7 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     } else if (e.kind == HirExpr_Temp) {
         var e = e as *HirTempExpr;
         var temp = e.temp;
-        assert(temp.offset >= 0, "emit_expr_lvalue: temp should have a valid offset.");
-        emit_temp_addr(ctx, temp, t0);
+        emit_slot_addr(ctx, temp.type, temp.slot_index, t0);
     } else if (e.kind == HirExpr_Member) {
         var e = e as *HirMemberExpr;
         var fields = (e.left.type as *StructType).sym.fields;
@@ -195,17 +245,6 @@ func emit_seq_expr(ctx: *CodegenCtx, e: *HirSeqExpr, t0: Int) {
     var second = e.second;
     emit_expr(ctx, first, 0);
     emit_expr(ctx, second, t0);
-}
-
-func emit_let_expr(ctx: *CodegenCtx, e: *HirLetExpr, t0: Int) {
-    var temp = e.temp;
-    var init = e.init;
-    var body = e.body;
-
-    emit_expr(ctx, init, 0);
-    emit_temp_push(ctx, temp, 0);
-    emit_expr(ctx, body, t0);
-    emit_temp_pop(ctx, temp, 0);
 }
 
 func emit_int_expr(ctx: *CodegenCtx, e: *HirIntExpr, t0: Int) {
@@ -408,8 +447,6 @@ func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
         // nop
     } else if (e.kind == HirExpr_Seq) {
         emit_seq_expr(ctx, e as *HirSeqExpr, t0);
-    } else if (e.kind == HirExpr_Let) {
-        emit_let_expr(ctx, e as *HirLetExpr, t0);
     } else if (e.kind == HirExpr_Int) {
         emit_int_expr(ctx, e as *HirIntExpr, t0);
     } else if (e.kind == HirExpr_Str) {
@@ -443,15 +480,9 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     var body = sym.body;
 
     var hir_body = hir_lower(sym, body);
-    var locals_size = compute_locals_layout(sym);
-    if (locals_size > FRAME_LOCALS_SIZE_MAX) {
-        error_at(&body.pos);
-        fprintf(stderr, "Function %s has too many local variables.\n", sym.name);
-        exit(1);
-    }
 
     ctx.current_func = sym;
-    ctx.frame_size = align_up(locals_size, 16) + FRAME_TEMP_SIZE;
+    compute_frame_layout(ctx);
 
     printf("  .text\n");
     printf("  .align 2\n");
@@ -464,8 +495,7 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     for (var i = 0; i < list_len(params); i += 1) {
         var param: *FuncParam = list_get(params, i);
         var local: *LocalSym = list_get(locals, i);
-        var offset = local.frame_offset;
-        printf("  %s%d, [sp, #%d] // %s\n", strx(param.type), i, ctx.frame_size - offset, param.name);
+        emit_slot_store(ctx, param.type, local.slot_index, i);
     }
     emit_expr(ctx, hir_body, 0);
     printf(".L.%s.ret:\n", sym.name);
@@ -502,7 +532,8 @@ func emit_program(syms: *List) {
         temp_size: 0,
         current_func: null,
         current_loop: 0,
-        temp_offsets: list_new(),
+        slots: null,
+        n_slots: 0,
     );
 
     for (var i = 0; i < list_len(syms); i += 1) {

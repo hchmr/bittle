@@ -166,6 +166,7 @@ func declare_func(
             is_variadic: is_variadic,
             is_defined: is_definition,
             locals: list_new(),
+            temps: list_new(),
             body: null
         );
         add_sym(ctx, sym);
@@ -210,11 +211,13 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
         die_at(pos, "Symbol is already defined");
     }
 
+    var slot_index = ctx.current_func.locals.len;
+
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
-    *sym = LocalSym(Sym_Local, name, type, frame_offset: -1);
+    *sym = LocalSym(Sym_Local, name, type, slot_index: slot_index);
     add_sym(ctx, sym);
 
-    list_push((ctx.current_func).locals, sym);
+    list_push(ctx.current_func.locals, sym);
 
     return sym;
 }

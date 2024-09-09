@@ -48,12 +48,6 @@ func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
     return result;
 }
 
-func hir_mk_let_expr(temp: *HirTemp, init: *HirExpr, body: *HirExpr, pos: *Pos): *HirLetExpr {
-    var result: *HirLetExpr = calloc(1, sizeof(HirLetExpr));
-    *result = HirLetExpr(HirExpr_Let, body.type, *pos, temp, init, body);
-    return result;
-}
-
 func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
     var result: *HirIntExpr = calloc(1, sizeof(HirIntExpr));
     *result = HirIntExpr(HirExpr_Int, type, *pos, value);
@@ -180,18 +174,20 @@ func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
 //== Context
 
 struct Context {
-    func_: *Sym,
-    temps: *List, // List<*HirTemp>
+    func_: *FuncSym,
 }
 
 func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
+    var slot_index = list_len(ctx.func_.locals) + list_len(ctx.func_.temps);
+
     var temp: *HirTemp = calloc(1, sizeof(HirTemp));
     *temp = HirTemp(
-        id: list_len(ctx.temps),
         type,
-        offset: -1
+        slot_index: slot_index,
     );
-    list_push(ctx.temps, temp);
+
+    list_push(ctx.func_.temps, temp);
+
     return temp;
 }
 
@@ -319,19 +315,24 @@ func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
             Desugar
                 left op= right
             to
-                let temp: *typeof(left) = &left in
-                *temp = *temp op right
+                temp t1: *typeof(left);
+                t1 = &left;
+                *t1 = *t1 op right;
         */
-        var right = lower_expr(ctx, ast_right);
-        var typeof_addr_left = mk_ptr_type(left.type);
-        var op = translate_assign_op(ast_op);
+        var addr_left = hir_mk_addr_expr(left, &expr.pos);
+        var typeof_addr_left = mk_ptr_type(addr_left.type);
+
         var temp_var = mk_temp_var(ctx, typeof_addr_left);
         var temp = hir_mk_temp_expr(temp_var, &expr.pos);
-        var addr_left = hir_mk_addr_expr(left, &expr.pos);
+        var temp_init = hir_mk_assign_expr(temp, addr_left);
+
         var temp_deref = hir_mk_deref_expr(temp, &expr.pos);
+        var right = lower_expr(ctx, ast_right);
+        var op = translate_assign_op(ast_op);
         var computation = hir_mk_binary_op_expr(op, temp_deref, right, left.type);
         var assign_temp = hir_mk_assign_expr(temp_deref, computation);
-        result = hir_mk_let_expr(temp_var, addr_left, assign_temp, &expr.pos);
+
+        result = hir_mk_seq_expr(temp_init, assign_temp);
     } else if (ast_op == Tok_AmpAmp || ast_op == Tok_BarBar) {
         var right = lower_expr(ctx, ast_right);
         if (ast_op == Tok_AmpAmp) {
@@ -403,14 +404,15 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
 
     if (ast_src.kind == Expr_Call && (ast_src as *CallExpr).resolved_callee.kind == Sym_Struct) {
         /*
-            desugar
-                x = List(1, List(2, null))
+            Desugar
+                x = Pair(1, List(2, null))
             to
-                let t1: *List = &x in
-                    (*t1).value = 1;
-                    let t2: *List = &t1.next in
-                        (*t2).value = 2;
-                        (*t2).next = null
+                temp t1: *Pair;
+                t1 = &x;
+                (*t1).value = 1;
+                let t2: *List = &t1.next;
+                (*t2).value = 2;
+                (*t2).next = null
         */
 
         var resolved_callee = (ast_src as *CallExpr).resolved_callee;
@@ -419,8 +421,11 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         var fields = (structSym as *StructSym).fields;
 
         var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
+
         var temp_var = mk_temp_var(ctx, addr_dst.type);
         var temp = hir_mk_temp_expr(temp_var, pos);
+        var temp_init = hir_mk_assign_expr(temp, addr_dst);
+
         var body = mk_skip_stmt(pos);
 
         for (var i = 0; i < args.len; i += 1) {
@@ -433,16 +438,17 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
             body = hir_mk_seq_expr(body, assignment);
         }
 
-        return hir_mk_let_expr(temp_var, addr_dst, body, pos);
+        return hir_mk_seq_expr(temp_init, body);
     } else if (ast_src.kind == Expr_Array) {
         /*
-            desugar
+            Desugar
                 x = [a, b, c]
             to
-                let t1: *T = &x[0] in
-                    t1[0] = a;
-                    t1[1] = b;
-                    t1[2] = c
+                temp t1: *T;
+                t1 = &x[0];
+                t1[0] = a;
+                t1[1] = b;
+                t1[2] = c
         */
 
         var elems = (ast_src as *ArrayExpr).elems;
@@ -456,6 +462,8 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
 
         var temp_var = mk_temp_var(ctx, addr_zero_index.type);
         var temp = hir_mk_temp_expr(temp_var, pos);
+        var temp_init = hir_mk_assign_expr(temp, addr_zero_index);
+
         var body = mk_skip_stmt(pos);
 
         for (var i = 0; i < array_size; i += 1) {
@@ -470,7 +478,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         assert(addr_zero_index.type, "lower_assign_expr: addr_zero_index should have a type");
         assert(addr_zero_index.expr.type, "lower_assign_expr: addr_zero_index should have a type");
 
-        return hir_mk_let_expr(temp_var, addr_zero_index, body, pos);
+        return hir_mk_seq_expr(temp_init, body);
     } else {
         var src = lower_expr(ctx, ast_src);
         return hir_mk_assign_expr(dst, src);
@@ -595,10 +603,9 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
 //==============================================================================
 //== Top-level declarations
 
-func hir_lower(func_: *Sym, body: *Stmt): *HirExpr {
+func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr {
     var ctx: *Context = calloc(1, sizeof(Context));
     ctx.func_ = func_;
-    ctx.temps = list_new();
 
     return lower_stmt(ctx, body);
 }
