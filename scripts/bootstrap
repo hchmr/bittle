@@ -151,6 +151,8 @@ compiler_name=bittlec
 
 stage "chore: Rename the language from Cog to Bittle"
 
+stage "fix(compiler): Allow more than 8 field arguments in struct initializer"
+
 if [ "$bootstrap_next" = "1" ]; then
     stage "master"
 fi
