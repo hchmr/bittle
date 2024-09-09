@@ -491,7 +491,7 @@ func elab_call_expr_part2(
     var param_count = list_len(params);
     var arg_count = list_len(args);
 
-    if (arg_count > MAX_PARAMS) {
+    if (sym.kind != Sym_Struct && arg_count > MAX_PARAMS) {
         die_at(&expr.pos, "Too many arguments");
     }
     if (arg_count < param_count) {
