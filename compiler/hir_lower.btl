@@ -400,7 +400,6 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
 
 func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
     var type = dst.type;
-    assert(type_eq(type, ast_src.type), "lower_assign_expr: type mismatch");
 
     if (ast_src.kind == Expr_Call && (ast_src as *CallExpr).resolved_callee.kind == Sym_Struct) {
         /*
