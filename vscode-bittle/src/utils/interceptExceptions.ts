@@ -1,10 +1,17 @@
 import * as vscode from 'vscode';
 import { log } from '../log';
 
-export function interceptExceptions(target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
+function logInvocation(target: object, propertyKey: string) {
+    const className = target.constructor.name;
+    const methodName = propertyKey;
+    log.log(`Invoking ${className}.${methodName}`);
+}
+
+export function interceptExceptions(target: object, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
     descriptor.value = function (...args: unknown[]) {
+        logInvocation(target, propertyKey);
         try {
             return originalMethod.apply(this, args);
         } catch (error) {
@@ -17,7 +24,7 @@ export function interceptExceptions(target: unknown, propertyKey: string, descri
     return descriptor;
 }
 
-export function interceptExceptionsAsync(target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
+export function interceptExceptionsAsync(target: object, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: unknown[]) {
