@@ -1,3 +1,5 @@
+import { log } from '../log';
+
 export class ReactiveCache {
     private dependencies = new Map<string, Set<string>>();
     private dependents = new Map<string, Set<string>>();
@@ -30,7 +32,7 @@ export class ReactiveCache {
         const outerComputation = this.currentComputation;
         this.currentComputation = key;
         try {
-            console.log(`Computing ${key}`);
+            log.log(`Computing ${key}`);
             return compute();
         } finally {
             this.currentComputation = outerComputation;
@@ -41,7 +43,7 @@ export class ReactiveCache {
         if (!this.values.has(key)) {
             return;
         }
-        console.log(`Invalidating ${key}`);
+        log.log(`Invalidating ${key}`);
         for (const dep of this.dependents.get(key) ?? []) {
             this.delete(dep);
         }

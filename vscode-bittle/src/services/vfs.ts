@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { Minimatch } from 'minimatch';
 import path from 'path';
 import * as vscode from 'vscode';
+import { log } from '../log';
 import { isBittleFile } from '../utils';
 import { ReactiveCache } from '../utils/reactiveCache';
 
@@ -120,7 +121,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
             files.push(...this.listFilesInWorkspaceFolder(folder.uri.fsPath));
         }
 
-        console.log('listFilesUncached', files);
+        log.log('listFilesUncached', files);
         return files;
     }
 

@@ -1,9 +1,10 @@
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
+import { log } from '../log';
 
 export class CompilerService {
     async compile(filePath: string) {
-        console.log(`Invoking compiler for ${filePath}`);
+        log.log(`Invoking compiler for ${filePath}`);
 
         const bittlec = vscode.workspace.getConfiguration().get<string>('bittle.compilerPath', 'bittlec');
         const process = spawn(
@@ -25,11 +26,11 @@ export class CompilerService {
                 resolve(code ?? 'unknown');
             });
             process.on('error', error => {
-                console.log(`Error invoking compiler: ${error}`);
+                log.log(`Error invoking compiler: ${error}`);
                 reject(new Error('Error invoking compiler: ' + error));
             });
         });
-        console.log(`Compiler exited with code ${code}`);
+        log.log(`Compiler exited with code ${code}`);
 
         return { ok: code == 0, stderr };
     }

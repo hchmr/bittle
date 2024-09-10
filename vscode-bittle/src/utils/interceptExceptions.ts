@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { log } from '../log';
 
 export function interceptExceptions(target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
@@ -8,7 +9,7 @@ export function interceptExceptions(target: unknown, propertyKey: string, descri
             return originalMethod.apply(this, args);
         } catch (error) {
             vscode.window.showErrorMessage('Uncaught exception: ' + getErrorDescription(error));
-            console.log(error);
+            log.log(error);
             throw error;
         }
     };
@@ -24,7 +25,7 @@ export function interceptExceptionsAsync(target: unknown, propertyKey: string, d
             return await originalMethod.apply(this, args);
         } catch (error) {
             vscode.window.showErrorMessage('Uncaught exception: ' + getErrorDescription(error));
-            console.log(error);
+            log.log(error);
             throw error;
         }
     };

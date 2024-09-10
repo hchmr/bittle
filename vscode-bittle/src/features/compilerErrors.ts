@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { log } from '../log';
 import { CompilerService } from '../services/compilerService';
 import { interceptExceptionsAsync } from '../utils/interceptExceptions';
 import { stream } from '../utils/stream';
@@ -56,7 +57,7 @@ class CompilerErrorProviderImpl implements CompilerErrorProvider {
     async getFileDiagnostic(document: vscode.TextDocument) {
         const { ok, stderr } = await this.compilerService.compile(document.fileName);
 
-        console.log(`Compiler output: ${ok}, '${stderr}'`);
+        log.log(`Compiler output: ${ok}, '${stderr}'`);
 
         if (ok) {
             return;
