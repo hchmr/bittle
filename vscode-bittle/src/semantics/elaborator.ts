@@ -204,6 +204,7 @@ export class Elaborator {
             } else if (isDefined(existing) && isDefinition) {
                 this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             } else {
+                this.recordNameIntroduction(existing, nameNode);
                 existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
                 return existing;
             }
@@ -294,6 +295,7 @@ export class Elaborator {
             } else if (isDefined(existing) && isDefinition) {
                 this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             } else {
+                this.recordNameIntroduction(existing, nameNode);
                 existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
                 return existing;
             }
@@ -380,6 +382,7 @@ export class Elaborator {
             } else if (isDefined(existing) && isDefinition) {
                 this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             } else {
+                this.recordNameIntroduction(existing, nameNode);
                 existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
                 return existing;
             }
