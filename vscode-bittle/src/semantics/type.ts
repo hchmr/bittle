@@ -302,7 +302,7 @@ export function isValidReturnType(type: Type): boolean {
 
 export function typeLe(t1: Type, t2: Type): boolean {
     return typeEq(t1, t2)
-        || (t1.kind === TypeKind.Err)
+        || (t1.kind === TypeKind.Err || t2.kind === TypeKind.Err)
         || (t1.kind === TypeKind.Never)
         || (isScalarType(t1) && t2.kind === TypeKind.Bool)
         || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Int && t1.size! <= t2.size!)
@@ -312,7 +312,7 @@ export function typeLe(t1: Type, t2: Type): boolean {
 
 function pointeeTypeLe(t1: Type, t2: Type): boolean {
     return typeEq(t1, t2)
-        || (t1.kind === TypeKind.Err)
+        || (t1.kind === TypeKind.Err || t2.kind === TypeKind.Err)
         || (t1.kind === TypeKind.Void)
         || (t1.kind === TypeKind.Struct && t2.kind === TypeKind.Struct && structLe(t1.sym, t2.sym));
 }
