@@ -42,7 +42,7 @@ checkout() {
         commit="$1"
     else
         pattern="^$(sed 's/[$\.*[\^]/\\&/g' <<<"$1")$"
-        commit="$(git rev-list master --grep "$pattern" --max-count=1)"
+        commit="$(git rev-list origin/master --grep "$pattern" --max-count=1)"
         if [[ -z "$commit" ]]; then
             echo "Commit not found: $1"
             exit 1
