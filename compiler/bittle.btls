@@ -127,7 +127,8 @@ func mk_enum_type(sym: *EnumSym): *EnumType;
 func mk_struct_type(sym: *StructSym): *StructType;
 
 func type_eq(t1: *Type, t2: *Type): Bool;
-func type_le(t1: *Type, t2: *Type): Bool;
+func type_implicitly_convertible(src: *Type, dst: *Type): Bool;
+func type_convertible(src: *Type, dst: *Type): Bool;
 func type_size(type: *Type): Int;
 func type_align(type: *Type): Int;
 func is_scalar(type: *Type): Bool;
@@ -626,6 +627,9 @@ enum {
     HirExpr_Addr,
     HirExpr_Assign,
     HirExpr_Cast,
+
+    // Special
+    HirExpr_Unreachable,
 }
 
 struct HirExpr {

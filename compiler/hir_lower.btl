@@ -170,6 +170,12 @@ func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
     return result;
 }
 
+func hir_mk_unreachable_expr(pos: *Pos, type: *Type): *HirExpr {
+    var result: *HirExpr = calloc(1, sizeof(HirExpr));
+    *result = HirExpr(HirExpr_Unreachable, type, *pos);
+    return result;
+}
+
 //==============================================================================
 //== Context
 
@@ -363,12 +369,19 @@ func lower_ternary_expr(ctx: *Context, expr: *TernaryExpr): *HirExpr {
 }
 
 func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
-    var ast_expr = expr.expr;
+    var ast_subexpr = expr.expr;
+    var subexpr = lower_expr(ctx, ast_subexpr);
+
+    var source_type = subexpr.type;
     var target_type = expr.type;
 
-    var hir_expr = lower_expr(ctx, ast_expr);
+    // special case
+    if (source_type.kind == Type_Never) {
+        var unreachable_expr = hir_mk_unreachable_expr(&expr.pos, target_type);
+        return hir_mk_seq_expr(subexpr, unreachable_expr);
+    }
 
-    return hir_mk_cast_expr(hir_expr, target_type);
+    return hir_mk_cast_expr(subexpr, target_type);
 }
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {

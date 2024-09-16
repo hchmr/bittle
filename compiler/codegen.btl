@@ -393,7 +393,10 @@ func emit_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, t0: Int) {
         emit_pop(ctx, i);
     }
     printf("  bl %s\n", sym.name);
-    if (type.kind != Type_Void && type.kind != Type_Never) {
+    if (type.kind == Type_Never) {
+        return;
+    }
+    if (type.kind != Type_Void) {
         emit_sign_extend(ctx, type, t0, 0);
     }
 }
@@ -424,10 +427,6 @@ func emit_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, t0: Int) {
     var target = e.type;
     var source = subexpr.type;
     emit_expr(ctx, subexpr, t0);
-    if (source.kind == Type_Never) {
-        printf("  // cast of !\n", t0);
-        return;
-    }
     assert(is_scalar(target) && is_scalar(source), "emit_expr: <cast> should have scalar types.");
     if (target.kind == Type_Bool) {
         printf("  cmp x%d, #0\n", t0);
@@ -469,6 +468,8 @@ func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
         emit_assign_expr(ctx, e as *HirAssignExpr, t0);
     } else if (e.kind == HirExpr_Cast) {
         emit_cast_expr(ctx, e as *HirCastExpr, t0);
+    } else if (e.kind == HirExpr_Unreachable) {
+        printf("  // <- unreachable\n");
     } else {
         unreachable("emit_expr");
     }

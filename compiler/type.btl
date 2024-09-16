@@ -93,17 +93,43 @@ func pointee_type_le(t1: *Type, t2: *Type): Bool {
         || t1.kind == Type_Struct && t2.kind == Type_Struct && struct_le((t1 as *StructType).sym, (t2 as *StructType).sym);
 }
 
-func type_le(t1: *Type, t2: *Type): Bool {
-    if (t1.kind == Type_Never) {
+// Returns whether the first type is implicitly convertible to the second type.
+func type_implicitly_convertible(src: *Type, dst: *Type): Bool {
+    if (src.kind == Type_Never) {
         return true;
-    } else if (is_scalar(t1) && t2.kind == Type_Bool) {
-        return true;
-    } else if (t1.kind == Type_Int && t2.kind == Type_Int) {
-        return (t1 as *IntType).size <= (t2 as *IntType).size;
-    } else if (t1.kind == Type_Ptr && t2.kind == Type_Ptr) {
-        return pointee_type_le((t1 as *PtrType).pointee, (t2 as *PtrType).pointee);
+    }
+
+    if (dst.kind == Type_Bool) {
+        return is_scalar(src);
+    } else if (dst.kind == Type_Int) {
+        return src.kind == Type_Int && type_size(src) <= type_size(dst)
+            || src.kind == Type_Enum && type_size(src) <= type_size(dst);
+    } else if (dst.kind == Type_Ptr) {
+        return src.kind == Type_Ptr && pointee_type_le((src as *PtrType).pointee, (dst as *PtrType).pointee);
     } else {
-        return type_eq(t1, t2);
+        return false;
+    }
+}
+
+// Returns whether the first type is explicitly convertible to the second type
+func type_convertible(src: *Type, dst: *Type): Bool {
+    // special case
+    if (src.kind == Type_Never) {
+        return true;
+    }
+
+    if (dst.kind == Type_Bool) {
+        return is_scalar(src);
+    } else if (dst.kind == Type_Int) {
+        return is_scalar(src);
+    } else if (dst.kind == Type_Ptr) {
+        return src.kind == Type_Int && type_size(src) == 8
+            || src.kind == Type_Ptr;
+    } else if (dst.kind == Type_Enum) {
+        return src.kind == Type_Int
+            || src.kind == Type_Enum;
+    } else {
+        return false;
     }
 }
 
