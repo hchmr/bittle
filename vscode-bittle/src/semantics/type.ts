@@ -223,10 +223,10 @@ export function typeLayout(type: Type): TypeLayout | undefined {
 //= Type merging
 
 export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
-    if (typeLe(t1, t2)) {
-        return t2;
-    } else if (typeLe(t2, t1)) {
+    if (typeEq(t1, t2) || typeImplicitlyConvertible(t1, t2)) {
         return t1;
+    } else if (typeImplicitlyConvertible(t2, t1)) {
+        return t2;
     }
 
     if (t1.kind !== t2.kind) {
@@ -300,14 +300,41 @@ export function isValidReturnType(type: Type): boolean {
         || isScalarType(type);
 }
 
-export function typeLe(t1: Type, t2: Type): boolean {
-    return typeEq(t1, t2)
-        || (t1.kind === TypeKind.Err || t2.kind === TypeKind.Err)
-        || (t1.kind === TypeKind.Never)
-        || (isScalarType(t1) && t2.kind === TypeKind.Bool)
-        || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Int && t1.size! <= t2.size!)
-        || (t1.kind === TypeKind.Int && t2.kind === TypeKind.Enum && t1.size! <= t2.sym.size)
-        || (t1.kind === TypeKind.Ptr && t2.kind === TypeKind.Ptr && pointeeTypeLe(t1.pointeeType, t2.pointeeType));
+export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
+    if (src.kind === TypeKind.Never) {
+        return true;
+    }
+
+    if (dst.kind === TypeKind.Bool) {
+        return isScalarType(src);
+    } else if (dst.kind === TypeKind.Int) {
+        return (src.kind === TypeKind.Int && src.size! <= dst.size!)
+            || (src.kind === TypeKind.Enum && src.sym.size! <= dst.size!);
+    } else if (dst.kind === TypeKind.Ptr) {
+        return src.kind === TypeKind.Ptr && pointeeTypeLe(src.pointeeType, dst.pointeeType);
+    } else {
+        return false;
+    }
+}
+
+export function typeConvertible(src: Type, dst: Type): boolean {
+    if (src.kind === TypeKind.Never) {
+        return true;
+    }
+
+    if (dst.kind === TypeKind.Bool) {
+        return isScalarType(src);
+    } else if (dst.kind === TypeKind.Int) {
+        return isScalarType(src);
+    } else if (dst.kind === TypeKind.Ptr) {
+        return (src.kind === TypeKind.Int && src.size === 64)
+            || src.kind === TypeKind.Ptr;
+    } else if (dst.kind === TypeKind.Enum) {
+        return src.kind === TypeKind.Int
+            || src.kind === TypeKind.Enum;
+    } else {
+        return false;
+    }
 }
 
 function pointeeTypeLe(t1: Type, t2: Type): boolean {

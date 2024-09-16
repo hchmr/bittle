@@ -14,7 +14,7 @@ import {
     ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
 } from './sym';
 import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, TypeKind, typeLayout, typeLe,
+    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout,
 } from './type';
 
 export type ErrorLocation = {
@@ -1406,7 +1406,7 @@ export class Elaborator {
         if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
             return;
         }
-        if (!typeLe(actual, expected)) {
+        if (!typeEq(actual, expected) && !typeImplicitlyConvertible(actual, expected)) {
             this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
         }
     }
