@@ -428,10 +428,7 @@ func emit_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, t0: Int) {
     var source = subexpr.type;
     emit_expr(ctx, subexpr, t0);
     assert(is_scalar(target) && is_scalar(source), "emit_expr: <cast> should have scalar types.");
-    if (target.kind == Type_Bool) {
-        printf("  cmp x%d, #0\n", t0);
-        printf("  cset w%d, ne\n", t0);
-    } else if (type_size(target) < type_size(source)) {
+    if (type_size(target) < type_size(source)) {
         emit_sign_extend(ctx, target, t0, t0);
     } else {
         // no-op

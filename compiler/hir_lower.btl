@@ -381,6 +381,11 @@ func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
         return hir_mk_seq_expr(subexpr, unreachable_expr);
     }
 
+    if (target_type.kind == Type_Bool) {
+        var zero = hir_mk_int_expr(0, source_type, &expr.pos);
+        return hir_mk_binary_op_expr(HirOp_Ne, subexpr, zero, target_type);
+    }
+
     return hir_mk_cast_expr(subexpr, target_type);
 }
 
