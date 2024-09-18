@@ -27,19 +27,25 @@ func die_at(pos: *Pos, msg: *Char): ! {
     exit(1);
 }
 
-func sb_new(): *StringBuilder {
-    return calloc(1, sizeof(StringBuilder));
+struct StringBuffer {
+    buf: *Char,
+    len: Int,
+    cap: Int,
 }
 
-func sb_len(self: *StringBuilder): Int {
+func sb_new(): *StringBuffer {
+    return calloc(1, sizeof(StringBuffer));
+}
+
+func sb_len(self: *StringBuffer): Int {
     return self.len;
 }
 
-func sb_get(self: *StringBuilder): *Char {
+func sb_cstr(self: *StringBuffer): *Char {
     return self.buf;
 }
 
-func sb_ensure_cap(self: *StringBuilder, cap: Int) {
+func sb_ensure_cap(self: *StringBuffer, cap: Int) {
     if (self.cap >= cap) {
         return;
     }
@@ -51,13 +57,19 @@ func sb_ensure_cap(self: *StringBuilder, cap: Int) {
     self.cap = new_cap;
 }
 
-func sb_push(self: *StringBuilder, c: Char) {
-    sb_ensure_cap(self, self.len + 1);
+func sb_shrink_to_fit(self: *StringBuffer) {
+    self.buf = realloc(self.buf, self.len + 1);
+    self.cap = self.len + 1;
+}
+
+func sb_push(self: *StringBuffer, c: Char) {
+    sb_ensure_cap(self, self.len + 2);
     self.buf[self.len] = c;
+    self.buf[self.len + 1] = '\0';
     self.len += 1;
 }
 
-func sb_append(self: *StringBuilder, s: *Char) {
+func sb_append(self: *StringBuffer, s: *Char) {
     var i = 0;
     while (s[i]) {
         sb_push(self, s[i]);
@@ -65,12 +77,11 @@ func sb_append(self: *StringBuilder, s: *Char) {
     }
 }
 
-func sb_finish(self: *StringBuilder): *Char {
-    sb_push(self, '\0');
-    var string = self.buf;
-    string = realloc(string, self.len);
-    *self = StringBuilder(buf: null, len: -1, cap: -1);
-    return string;
+func sb_finish(self: *StringBuffer): *Char {
+    sb_shrink_to_fit(self);
+    var buf = self.buf;
+    free(self);
+    return buf;
 }
 
 func list_ensure_cap(self: *List, cap: Int) {

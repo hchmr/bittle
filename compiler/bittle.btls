@@ -15,11 +15,7 @@ struct List {
     cap: Int,
 }
 
-struct StringBuilder {
-    buf: *Char,
-    len: Int,
-    cap: Int,
-}
+struct StringBuffer;
 
 func assert(cond: Bool, because: *Char);
 func unreachable(function: *Char): !;
@@ -28,13 +24,14 @@ func error_at(pos: *Pos);
 func die(msg: *Char): !;
 func die_at(pos: *Pos, msg: *Char): !;
 
-func sb_new(): *StringBuilder;
-func sb_len(self: *StringBuilder): Int;
-func sb_get(self: *StringBuilder): *Char;
-func sb_ensure_cap(self: *StringBuilder, cap: Int);
-func sb_push(self: *StringBuilder, c: Char);
-func sb_append(self: *StringBuilder, s: *Char);
-func sb_finish(self: *StringBuilder): *Char;
+func sb_new(): *StringBuffer;
+func sb_len(self: *StringBuffer): Int;
+func sb_cstr(self: *StringBuffer): *Char;
+func sb_ensure_cap(self: *StringBuffer, cap: Int);
+func sb_shrink_to_fit(self: *StringBuffer);
+func sb_push(self: *StringBuffer, c: Char);
+func sb_append(self: *StringBuffer, s: *Char);
+func sb_finish(self: *StringBuffer): *Char;
 
 func list_new(): *List;
 func list_new_with_cap(cap: Int): *List;
