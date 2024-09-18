@@ -1179,7 +1179,7 @@ export class Elaborator {
                 this.elabExprInfer(leftNode);
                 this.elabExprInfer(rightNode);
                 const cmpType = this.unifyTypes(node, leftNode, rightNode);
-                if (cmpType.kind === TypeKind.Err && !isScalarType(cmpType)) {
+                if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
                     this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
                 }
                 return mkBoolType();

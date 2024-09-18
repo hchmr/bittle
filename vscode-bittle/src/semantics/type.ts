@@ -301,7 +301,7 @@ export function isValidReturnType(type: Type): boolean {
 }
 
 export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
-    if (src.kind === TypeKind.Never) {
+    if (src.kind === TypeKind.Never || src.kind === TypeKind.Err) {
         return true;
     }
 
@@ -318,7 +318,7 @@ export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
 }
 
 export function typeConvertible(src: Type, dst: Type): boolean {
-    if (src.kind === TypeKind.Never) {
+    if (src.kind === TypeKind.Never || src.kind === TypeKind.Err) {
         return true;
     }
 
