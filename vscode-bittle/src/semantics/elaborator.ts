@@ -1040,6 +1040,7 @@ export class Elaborator {
             case SymKind.Struct:
             case SymKind.Func:
             case SymKind.StructField:
+                this.reportError(nameNode, `Expected a variable or a constant.`);
                 return mkErrorType();
             default: {
                 const unreachable: never = sym;
