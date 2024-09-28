@@ -105,8 +105,8 @@ func emit_slot_addr(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Int) {
 func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
     assert(is_scalar(source), "emit_sign_extend: source should be a scalar.");
     if (is_int_or_enum(source, max_size: 4)) {
-        var source = source as *IntType;
-        var suffix = "_bh_w"[source.size];
+        var size = type_size(source);
+        var suffix = "_bh_w"[size];
         printf("  sxt%c x%d, w%d\n", suffix, t0, t1);
     } else {
         if (t0 != t1) {
