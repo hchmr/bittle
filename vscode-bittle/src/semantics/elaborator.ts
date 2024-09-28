@@ -1099,12 +1099,7 @@ export class Elaborator {
             case '~':
                 return this.elabExprInt(operandNode);
             case '&':
-            {
-                if (operandNode && !isLvalue(operandNode)) {
-                    this.reportError(operandNode, `Expected lvalue.`);
-                }
                 return mkPointerType(this.elabExprInfer(operandNode));
-            }
             case '*':
             {
                 const operandType = this.elabExprInfer(operandNode);
