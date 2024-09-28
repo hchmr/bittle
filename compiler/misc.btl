@@ -151,6 +151,10 @@ func int_min(a: Int, b: Int): Int {
     return a > b ? b : a;
 }
 
+func int_max(a: Int, b: Int): Int {
+    return a > b ? a : b;
+}
+
 func read_file(file: *File): *Char {
     var len = 0;
     var cap = 4096;

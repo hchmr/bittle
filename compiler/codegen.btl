@@ -1,8 +1,7 @@
 include "bittle.btls";
 
-const FRAME_SIZE_MAX = 4096;
-const FRAME_TEMP_SIZE = 128;
-const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_TEMP_SIZE;
+//==============================================================================
+//== Helper Functions
 
 func is_int_or_enum(t: *Type, max_size: Int): Bool {
     if (t.kind == Type_Int) {
@@ -14,360 +13,864 @@ func is_int_or_enum(t: *Type, max_size: Int): Bool {
     }
 }
 
-struct Slot {
-    offset: Int,
+func reg_width_from_size(size: Int): Int {
+    return size < 8 ? 4 : 8;
+}
+
+//==============================================================================
+//== Assembly DSL
+
+enum Reg {
+    Reg_X0, Reg_X1, Reg_X2, Reg_X3, Reg_X4, Reg_X5, Reg_X6, Reg_X7, Reg_X8,
+    Reg_X9, Reg_X10, Reg_X11, Reg_X12, Reg_X13, Reg_X14, Reg_X15,
+    Reg_X16, Reg_X17, Reg_X18, Reg_X19, Reg_X20, Reg_X21, Reg_X22, Reg_X23, Reg_X24,
+    Reg_X25, Reg_X26, Reg_X27, Reg_X28, Reg_X29, Reg_X30, Reg_X31,
+    FP = Reg_X29, LR = Reg_X30, SP = Reg_X31,
+}
+
+enum AsmOperandKind {
+    AsmOperand_Reg,
+    AsmOperand_Mem,
+    AsmOperand_Int,
+    AsmOperand_Label,
+    AsmOperand_Global,
+    AsmOperand_SpOffset,
+    AsmOperand_Raw,
+}
+
+struct AsmOperand {
+    kind: AsmOperandKind,
+}
+
+// e.g. x0
+struct AsmRegOperand : AsmOperand {
+    width: Int,
+    reg: Reg,
+    shift: Int,
+}
+
+// e.g. [x0]
+// e.g. [x0, #42]
+struct AsmMemOperand : AsmOperand {
+    n_args: Int,
+    args: **AsmOperand,
+}
+
+// e.g. #42
+// e.g. #1, lsl 16
+struct AsmIntOperand : AsmOperand {
+    value: Int,
+    shift: Int,
+}
+
+// e.g. my_global
+// e.g. .L0
+struct AsmLabelOperand : AsmOperand {
+    counter: Int, // Only used for auto-generated labels
+    suffix: *Char,
+}
+
+// e.g. :got:my_global
+// e.g. str3
+struct AsmGlobalOperand : AsmOperand {
+    relocation_spec: *Char, // :lo12, :got, :got_lo12
+    prefix: *Char,
+    counter: Int, // Only used for strings
+}
+
+struct AsmSpOffsetOperand : AsmOperand {
+    fp_offset: Int,
+}
+
+struct AsmRawOperand : AsmOperand {
+    op: *Char,
+}
+
+struct AsmInstr {
+    op: *Char,
+    n_args: Int,
+    args: **AsmOperand,
+}
+
+struct AsmFunc {
     name: *Char,
-}
-
-struct CodegenCtx {
+    instrs: *List, // List<*AsmInstr>
     frame_size: Int,
-    label_count: Int,
-    temp_size: Int,
-    current_func: *FuncSym,
-    current_loop: Int,
-    slots: *Slot,
-    n_slots: Int,
 }
 
-func next_label(ctx: *CodegenCtx): Int {
-    ctx.label_count += 1;
-    return ctx.label_count;
+func asm_mk_reg_operand(width: Int, reg: Reg, shift: Int): *AsmRegOperand {
+    var operand: *AsmRegOperand = calloc(1, sizeof(AsmRegOperand));
+    *operand = AsmRegOperand(
+        kind: AsmOperand_Reg,
+        width: width,
+        reg: reg,
+        shift: shift,
+    );
+    return operand;
 }
 
-func strx(type: *Type): *Char {
-    if (type_size(type) == 1)
-        return "strb w";
-    if (type_size(type) == 2)
-        return "strh w";
-    if (type_size(type) == 4)
-        return "str w";
-    if (type_size(type) == 8)
-        return "str x";
-    unreachable("strx");
+func asm_mk_int_operand(value: Int): *AsmIntOperand {
+    var operand: *AsmIntOperand = calloc(1, sizeof(AsmIntOperand));
+    *operand = AsmIntOperand(
+        kind: AsmOperand_Int,
+        value: value,
+        shift: 0,
+    );
+    return operand;
 }
 
-func ldrx(type: *Type): *Char {
-    if (type.kind == Type_Bool)
-        return "ldrb w";
-    if (is_int_or_enum(type, max_size: 1))
-        return "ldrsb x";
-    if (is_int_or_enum(type, max_size: 2))
-        return "ldrsh x";
-    if (is_int_or_enum(type, max_size: 4))
-        return "ldrsw x";
-    if (type_size(type) == 8)
-        return "ldr x";
-    pretty_type(stderr, type); // TODO
-    unreachable("ldrx");
+func asm_mk_label_operand(counter: Int, suffix: *Char): *AsmLabelOperand {
+    var operand: *AsmLabelOperand = calloc(1, sizeof(AsmLabelOperand));
+    *operand = AsmLabelOperand(
+        kind: AsmOperand_Label,
+        counter: counter,
+        suffix: suffix,
+    );
+    return operand;
 }
 
-func emit_push(ctx: *CodegenCtx, reg: Int) {
-    if (ctx.temp_size + 8 >= FRAME_TEMP_SIZE) {
-        fprintf(stderr, "Ran out of space for temporaries while compiling expression.\n");
-        exit(1);
+func asm_mk_global_operand(relocation_spec: *Char, prefix: *Char, suffix: Int): *AsmGlobalOperand {
+    var operand: *AsmGlobalOperand = calloc(1, sizeof(AsmGlobalOperand));
+    *operand = AsmGlobalOperand(
+        kind: AsmOperand_Global,
+        relocation_spec: relocation_spec,
+        prefix: prefix,
+        counter: suffix,
+    );
+    return operand;
+}
+
+func asm_mk_sp_offset_operand(fp_offset: Int): *AsmSpOffsetOperand {
+    var operand: *AsmSpOffsetOperand = calloc(1, sizeof(AsmSpOffsetOperand));
+    *operand = AsmSpOffsetOperand(
+        kind: AsmOperand_SpOffset,
+        fp_offset: fp_offset,
+    );
+    return operand;
+}
+
+func asm_mk_raw_operand(op: *Char): *AsmRawOperand {
+    var operand: *AsmRawOperand = calloc(1, sizeof(AsmRawOperand));
+    *operand = AsmRawOperand(
+        kind: AsmOperand_Raw,
+        op: op,
+    );
+    return operand;
+}
+
+func asm_mk_mem_operand(n_args: Int): *AsmMemOperand {
+    var operand: *AsmMemOperand = calloc(1, sizeof(AsmMemOperand));
+    *operand = AsmMemOperand(
+        kind: AsmOperand_Mem,
+        n_args: n_args,
+        args: calloc(n_args, sizeof(*AsmOperand)),
+    );
+    return operand;
+}
+
+func asm_mk_reg_mem_operand(reg: Reg, offset: Int): *AsmMemOperand {
+    var operand = asm_mk_mem_operand(2);
+    operand.args[0] = asm_mk_reg_operand(8, reg, shift: 0);
+    operand.args[1] = asm_mk_int_operand(offset);
+    return operand;
+}
+
+func asm_mk_frame_indexed_mem_operand(fp_offset: Int): *AsmMemOperand {
+    var operand = asm_mk_mem_operand(2);
+    operand.args[0] = asm_mk_reg_operand(8, SP, shift: 0);
+    operand.args[1] = asm_mk_sp_offset_operand(fp_offset);
+    return operand;
+}
+
+func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
+    var instr: *AsmInstr = calloc(1, sizeof(AsmInstr));
+    *instr = AsmInstr(
+        op: op,
+        n_args: n_args,
+        args: calloc(n_args, sizeof(*AsmOperand)),
+    );
+    return instr;
+}
+
+//==============================================================================
+//== Instruction building
+
+func asm_write_instr(builder: *List, op: *Char, n_args: Int): *AsmInstr {
+    var instr = asm_mk_instr(op, n_args);
+    list_push(builder, instr);
+    return instr;
+}
+
+// Data Movement
+
+func asm_get_load_op(width: Int): *Char {
+    return
+        width == 1 ? "ldrsb" :
+        width == 2 ? "ldrsh" :
+        width == 4 ? "ldrsw" :
+        "ldr";
+}
+
+func asm_get_store_op(width: Int): *Char {
+    return
+        width == 1 ? "strb" :
+        width == 2 ? "strh" :
+        "str";
+}
+
+func asm_write_mov_r(builder: *List, width: Int, xd: Reg, x1: Reg) {
+    var instr = asm_write_instr(builder, "mov", n_args: 2);
+    instr.args[0] = asm_mk_reg_operand(width, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(width, x1, shift: 0);
+}
+
+func asm_write_mov_i(builder: *List, width: Int, xd: Reg, value: Int) {
+    if (value == 0) {
+        var instr = asm_write_instr(builder, "movz", n_args: 2);
+        instr.args[0] = asm_mk_reg_operand(width, xd, shift: 0);
+        instr.args[1] = asm_mk_int_operand(0);
+        return;
     }
-    ctx.temp_size += 8;
-    printf("  str x%d, [sp, #%d] // push\n", reg, FRAME_TEMP_SIZE - ctx.temp_size);
-}
 
-func emit_pop(ctx: *CodegenCtx, reg: Int) {
-    printf("  ldr x%d, [sp, #%d] // pop\n", reg, FRAME_TEMP_SIZE - ctx.temp_size);
-    ctx.temp_size -= 8;
-}
+    var MASK_16 = (1 << 16) - 1;
 
-func get_slot_sp_offset(ctx: *CodegenCtx, type: *Type, slot_index: Int): Int {
-    var slot = &ctx.slots[slot_index];
-    return ctx.frame_size - slot.offset - type_size(type);
-}
+    var n_gen = 0;
+    for (var i = 0; i < 4; i += 1) {
+        var lo16 = value & MASK_16;
 
-func print_slot_name(ctx: *CodegenCtx, slot_index: Int) {
-    if (ctx.slots[slot_index].name) {
-        printf("%s", ctx.slots[slot_index].name);
-    } else {
-        printf("$slot%d", slot_index);
+        if (lo16 != 0 || i == 3 && n_gen == 0) {
+            var op = n_gen == 0 ? "movz" : "movk";
+
+            var instr = asm_write_instr(builder, op, n_args: 2);
+            instr.args[0] = asm_mk_reg_operand(width, xd, shift: 0);
+            instr.args[1] = asm_mk_int_operand(lo16);
+            (instr.args[1] as *AsmIntOperand).shift = i * 16;
+
+            n_gen += 1;
+        }
+
+        value >>= 16;
     }
+
+    assert(n_gen > 0, "asm_write_mov_i: should generate at least one instruction.");
 }
 
-func emit_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Int) {
-    var sp_offset = get_slot_sp_offset(ctx, type, slot_index);
-    printf("  %s%d, [sp, #%d] // ", strx(type), reg, sp_offset);
-    print_slot_name(ctx, slot_index);
-    printf("\n");
+func asm_write_ldrs(builder: *List, width: Int, dst: *AsmOperand, src: *AsmOperand) {
+    var op = asm_get_load_op(width);
+    var instr = asm_write_instr(builder, op, n_args: 2);
+    instr.args[0] = dst;
+    instr.args[1] = src;
 }
 
-func emit_slot_addr(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Int) {
-    var sp_offset = get_slot_sp_offset(ctx, type, slot_index);
-    printf("  add x%d, sp, #%d // &", reg, sp_offset);
-    print_slot_name(ctx, slot_index);
-    printf("\n");
+func asm_write_ldrs_ri(builder: *List, width: Int, xd: Reg, xs: Reg, offset: Int) {
+    var dst_operand = asm_mk_reg_operand(8, xd, shift: 0);
+    var src_operand = asm_mk_reg_mem_operand(xs, offset);
+    asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
-func emit_sign_extend(ctx: *CodegenCtx, source: *Type, t0: Int, t1: Int) {
-    assert(is_scalar(source), "emit_sign_extend: source should be a scalar.");
-    if (is_int_or_enum(source, max_size: 4)) {
-        var size = type_size(source);
-        var suffix = "_bh_w"[size];
-        printf("  sxt%c x%d, w%d\n", suffix, t0, t1);
+func asm_write_ldrs_r(builder: *List, width: Int, xd: Reg, xs: Reg) {
+    asm_write_ldrs_ri(builder, width, xd, xs, 0);
+}
+
+func asm_write_ldrs_r_frame_indexed(builder: *List, width: Int, xd: Reg, fp_offset: Int) {
+    var dst_operand = asm_mk_reg_operand(8, xd, shift: 0);
+    var src_operand = asm_mk_frame_indexed_mem_operand(fp_offset);
+    asm_write_ldrs(builder, width, dst_operand, src_operand);
+}
+
+func asm_write_str(builder: *List, width: Int, src: *AsmOperand, dst: *AsmOperand) {
+    var op = asm_get_store_op(width);
+    var instr = asm_write_instr(builder, op, n_args: 2);
+    instr.args[0] = src;
+    instr.args[1] = dst;
+}
+
+func asm_write_str_ri(builder: *List, width: Int, xs: Reg, xd: Reg, offset: Int) {
+    var src_width = reg_width_from_size(width);
+    var src_operand = asm_mk_reg_operand(src_width, xs, shift: 0);
+    var dst_operand = asm_mk_reg_mem_operand(xd, offset);
+    asm_write_str(builder, width, src_operand, dst_operand);
+}
+
+func asm_write_str_r(builder: *List, width: Int, xs: Reg, xd: Reg) {
+    asm_write_str_ri(builder, width, xs, xd, 0);
+}
+
+func asm_write_str_r_frame_indexed(builder: *List, width: Int, xs: Reg, fp_offset: Int) {
+    var src_width = reg_width_from_size(width);
+    var src_operand = asm_mk_reg_operand(src_width, xs, shift: 0);
+    var dst_operand = asm_mk_frame_indexed_mem_operand(fp_offset);
+    asm_write_str(builder, width, src_operand, dst_operand);
+}
+
+// Arithmetic, Logic and Comparison
+
+// sxt {xd}, {x1}
+func asm_write_sxt(builder: *List, dst_size: Int, src_size: Int, xd: Reg, x1: Reg) {
+    var op =
+        src_size == 1 ? "sxtb" :
+        src_size == 2 ? "sxth" :
+        "sxtw";
+
+    var dst_width = reg_width_from_size(dst_size);
+    var src_width = reg_width_from_size(src_size);
+
+    var instr = asm_write_instr(builder, op, n_args: 2);
+    instr.args[0] = asm_mk_reg_operand(dst_size, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(src_width, x1, shift: 0);
+}
+
+func asm_write_binary_op_rr(builder: *List, op: *Char, xd: Reg, x1: Reg, x2: Reg) {
+    var instr = asm_write_instr(builder, op, n_args: 3);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(8, x1, shift: 0);
+    instr.args[2] = asm_mk_reg_operand(8, x2, shift: 0);
+}
+
+func asm_write_binary_op_ri(builder: *List, op: *Char, xd: Reg, x1: Reg, imm: Int) {
+    var instr = asm_write_instr(builder, op, n_args: 3);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(8, x1, shift: 0);
+    instr.args[2] = asm_mk_int_operand(imm);
+}
+
+func asm_write_binary_op_rrr(builder: *List, op: *Char, xd: Reg, x1: Reg, x2: Reg, x3: Reg) {
+    var instr = asm_write_instr(builder, op, n_args: 4);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(8, x1, shift: 0);
+    instr.args[2] = asm_mk_reg_operand(8, x2, shift: 0);
+    instr.args[3] = asm_mk_reg_operand(8, x3, shift: 0);
+}
+
+func asm_write_add_ri(builder: *List, width: Int, xd: Reg, x1: Reg, imm: Int) {
+    asm_write_binary_op_ri(builder, "add", xd, x1, imm);
+}
+
+func asm_write_add_rr(builder: *List, width: Int, xd: Reg, x1: Reg, x2: Reg) {
+    asm_write_binary_op_rr(builder, "add", xd, x1, x2);
+}
+
+func asm_write_cmp_rr(builder: *List, width: Int, xd: Reg, x1: Reg) {
+    var instr = asm_write_instr(builder, "cmp", n_args: 2);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(8, x1, shift: 0);
+}
+
+func asm_write_cset(builder: *List, width: Int, xd: Reg, op: *Char) {
+    var instr = asm_write_instr(builder, "cset", n_args: 2);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_raw_operand(op);
+}
+
+// Control Flow
+
+// cbz {xd}, {label}
+func asm_write_cbz(builder: *List, xd: Reg, counter: Int, suffix: *Char) {
+    var instr = asm_write_instr(builder, "cbz", n_args: 2);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_label_operand(counter, suffix);
+}
+
+// b {label}
+func asm_write_b(builder: *List, counter: Int, suffix: *Char) {
+    var instr = asm_write_instr(builder, "b", n_args: 1);
+    instr.args[0] = asm_mk_label_operand(counter, suffix);
+}
+
+// bl {name}
+func asm_write_bl(builder: *List, name: *Char) {
+    var instr = asm_write_instr(builder, "bl", n_args: 1);
+    instr.args[0] = asm_mk_global_operand("", name, -1);
+}
+
+// Addressing
+
+// addrp {xd}, {name}
+// add {xd}, {xd}, :lo12:{name}
+func asm_write_global_addr(builder: *List, xd: Reg, name: *Char) {
+    var addrp_instr = asm_write_instr(builder, "adrp", n_args: 2);
+    addrp_instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    addrp_instr.args[1] = asm_mk_global_operand("", name, -1);
+
+    var instr = asm_write_instr(builder, "add", n_args: 3);
+    instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[1] = asm_mk_reg_operand(8, xd, shift: 0);
+    instr.args[2] = asm_mk_global_operand(":lo12:", name, -1);
+}
+
+// addrp {xd}, :got:{name}
+// ldr {xd}, [{xd}, :got_lo12:{name}]
+func asm_write_got_global_addr(builder: *List, xd: Reg, name: *Char) {
+    var addrp_instr = asm_write_instr(builder, "adrp", n_args: 2);
+    addrp_instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    addrp_instr.args[1] = asm_mk_global_operand(":got:", name, -1);
+
+    var mem_operand = asm_mk_mem_operand(2);
+    mem_operand.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    mem_operand.args[1] = asm_mk_global_operand(":got_lo12:", name, -1);
+
+    var ldr_instr = asm_write_instr(builder, "ldr", n_args: 2);
+    ldr_instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    ldr_instr.args[1] = mem_operand;
+}
+
+// addrp {xd}, str{id}
+// add {xd}, {xd}, :lo12:str{id}
+func asm_write_string_addr(builder: *List, xd: Reg, id: Int) {
+    var addrp_instr = asm_write_instr(builder, "adrp", n_args: 2);
+    addrp_instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    addrp_instr.args[1] = asm_mk_global_operand("", ".L.str.", id);
+
+    var add_instr = asm_write_instr(builder, "add", n_args: 3);
+    add_instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
+    add_instr.args[1] = asm_mk_reg_operand(8, xd, shift: 0);
+    add_instr.args[2] = asm_mk_global_operand(":lo12:", ".L.str.", id);
+}
+
+// Miscellaneous
+
+func asm_write_label(builder: *List, counter: Int, suffix: *Char) {
+    var instr = asm_write_instr(builder, null, 1);
+    instr.args[0] = asm_mk_label_operand(counter, suffix);
+}
+
+func asm_write_raw(builder: *List, raw: *Char) {
+    asm_write_instr(builder, raw, n_args: 0);
+}
+
+//==============================================================================
+//== Printing Assembly
+
+func asm_print_reg(reg: Reg, width: Int) {
+    if (reg == SP) {
+        printf("sp");
     } else {
-        if (t0 != t1) {
-            printf("  mov x%d, x%d\n", t0, t1);
+        if (width == 4) {
+            printf("w%d", reg);
+        } else {
+            printf("x%d", reg);
         }
     }
 }
 
-func compute_frame_layout(ctx: *CodegenCtx) {
-    var sym = ctx.current_func;
-    var n_locals = list_len(sym.locals);
-    var n_temps = list_len(sym.temps);
+func asm_print_operand(fun: *AsmFunc, operand: *AsmOperand) {
+    if (operand.kind == AsmOperand_Reg) {
+        var operand = operand as *AsmRegOperand;
+        asm_print_reg(operand.reg, operand.width);
+        if (operand.shift != 0) {
+            printf(", lsl #%d", operand.shift);
+        }
+    } else if (operand.kind == AsmOperand_Mem) {
+        var operand = operand as *AsmMemOperand;
+        printf("[");
+        for (var i = 0; i < operand.n_args; i += 1) {
+            asm_print_operand(fun, operand.args[i]);
+            if (i < operand.n_args - 1) {
+                printf(", ");
+            }
+        }
+        printf("]");
+    } else if (operand.kind == AsmOperand_Int) {
+        var operand = operand as *AsmIntOperand;
+        printf("#%d", operand.value);
+        if (operand.shift != 0) {
+            printf(", lsl #%d", operand.shift);
+        }
+    } else if (operand.kind == AsmOperand_Label) {
+        var operand = operand as *AsmLabelOperand;
+        printf(".L%d", operand.counter);
+        if (operand.suffix != null) {
+            printf(".%s", operand.suffix);
+        }
+    } else if (operand.kind == AsmOperand_Global) {
+        var operand = operand as *AsmGlobalOperand;
+        printf("%s%s", operand.relocation_spec, operand.prefix);
+        if (operand.counter != -1) {
+            printf("%d", operand.counter);
+        }
+    } else if (operand.kind == AsmOperand_SpOffset) {
+        var operand = operand as *AsmSpOffsetOperand;
+        printf("#%d", fun.frame_size - operand.fp_offset);
+    } else if (operand.kind == AsmOperand_Raw) {
+        var operand = operand as *AsmRawOperand;
+        printf("%s", operand.op);
+    }
+}
 
-    var n_slots = n_locals + n_temps;
-    var slots: *Slot = calloc(n_slots, sizeof(Slot));
-
-    var size = 0;
-    for (var i = 0; i < n_locals; i += 1) {
-        var local_sym: *LocalSym = list_get(sym.locals, i);
-        var type = local_sym.type;
-
-
-        var offset = align_up(size, type_align(type));
-        slots[local_sym.slot_index] = Slot(offset, name: local_sym.name);
-
-        size = offset + type_size(type);
+func asm_print_instr(fun: *AsmFunc, instr: *AsmInstr) {
+    // special case for labels:
+    if (instr.op == null) {
+        asm_print_operand(fun, instr.args[0]);
+        printf(":\n");
+        return;
     }
 
-    for (var i = 0; i < n_temps; i += 1) {
-        var temp: *HirTemp = list_get(sym.temps, i);
-        var type = temp.type;
+    printf("  %s", instr.op);
 
+    for (var i = 0; i < instr.n_args; i += 1) {
+        var arg = instr.args[i];
 
-        var offset = align_up(size, type_align(type));
-        slots[temp.slot_index] = Slot(offset, name: null);
-
-        size = offset + type_size(type);
+        if (i == 0) {
+            printf(" ");
+        } else {
+            printf(", ");
+        }
+        asm_print_operand(fun, arg);
     }
 
-    size = align_up(size, 16) + FRAME_TEMP_SIZE;
+    printf("\n");
+}
 
-    if (size > FRAME_SIZE_MAX) {
-        error_at(&sym.body.pos);
-        fprintf(stderr, "Frame size of function %s exceeds the maximum allowed size.\n", sym.name);
-        exit(1);
+func asm_print_func(fun: *AsmFunc) {
+    // prologue
+    printf("  .text\n");
+    printf("  .align 2\n");
+    printf("  .global %s\n", fun.name);
+    printf("%s:\n", fun.name);
+    printf("  stp  x29, x30, [sp, #-16]!\n");
+    printf("  mov  x29, sp\n");
+    printf("  sub  sp, sp, #%d\n", fun.frame_size);
+
+    // body
+    var n_instrs = list_len(fun.instrs);
+    for (var i = 0; i < n_instrs; i += 1) {
+        var instr: *AsmInstr = list_get(fun.instrs, i);
+        asm_print_instr(fun, instr);
     }
 
-    ctx.frame_size = size;
-    ctx.n_slots = n_slots;
-    ctx.slots = slots;
+    // epilogue
+    printf("  add  sp, sp, #%d\n", fun.frame_size);
+    printf("  ldp  x29, x30, [sp], #16\n");
+    printf("  ret\n");
 }
 
-func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int);
+//==============================================================================
+//== Codegen Context
 
-func emit_expr_addr(ctx: *CodegenCtx, e: *HirExpr, t0: Int);
-
-func emit_operands(ctx: *CodegenCtx, e1: *HirExpr, e2: *HirExpr, t0: Int, t1: Int) {
-    emit_expr(ctx, e1, t0);
-    emit_push(ctx, t0);
-    emit_expr(ctx, e2, t1);
-    emit_pop(ctx, t0);
+struct LoopCtx {
+    step_label: Int,
+    done_label: Int,
 }
 
-func emit_assign_operands(ctx: *CodegenCtx, dst: *HirExpr, src: *HirExpr, t0: Int, t1: Int) {
-    emit_expr_addr(ctx, dst, t0);
-    emit_push(ctx, t0);
-    emit_expr(ctx, src, t1);
-    emit_pop(ctx, t0);
+struct Slot {
+    offset: Int,
 }
 
-func emit_expr_binary(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, t0: Int) {
-    emit_operands(ctx, e1, e2, 0, 1);
-    printf("  %s x%d, x%d, x%d\n", op, t0, 0, 1);
+struct CodegenCtx {
+    // execution context
+    current_func: *FuncSym,
+    current_loop: LoopCtx,
+
+    // slot space
+    slots_size: Int,
+    n_slots: Int,
+    slots: *Slot,
+
+    // scratch space
+    scratch_size: Int,
+    max_scratch: Int,
+
+    // labels
+    n_labels: Int,
+    ret_label: Int,
+
+    // strings
+    strings: *List, // List<*Char>
+
+    // asm builder
+    builder: *List,
 }
 
-func emit_expr_cmp(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, t0: Int) {
-    emit_operands(ctx, e1, e2, 0, 1);
-    printf("  cmp x%d, x%d\n", 0, 1);
-    printf("  cset x%d, %s\n", t0, op);
+func next_label(ctx: *CodegenCtx): Int {
+    var label = ctx.n_labels;
+    ctx.n_labels += 1;
+    return label;
 }
 
-func emit_expr_addr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
+func define_global_string(ctx: *CodegenCtx, value: *Char, xd: Reg): Int {
+    list_push(ctx.strings, value);
+    return list_len(ctx.strings) - 1;
+}
+
+//==============================================================================
+//== Codegen
+
+func write_push(ctx: *CodegenCtx, reg: Reg) {
+    ctx.scratch_size += 8;
+    ctx.max_scratch = int_max(ctx.max_scratch, ctx.scratch_size);
+
+    // str {reg}, [sp, #{??}]
+    var fp_offset = ctx.slots_size + ctx.scratch_size;
+    asm_write_str_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
+}
+
+func write_pop(ctx: *CodegenCtx, reg: Reg) {
+    // ldr {reg}, [sp, #{??}]
+    var fp_offset = ctx.slots_size + ctx.scratch_size;
+    asm_write_ldrs_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
+
+    ctx.scratch_size -= 8;
+}
+
+func write_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
+    var width = type_size(type);
+    var offset = ctx.slots[slot_index].offset + type_size(type);
+    asm_write_str_ri(ctx.builder, width: width, reg, FP, -offset);
+}
+
+func write_slot_addr(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
+    var width = type_size(type);
+    var offset = ctx.slots[slot_index].offset + type_size(type);
+    asm_write_add_ri(ctx.builder, width: width, reg, FP, -offset);
+}
+
+func write_sign_extend(ctx: *CodegenCtx, source: *Type, xd: Reg, x1: Reg) {
+    assert(is_scalar(source), "write_sign_extend: source should be a scalar.");
+    if (is_int_or_enum(source, max_size: 4)) {
+        var target_size = 8;
+        var source_size = type_size(source);
+        // {sxt} {xd}, {x1}
+        asm_write_sxt(ctx.builder, target_size, source_size, xd, x1);
+    } else {
+        if (xd != x1) {
+            // mov {xd}, {x1}
+            asm_write_mov_r(ctx.builder, width: 8, xd, x1);
+        }
+    }
+}
+
+func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg);
+
+func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg);
+
+func asm_lower_operands(ctx: *CodegenCtx, e1: *HirExpr, e2: *HirExpr, xd: Reg, x1: Reg) {
+    asm_lower_expr(ctx, e1, xd);
+    write_push(ctx, xd);
+    asm_lower_expr(ctx, e2, x1);
+    write_pop(ctx, xd);
+}
+
+func asm_lower_assign_operands(ctx: *CodegenCtx, dst: *HirExpr, src: *HirExpr, xd: Reg, x1: Reg) {
+    asm_lower_expr_addr(ctx, dst, xd);
+    write_push(ctx, xd);
+    asm_lower_expr(ctx, src, x1);
+    write_pop(ctx, xd);
+}
+
+func asm_lower_expr_binary(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, xd: Reg) {
+    // x0, x1 <- ...
+    asm_lower_operands(ctx, e1, e2, Reg_X0, Reg_X1);
+    // {op} xd, x0, x1
+    asm_write_binary_op_rr(ctx.builder, op, xd, Reg_X0, Reg_X1);
+}
+
+func asm_lower_expr_cmp(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, xd: Reg) {
+    // x0, x1 <- ...
+    asm_lower_operands(ctx, e1, e2, Reg_X0, Reg_X1);
+    // cmp x0, x1
+    asm_write_cmp_rr(ctx.builder, width: 8, Reg_X0, Reg_X1);
+    // cset xd, op
+    asm_write_cset(ctx.builder, width: 8, xd, op);
+}
+
+func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Local) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *LocalSym;
-        emit_slot_addr(ctx, sym.type, sym.slot_index, t0);
+        write_slot_addr(ctx, sym.type, sym.slot_index, xd);
     } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *GlobalSym;
         if (sym.is_defined) {
-            printf("  adrp x%d, %s\n", t0, sym.name);
-            printf("  add x%d, x%d, :lo12:%s // &%s\n", t0, t0, sym.name, sym.name);
+            // adrp {xd}, {name}
+            // add {xd}, {xd}, :lo12:{name}
+            asm_write_global_addr(ctx.builder, xd, sym.name);
         } else {
-            printf("  adrp x%d, :got:%s\n", t0, sym.name);
-            printf("  ldr x%d, [x%d, :got_lo12:%s] // &%s\n", t0, t0, sym.name, sym.name);
+            // adrp {xd}, :got:{name}
+            // ldr {xd}, [{xd}, :got_lo12:{name}]
+            asm_write_got_global_addr(ctx.builder, xd, sym.name);
         }
     } else if (e.kind == HirExpr_Temp) {
         var e = e as *HirTempExpr;
         var temp = e.temp;
-        emit_slot_addr(ctx, temp.type, temp.slot_index, t0);
+        write_slot_addr(ctx, temp.type, temp.slot_index, xd);
     } else if (e.kind == HirExpr_Member) {
         var e = e as *HirMemberExpr;
         var fields = (e.left.type as *StructType).sym.fields;
         var field: *StructField = list_get(fields, e.field_index);
-        emit_expr_addr(ctx, e.left, t0);
-        printf("  add x%d, x%d, #%d // &%s\n", t0, t0, field.offset, e.name);
+        asm_lower_expr_addr(ctx, e.left, xd);
+        // add {xd}, {xd}, #{offset}
+        asm_write_add_ri(ctx.builder, width: 8, xd, xd, field.offset);
     } else if (e.kind == HirExpr_Deref) {
         var e = e as *HirDerefExpr;
-        emit_expr(ctx, e.expr, t0);
+        asm_lower_expr(ctx, e.expr, xd);
     } else if (e.kind == HirExpr_Index) {
         var e = e as *HirIndexExpr;
         if (e.indexee.type.kind == Type_Ptr) {
-            emit_operands(ctx, e.indexee, e.index, 0, 1);
+            asm_lower_operands(ctx, e.indexee, e.index, Reg_X0, Reg_X1);
         } else if (e.indexee.type.kind == Type_Arr) {
-            emit_assign_operands(ctx, e.indexee, e.index, 0, 1);
+            asm_lower_assign_operands(ctx, e.indexee, e.index, Reg_X0, Reg_X1);
         } else {
-            unreachable("emit_expr_addr: indexee should be a pointer or an array.");
+            unreachable("asm_lower_expr_addr: indexee should be a pointer or an array.");
         }
         var elem_size = type_size(e.type);
-        printf("  mov x2, #%d\n", elem_size);
-        printf("  madd x%d, x1, x2, x0 // &x0[x1]\n", t0, elem_size);
+        asm_write_mov_i(ctx.builder, width: 8, Reg_X2, elem_size);
+        asm_write_binary_op_rrr(ctx.builder, "madd", xd, Reg_X1, Reg_X2, Reg_X0);
     } else {
-        unreachable("emit_expr_addr");
+        unreachable("asm_lower_expr_addr");
     }
 }
 
-func emit_seq_expr(ctx: *CodegenCtx, e: *HirSeqExpr, t0: Int) {
+func asm_lower_seq_expr(ctx: *CodegenCtx, e: *HirSeqExpr, xd: Reg) {
     var first = e.first;
     var second = e.second;
-    emit_expr(ctx, first, 0);
-    emit_expr(ctx, second, t0);
+    asm_lower_expr(ctx, first, Reg_X0);
+    asm_lower_expr(ctx, second, xd);
 }
 
-func emit_int_expr(ctx: *CodegenCtx, e: *HirIntExpr, t0: Int) {
+func asm_lower_int_expr(ctx: *CodegenCtx, e: *HirIntExpr, xd: Reg) {
     var int_val = e.value;
-    printf("  mov x%d, #%d\n", t0, int_val);
+    // mov {xd}, #{int_val}
+    asm_write_mov_i(ctx.builder, width: 8, xd, int_val);
 }
 
-func emit_str_expr(ctx: *CodegenCtx, e: *HirStrExpr, t0: Int) {
-    var str_val = e.value;
-    var label = next_label(ctx);
-    printf("  .text\n");
-    printf("  .section .rodata\n");
-    printf("  .align 3\n");
-    printf(".str.%d:\n", label);
-    printf("  .string \"");
-    var i = 0;
-    while (str_val[i] != '\0') {
-        if (!is_print(str_val[i]) || str_val[i] == '\"' || str_val[i] == '\\') {
-            printf("\\%03o", str_val[i]);
-        } else {
-            printf("%c", str_val[i]);
-        }
-        i += 1;
-    }
-    printf("\"\n");
-    printf("  .text\n");
-    printf("  adrp x%d, .str.%d\n", t0, label);
-    printf("  add x%d, x%d, :lo12:.str.%d\n", t0, t0, label);
+func asm_lower_str_expr(ctx: *CodegenCtx, e: *HirStrExpr, xd: Reg) {
+    var string_index = define_global_string(ctx, e.value, xd);
+    asm_write_string_addr(ctx.builder, xd, string_index);
 }
 
-func emit_cond_expr(ctx: *CodegenCtx, e: *HirCondExpr, t0: Int) {
+func asm_lower_cond_expr(ctx: *CodegenCtx, e: *HirCondExpr, xd: Reg) {
     var cond = e.cond;
     var then_expr = e.then_expr;
     var else_expr = e.else_expr;
 
-    var label = next_label(ctx);
-    printf(".L%d.if:\n", label);
-    emit_expr(ctx, cond, 0);
-    printf("  cbz x0, .L%d.else\n", label);
-    printf(".L%d.then:\n", label);
-    emit_expr(ctx, then_expr, t0);
-    printf("  b .L%d.end\n", label);
-    printf(".L%d.else:\n", label);
-    emit_expr(ctx, else_expr, t0);
-    printf(".L%d.end:\n", label);
+    var if_label = next_label(ctx);
+    var then_label = next_label(ctx);
+    var else_label = next_label(ctx);
+    var end_label = next_label(ctx);
+    // L.if:
+    asm_write_label(ctx.builder, if_label, "if");
+    // x0 <- ...
+    asm_lower_expr(ctx, cond, Reg_X0);
+    // cbz x0, L.else
+    asm_write_cbz(ctx.builder, Reg_X0, else_label, "else");
+    // L.then:
+    asm_write_label(ctx.builder, then_label, "then");
+    // {xd} <- ...
+    asm_lower_expr(ctx, then_expr, xd);
+    // b L.end
+    asm_write_b(ctx.builder, end_label, "end");
+    // L.else:
+    asm_write_label(ctx.builder, else_label, "else");
+    // {xd} <- ...
+    asm_lower_expr(ctx, else_expr, xd);
+    // L.end:
+    asm_write_label(ctx.builder, end_label, "end");
 }
 
-func emit_loop_expr(ctx: *CodegenCtx, e: *HirLoopExpr, t0: Int) {
+func asm_lower_loop_expr(ctx: *CodegenCtx, e: *HirLoopExpr, xd: Reg) {
     var cond = e.cond;
     var body = e.body;
     var step = e.step;
 
-    var label = next_label(ctx);
+    var while_label = next_label(ctx);
+    var do_label = next_label(ctx);
+    var step_label = next_label(ctx);
+    var done_label = next_label(ctx);
+
     var outer_loop = ctx.current_loop;
-    ctx.current_loop = label;
-    printf(".L%d.while:\n", label);
-    emit_expr(ctx, cond, 0);
-    printf("  cbz x0, .L%d.done\n", label);
-    printf(".L%d.do:\n", label);
-    emit_expr(ctx, body, 0);
-    printf(".L%d.step:\n", label);
-    emit_expr(ctx, step, 0);
-    printf("  b .L%d.while\n", label);
-    printf(".L%d.done:\n", label);
+    ctx.current_loop = LoopCtx(step_label, done_label);
+
+    // L.while:
+    asm_write_label(ctx.builder, while_label, "while");
+    // x0 <- ...
+    asm_lower_expr(ctx, cond, Reg_X0);
+    // cbz x0, L.done
+    asm_write_cbz(ctx.builder, Reg_X0, done_label, "done");
+    // L.do:
+    asm_write_label(ctx.builder, do_label, "do");
+    // x0 <- ...
+    asm_lower_expr(ctx, body, Reg_X0);
+    // L.step:
+    asm_write_label(ctx.builder, step_label, "step");
+    // x0 <- ...
+    asm_lower_expr(ctx, step, Reg_X0);
+    // b L.while
+    asm_write_b(ctx.builder, while_label, "while");
+    // L.done:
+    asm_write_label(ctx.builder, done_label, "done");
+
     ctx.current_loop = outer_loop;
 }
 
-func emit_jump_expr(ctx: *CodegenCtx, e: *HirJumpExpr, t0: Int) {
+func asm_lower_jump_expr(ctx: *CodegenCtx, e: *HirJumpExpr, xd: Reg) {
     var is_break = e.is_break;
     if (is_break) {
-        printf("  b .L%d.done\n", ctx.current_loop);
+        // b .L.done
+        asm_write_b(ctx.builder, ctx.current_loop.done_label, "done");
     } else {
-        printf("  b .L%d.step\n", ctx.current_loop);
+        // b .L.step
+        asm_write_b(ctx.builder, ctx.current_loop.step_label, "step");
     }
 }
 
-func emit_return_expr(ctx: *CodegenCtx, e: *HirReturnExpr, t0: Int) {
+func asm_lower_return_expr(ctx: *CodegenCtx, e: *HirReturnExpr, xd: Reg) {
     var subexpr = e.expr;
     if (subexpr) {
-        emit_expr(ctx, subexpr, 0);
+        asm_lower_expr(ctx, subexpr, Reg_X0);
     }
-    printf("  b .L.%s.ret\n", ctx.current_func.name);
+    // b .L.ret
+    asm_write_b(ctx.builder, ctx.ret_label, "ret");
 }
 
-func emit_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, t0: Int) {
+func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
     var op = e.op;
     var e1 = e.left;
     var e2 = e.right;
     var type = e.type;
 
     if (op == HirOp_Or) {
-        emit_expr_binary(ctx, "orr", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "orr", e1, e2, xd);
     } else if (op == HirOp_Xor) {
-        emit_expr_binary(ctx, "eor", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "eor", e1, e2, xd);
     } else if (op == HirOp_And) {
-        emit_expr_binary(ctx, "and", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "and", e1, e2, xd);
     } else if (op == HirOp_Shl) {
-        emit_expr_binary(ctx, "lsl", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "lsl", e1, e2, xd);
     } else if (op == HirOp_Shr) {
-        emit_expr_binary(ctx, "lsr", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "lsr", e1, e2, xd);
     } else if (op == HirOp_Eq) {
-        emit_expr_cmp(ctx, "eq", e1, e2, t0);
+        asm_lower_expr_cmp(ctx, "eq", e1, e2, xd);
     } else if (op == HirOp_Ne) {
-        emit_expr_cmp(ctx, "ne", e1, e2, t0);
+        asm_lower_expr_cmp(ctx, "ne", e1, e2, xd);
     } else if (op == HirOp_Lt) {
-        emit_expr_cmp(ctx, "lt", e1, e2, t0);
+        asm_lower_expr_cmp(ctx, "lt", e1, e2, xd);
     } else if (op == HirOp_Le) {
-        emit_expr_cmp(ctx, "le", e1, e2, t0);
+        asm_lower_expr_cmp(ctx, "le", e1, e2, xd);
     } else if (op == HirOp_Gt) {
-        emit_expr_cmp(ctx, "gt", e1, e2, t0);
+        asm_lower_expr_cmp(ctx, "gt", e1, e2, xd);
     } else if (op == HirOp_Ge) {
-        emit_expr_cmp(ctx, "ge", e1, e2, t0);
+        asm_lower_expr_cmp(ctx, "ge", e1, e2, xd);
     } else if (op == HirOp_Add) {
-        emit_expr_binary(ctx, "add", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "add", e1, e2, xd);
     } else if (op == HirOp_Sub) {
-        emit_expr_binary(ctx, "sub", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "sub", e1, e2, xd);
     } else if (op == HirOp_Mul) {
-        emit_expr_binary(ctx, "mul", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "mul", e1, e2, xd);
     } else if (op == HirOp_Div) {
-        emit_expr_binary(ctx, "sdiv", e1, e2, t0);
+        asm_lower_expr_binary(ctx, "sdiv", e1, e2, xd);
     } else if (op == HirOp_Rem) {
-        emit_operands(ctx, e1, e2, 1, 2);
-        printf("  sdiv x%d, x%d, x%d\n", 0, 1, 2);
-        printf("  msub x%d, x%d, x%d, x%d\n", t0, 0, 2, 1);
+        asm_lower_operands(ctx, e1, e2, Reg_X1, Reg_X2);
+        // sdiv x0, x1, x2
+        asm_write_binary_op_rr(ctx.builder, "sdiv", Reg_X0, Reg_X1, Reg_X2);
+        // msub {xd}, x0, x2, x1
+        asm_write_binary_op_rrr(ctx.builder, "msub", xd, Reg_X0, Reg_X2, Reg_X1);
     } else {
-        unreachable("emit_binary_op_expr");
+        unreachable("asm_lower_binary_op_expr");
     }
 }
 
-func emit_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, t0: Int) {
+func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     var sym = e.callee;
     var param_count = list_len((sym as *FuncSym).params);
     var args = e.args;
@@ -377,130 +880,168 @@ func emit_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, t0: Int) {
     var i = 0;
     while (i < arg_count) {
         var arg = list_get(args, i);
-        emit_expr(ctx, arg, 0);
-        emit_push(ctx, 0);
+        asm_lower_expr(ctx, arg, Reg_X0);
+        write_push(ctx, Reg_X0);
         i += 1;
     }
     while (i > 0) {
         i -= 1;
-        emit_pop(ctx, i);
+        // x{i} <- ...
+        write_pop(ctx, i as Reg);
     }
-    printf("  bl %s\n", sym.name);
+    // bl {name}
+    asm_write_bl(ctx.builder, sym.name);
     if (type.kind == Type_Never) {
         return;
     }
     if (type.kind != Type_Void) {
-        emit_sign_extend(ctx, type, t0, 0);
+        write_sign_extend(ctx, type, xd, Reg_X0);
     }
 }
 
-func emit_addr_expr(ctx: *CodegenCtx, e: *HirAddrExpr, t0: Int) {
+func asm_lower_addr_expr(ctx: *CodegenCtx, e: *HirAddrExpr, xd: Reg) {
     var subexpr = e.expr;
-    emit_expr_addr(ctx, subexpr, t0);
+    asm_lower_expr_addr(ctx, subexpr, xd);
 }
 
-func emit_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, t0: Int) {
+func asm_lower_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, xd: Reg) {
     var dst = e.dst;
     var src = e.src;
     if (is_scalar(dst.type)) {
-        emit_assign_operands(ctx, dst, src, 0, 1);
-        printf("  %s1, [x0]\n", strx(dst.type));
+        // x0, x1 <- ...
+        asm_lower_assign_operands(ctx, dst, src, Reg_X0, Reg_X1);
+        // strx x1, [x0]
+        asm_write_str_r(ctx.builder, type_size(dst.type), Reg_X1, Reg_X0);
     } else {
-        emit_expr_addr(ctx, dst, 0);
-        emit_push(ctx, 0);
-        emit_expr_addr(ctx, src, 1);
-        emit_pop(ctx, 0);
-        printf("  mov x2, #%d\n", type_size(dst.type));
-        printf("  bl memcpy\n");
+        // x0, x1 <- ...
+        asm_lower_expr_addr(ctx, dst, Reg_X0);
+        write_push(ctx, Reg_X0);
+        asm_lower_expr_addr(ctx, src, Reg_X1);
+        write_pop(ctx, Reg_X0);
+
+        // mov x2, #{size}
+        asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(dst.type));
+        // bl memcpy
+        asm_write_bl(ctx.builder, "memcpy");
     }
 }
 
-func emit_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, t0: Int) {
+func asm_lower_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, xd: Reg) {
     var subexpr = e.expr;
     var target = e.type;
     var source = subexpr.type;
-    emit_expr(ctx, subexpr, t0);
-    assert(is_scalar(target) && is_scalar(source), "emit_expr: <cast> should have scalar types.");
+    asm_lower_expr(ctx, subexpr, xd);
+    assert(is_scalar(target) && is_scalar(source), "asm_lower_expr: <cast> should have scalar types.");
     if (type_size(target) < type_size(source)) {
-        emit_sign_extend(ctx, target, t0, t0);
+        write_sign_extend(ctx, target, xd, xd);
     } else {
         // no-op
     }
 }
 
-func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
+func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     if (hir_is_lvalue(e)) {
-        assert(is_scalar(e.type), "emit_expr: lvalue must evaluate to a scalar.");
-        emit_expr_addr(ctx, e, t0);
-        printf("  %s%d, [x%d]\n", ldrx(e.type), t0, t0);
+        assert(is_scalar(e.type), "asm_lower_expr: lvalue must evaluate to a scalar.");
+        asm_lower_expr_addr(ctx, e, xd);
+        // ldr {xd}, [{xd}]
+        asm_write_ldrs_r(ctx.builder, type_size(e.type), xd, xd);
     } else if (e.kind == HirExpr_Skip) {
         // nop
     } else if (e.kind == HirExpr_Seq) {
-        emit_seq_expr(ctx, e as *HirSeqExpr, t0);
+        asm_lower_seq_expr(ctx, e as *HirSeqExpr, xd);
     } else if (e.kind == HirExpr_Int) {
-        emit_int_expr(ctx, e as *HirIntExpr, t0);
+        asm_lower_int_expr(ctx, e as *HirIntExpr, xd);
     } else if (e.kind == HirExpr_Str) {
-        emit_str_expr(ctx, e as *HirStrExpr, t0);
+        asm_lower_str_expr(ctx, e as *HirStrExpr, xd);
     } else if (e.kind == HirExpr_Cond) {
-        emit_cond_expr(ctx, e as *HirCondExpr, t0);
+        asm_lower_cond_expr(ctx, e as *HirCondExpr, xd);
     } else if (e.kind == HirExpr_Loop) {
-        emit_loop_expr(ctx, e as *HirLoopExpr, t0);
+        asm_lower_loop_expr(ctx, e as *HirLoopExpr, xd);
     } else if (e.kind == HirExpr_Jump) {
-        emit_jump_expr(ctx, e as *HirJumpExpr, t0);
+        asm_lower_jump_expr(ctx, e as *HirJumpExpr, xd);
     } else if (e.kind == HirExpr_Return) {
-        emit_return_expr(ctx, e as *HirReturnExpr, t0);
+        asm_lower_return_expr(ctx, e as *HirReturnExpr, xd);
     } else if (e.kind == HirExpr_BinaryOp) {
-        emit_binary_op_expr(ctx, e as *HirBinaryOpExpr, t0);
+        asm_lower_binary_op_expr(ctx, e as *HirBinaryOpExpr, xd);
     } else if (e.kind == HirExpr_Call) {
-        emit_call_expr(ctx, e as *HirCallExpr, t0);
+        asm_lower_call_expr(ctx, e as *HirCallExpr, xd);
     } else if (e.kind == HirExpr_Addr) {
-        emit_addr_expr(ctx, e as *HirAddrExpr, t0);
+        asm_lower_addr_expr(ctx, e as *HirAddrExpr, xd);
     } else if (e.kind == HirExpr_Assign) {
-        emit_assign_expr(ctx, e as *HirAssignExpr, t0);
+        asm_lower_assign_expr(ctx, e as *HirAssignExpr, xd);
     } else if (e.kind == HirExpr_Cast) {
-        emit_cast_expr(ctx, e as *HirCastExpr, t0);
+        asm_lower_cast_expr(ctx, e as *HirCastExpr, xd);
     } else if (e.kind == HirExpr_Unreachable) {
-        printf("  // <- unreachable\n");
+        asm_write_raw(ctx.builder, "  // <- unreachable");
     } else {
-        unreachable("emit_expr");
+        unreachable("asm_lower_expr");
     }
 }
 
-func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
+func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
     var params = sym.params;
     var locals = sym.locals;
-    var body = sym.body;
 
-    var hir_body = hir_lower(sym, body);
-
-    ctx.current_func = sym;
-    compute_frame_layout(ctx);
-
-    printf("  .text\n");
-    printf("  .align 2\n");
-    printf("  .global %s\n", sym.name);
-    printf("%s:\n", sym.name);
-    printf("  stp x29, x30, [sp, #-16]!\n");
-    printf("  mov x29, sp\n");
-    printf("  sub sp, sp, #%d\n", ctx.frame_size);
     var i = 0;
     for (var i = 0; i < list_len(params); i += 1) {
         var param: *FuncParam = list_get(params, i);
         var local: *LocalSym = list_get(locals, i);
-        emit_slot_store(ctx, param.type, local.slot_index, i);
+        write_slot_store(ctx, param.type, local.slot_index, i as Reg);
     }
-    emit_expr(ctx, hir_body, 0);
-    printf(".L.%s.ret:\n", sym.name);
-    printf("  add sp, sp, #%d\n", ctx.frame_size);
-    printf("  ldp x29, x30, [sp], #16\n");
-    printf("  ret\n");
+
+    asm_lower_expr(ctx, hir_body, Reg_X0);
+
+    // L.ret:
+    asm_write_label(ctx.builder, ctx.ret_label, "ret");
+}
+
+func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
+    var hir_body = hir_lower(sym, sym.body);
+
+    ctx.current_func = sym;
+    ctx.ret_label = next_label(ctx);
+
+    var n_locals = list_len(sym.locals);
+    var n_temps = list_len(sym.temps);
+    var n_slots = n_locals + n_temps;
+    var slots: *Slot = calloc(n_slots, sizeof(Slot));
+
+    var slots_size = 0;
+    for (var i = 0; i < n_locals; i += 1) {
+        var local: *LocalSym = list_get(sym.locals, i);
+        var offset = align_up(slots_size, type_align(local.type));
+        slots[local.slot_index] = Slot(offset);
+        slots_size = offset + type_size(local.type);
+    }
+    for (var i = 0; i < n_temps; i += 1) {
+        var temp: *HirTemp = list_get(sym.temps, i);
+        var offset = align_up(slots_size, type_align(temp.type));
+        slots[temp.slot_index] = Slot(offset);
+        slots_size = offset + type_size(temp.type);
+    }
+    ctx.n_slots = n_slots;
+    ctx.slots = slots;
+    ctx.slots_size = slots_size;
+
+    ctx.builder = list_new();
+
+    asm_lower_func(ctx, sym, hir_body);
+
+    var frame_size = align_up(ctx.slots_size + ctx.max_scratch, 16);
+    var asm_fun: *AsmFunc = calloc(1, sizeof(AsmFunc));
+    *asm_fun = AsmFunc(
+        name: sym.name,
+        instrs: ctx.builder,
+        frame_size: frame_size,
+    );
+    asm_print_func(asm_fun);
 }
 
 func emit_global(ctx: *CodegenCtx, sym: *GlobalSym) {
     var type = sym.type;
     printf("  .global %s\n", sym.name);
     printf("  .bss\n");
-    printf(".align %d\n", type_align(type));
+    printf("  .align %d\n", type_align(type));
     printf("%s:\n", sym.name);
     printf("  .zero %d\n", type_size(type));
 }
@@ -516,20 +1057,47 @@ func emit_sym(ctx: *CodegenCtx, sym: *Sym) {
     }
 }
 
+func emit_string(id: Int, str_val: *Char) {
+    printf("  .text\n");
+    printf("  .section .rodata\n");
+    printf("  .align 3\n");
+    printf(".L.str.%d:\n", id);
+    printf("  .string \"");
+    var i = 0;
+    while (str_val[i] != '\0') {
+        if (!is_print(str_val[i]) || str_val[i] == '\"' || str_val[i] == '\\') {
+            printf("\\%03o", str_val[i]);
+        } else {
+            printf("%c", str_val[i]);
+        }
+        i += 1;
+    }
+    printf("\"\n");
+}
+
 func emit_program(syms: *List) {
     var ctx = calloc(1, sizeof(CodegenCtx)) as *CodegenCtx;
     *ctx = CodegenCtx(
-        frame_size: 0,
-        label_count: 0,
-        temp_size: 0,
         current_func: null,
-        current_loop: 0,
-        slots: null,
+        current_loop: LoopCtx(0, 0),
+        slots_size: 0,
         n_slots: 0,
+        slots: null,
+        scratch_size: 0,
+        max_scratch: 0,
+        n_labels: 0,
+        ret_label: 0,
+        strings: list_new(),
+        builder: null,
     );
 
     for (var i = 0; i < list_len(syms); i += 1) {
         var sym = list_get(syms, i);
         emit_sym(ctx, sym);
+    }
+
+    var n_strings = list_len(ctx.strings);
+    for (var i = 0; i < n_strings; i += 1) {
+        emit_string(i, list_get(ctx.strings, i));
     }
 }
