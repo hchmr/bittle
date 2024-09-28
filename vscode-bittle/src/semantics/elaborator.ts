@@ -14,7 +14,7 @@ import {
     ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
 } from './sym';
 import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout,
+    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout,
 } from './type';
 
 export type ErrorLocation = {
@@ -1349,7 +1349,7 @@ export class Elaborator {
         const castType = this.typeEval(typeNode);
         const exprType = this.elabExprInfer(exprNode);
 
-        if (!isValidCast(castType, exprType)) {
+        if (!typeConvertible(exprType, castType)) {
             this.reportError(node, `Invalid cast type.`);
         }
 
@@ -1497,14 +1497,6 @@ function isLvalue(node: ExprNode | Nullish): boolean {
     } else {
         return false;
     }
-}
-
-function isValidCast(targetType: Type, sourceType: Type) {
-    return targetType.kind == TypeKind.Err
-        || sourceType.kind == TypeKind.Err
-        || ((targetType.kind == TypeKind.Bool) && isScalarType(sourceType))
-        || ((targetType.kind == TypeKind.Int) && isScalarType(sourceType))
-        || ((targetType.kind == TypeKind.Ptr) && (sourceType.kind == TypeKind.Ptr || sourceType.kind == TypeKind.Int));
 }
 
 function isNonScalarType(type: Type): boolean {

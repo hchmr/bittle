@@ -321,6 +321,9 @@ export function typeConvertible(src: Type, dst: Type): boolean {
     if (src.kind === TypeKind.Never || src.kind === TypeKind.Err) {
         return true;
     }
+    if (dst.kind === TypeKind.Err) {
+        return true;
+    }
 
     if (dst.kind === TypeKind.Bool) {
         return isScalarType(src);
