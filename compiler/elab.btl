@@ -595,15 +595,14 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
 
     elab_expr_infer(ctx, left);
 
-    var struc_type = left.type;
-    // TODO: implicit dereference
-    if (struc_type.kind == Type_Ptr) {
-        struc_type = (struc_type as *PtrType).pointee;
+    var left_type = left.type;
+    if (left_type.kind == Type_Ptr) {
+        left_type = (left_type as *PtrType).pointee;
     }
-    if (struc_type.kind != Type_Struct) {
+    if (left_type.kind != Type_Struct) {
         die_at(&left.pos, "Expected a struct");
     }
-    var struct_type = struc_type as *StructType;
+    var struct_type = left_type as *StructType;
 
     var struct_sym = struct_type.sym;
     var field_index = find_struct_field(struct_sym, field_name);
