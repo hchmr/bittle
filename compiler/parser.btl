@@ -363,6 +363,8 @@ func p_expr(self: *Parser, max_prec: Int32): *Expr {
         lhs = p_unary_expr(self, Tok_Minus);
     } else if (max_prec <= Prec_Unary && eat(self, Tok_Bang)) {
         lhs = p_unary_expr(self, Tok_Bang);
+    } else if (max_prec <= Prec_Unary && eat(self, Tok_Tilde)) {
+        lhs = p_unary_expr(self, Tok_Tilde);
     } else if (max_prec <= Prec_Unary && eat(self, Tok_Star)) {
         lhs = p_unary_expr(self, Tok_Star);
     } else if (max_prec <= Prec_Unary && eat(self, Tok_Amp)) {
