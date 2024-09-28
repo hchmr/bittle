@@ -298,7 +298,23 @@ func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
     } else if (op == Tok_Star) {
         result = hir_mk_deref_expr(right, &expr.pos);
     } else if (op == Tok_Amp) {
-        result = hir_mk_addr_expr(right, &expr.pos);
+        if (hir_is_lvalue(right)) {
+            result = hir_mk_addr_expr(right, &expr.pos);
+        } else {
+            /*
+                Desugar
+                    &f()
+                to
+                    temp t1: typeof(f());
+                    t1 = f();
+                    &t1
+            */
+            var temp_var = mk_temp_var(ctx, right.type);
+            var temp = hir_mk_temp_expr(temp_var, &expr.pos);
+            var temp_init = hir_mk_assign_expr(temp, right);
+            var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
+            result = hir_mk_seq_expr(temp_init, addr_temp);
+        }
     } else {
         unreachable("elab_unary_expr");
     }

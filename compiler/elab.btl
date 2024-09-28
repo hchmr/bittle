@@ -643,9 +643,6 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr) {
         }
         expr.type = (pointee_type as *PtrType).pointee;
     } else if (op == Tok_Amp) {
-        if (!is_lvalue(right)) {
-            die_at(&right.pos, "Expected an lvalue");
-        }
         expr.type = mk_ptr_type(right.type);
     } else {
         unreachable("elab_unary_expr");

@@ -4,14 +4,6 @@ const FRAME_SIZE_MAX = 4096;
 const FRAME_TEMP_SIZE = 128;
 const FRAME_LOCALS_SIZE_MAX = FRAME_SIZE_MAX - FRAME_TEMP_SIZE;
 
-func hir_is_lvalue(e: *HirExpr): Bool {
-    return e.kind == HirExpr_Var
-        || e.kind == HirExpr_Temp
-        || e.kind == HirExpr_Member
-        || e.kind == HirExpr_Index
-        || e.kind == HirExpr_Deref;
-}
-
 func is_int_or_enum(t: *Type, max_size: Int): Bool {
     if (t.kind == Type_Int) {
         return (t as *IntType).size <= max_size;
@@ -169,7 +161,7 @@ func compute_frame_layout(ctx: *CodegenCtx) {
 
 func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int);
 
-func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int);
+func emit_expr_addr(ctx: *CodegenCtx, e: *HirExpr, t0: Int);
 
 func emit_operands(ctx: *CodegenCtx, e1: *HirExpr, e2: *HirExpr, t0: Int, t1: Int) {
     emit_expr(ctx, e1, t0);
@@ -178,8 +170,8 @@ func emit_operands(ctx: *CodegenCtx, e1: *HirExpr, e2: *HirExpr, t0: Int, t1: In
     emit_pop(ctx, t0);
 }
 
-func emit_operands_lvalue(ctx: *CodegenCtx, dst: *HirExpr, src: *HirExpr, t0: Int, t1: Int) {
-    emit_expr_lvalue(ctx, dst, t0);
+func emit_assign_operands(ctx: *CodegenCtx, dst: *HirExpr, src: *HirExpr, t0: Int, t1: Int) {
+    emit_expr_addr(ctx, dst, t0);
     emit_push(ctx, t0);
     emit_expr(ctx, src, t1);
     emit_pop(ctx, t0);
@@ -196,7 +188,7 @@ func emit_expr_cmp(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, t0: 
     printf("  cset x%d, %s\n", t0, op);
 }
 
-func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
+func emit_expr_addr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Local) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *LocalSym;
@@ -219,7 +211,7 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
         var e = e as *HirMemberExpr;
         var fields = (e.left.type as *StructType).sym.fields;
         var field: *StructField = list_get(fields, e.field_index);
-        emit_expr_lvalue(ctx, e.left, t0);
+        emit_expr_addr(ctx, e.left, t0);
         printf("  add x%d, x%d, #%d // &%s\n", t0, t0, field.offset, e.name);
     } else if (e.kind == HirExpr_Deref) {
         var e = e as *HirDerefExpr;
@@ -229,14 +221,14 @@ func emit_expr_lvalue(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
         if (e.indexee.type.kind == Type_Ptr) {
             emit_operands(ctx, e.indexee, e.index, 0, 1);
         } else if (e.indexee.type.kind == Type_Arr) {
-            emit_operands_lvalue(ctx, e.indexee, e.index, 0, 1);
+            emit_assign_operands(ctx, e.indexee, e.index, 0, 1);
         } else {
-            unreachable("emit_expr_lvalue: indexee should be a pointer or an array.");
+            unreachable("emit_expr_addr: indexee should be a pointer or an array.");
         }
         var elem_size = type_size(e.type);
         printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
     } else {
-        unreachable("emit_expr_lvalue");
+        unreachable("emit_expr_addr");
     }
 }
 
@@ -403,19 +395,19 @@ func emit_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, t0: Int) {
 
 func emit_addr_expr(ctx: *CodegenCtx, e: *HirAddrExpr, t0: Int) {
     var subexpr = e.expr;
-    emit_expr_lvalue(ctx, subexpr, t0);
+    emit_expr_addr(ctx, subexpr, t0);
 }
 
 func emit_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, t0: Int) {
     var dst = e.dst;
     var src = e.src;
     if (is_scalar(dst.type)) {
-        emit_operands_lvalue(ctx, dst, src, 0, 1);
+        emit_assign_operands(ctx, dst, src, 0, 1);
         printf("  %s1, [x0]\n", strx(dst.type));
     } else {
-        emit_expr_lvalue(ctx, dst, 0);
+        emit_expr_addr(ctx, dst, 0);
         emit_push(ctx, 0);
-        emit_expr_lvalue(ctx, src, 1);
+        emit_expr_addr(ctx, src, 1);
         emit_pop(ctx, 0);
         printf("  mov x2, #%d\n", type_size(dst.type));
         printf("  bl memcpy\n");
@@ -437,7 +429,8 @@ func emit_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, t0: Int) {
 
 func emit_expr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
     if (hir_is_lvalue(e)) {
-        emit_expr_lvalue(ctx, e, t0);
+        assert(is_scalar(e.type), "emit_expr: lvalue must evaluate to a scalar.");
+        emit_expr_addr(ctx, e, t0);
         printf("  %s%d, [x%d]\n", ldrx(e.type), t0, t0);
     } else if (e.kind == HirExpr_Skip) {
         // nop

@@ -715,6 +715,8 @@ struct HirCastExpr: HirExpr {
     expr: *HirExpr,
 }
 
+func hir_is_lvalue(e: *HirExpr): Bool;
+
 //==============================================================================
 //== lexer.btl
 

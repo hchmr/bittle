@@ -1,0 +1,9 @@
+include "bittle.btls";
+
+func hir_is_lvalue(e: *HirExpr): Bool {
+    return e.kind == HirExpr_Var
+        || e.kind == HirExpr_Temp
+        || e.kind == HirExpr_Member
+        || e.kind == HirExpr_Index
+        || e.kind == HirExpr_Deref;
+}
