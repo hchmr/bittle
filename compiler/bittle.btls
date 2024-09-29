@@ -54,7 +54,7 @@ func get_directory(path: *Char): *Char;
 func join_paths(dir: *Char, file: *Char): *Char;
 
 func is_whitespace(c: Int32): Bool;
-func is_digit(c: Int32): Bool;
+func is_digit(c: Int32, base: Int): Bool;
 func is_word_start(c: Int32): Bool;
 func is_word_part(c: Int32): Bool;
 func is_print(c: Int32): Bool;

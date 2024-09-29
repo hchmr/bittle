@@ -142,6 +142,20 @@ func p_type(self: *Parser): *TypeExpr {
 //==============================================================================
 //== Literals
 
+func parse_int_lexeme(lexeme: *Char): Int64 {
+    if (lexeme[0] == '0') {
+        var prefix = lexeme[1] | 32;
+        if (prefix == 'b') {
+            return strtol(&lexeme[2], null, 2);
+        } else if (prefix == 'o') {
+            return strtol(&lexeme[2], null, 8);
+        } else if (prefix == 'x') {
+            return strtol(&lexeme[2], null, 16);
+        }
+    }
+    return strtol(lexeme, null, 10);
+}
+
 func p_literal(self: *Parser): *Literal {
     var result: *Literal;
 
@@ -159,7 +173,7 @@ func p_literal(self: *Parser): *Literal {
         result = literal;
     } else if (at(self, Tok_Int)) {
         var literal: *IntLiteral = calloc(1, sizeof(IntLiteral));
-        *literal = IntLiteral(Literal_Int, value: atol(self.tok.lexeme));
+        *literal = IntLiteral(Literal_Int, value: parse_int_lexeme(self.tok.lexeme));
         result = literal;
     } else if (at(self, Tok_Char)) {
         var literal: *CharLiteral = calloc(1, sizeof(CharLiteral));

@@ -116,8 +116,8 @@ func at_word_part(self: *Lexer): Bool {
     return is_word_part(curr_char(self));
 }
 
-func at_digit(self: *Lexer): Bool {
-    return is_digit(curr_char(self));
+func at_digit(self: *Lexer, base: Int): Bool {
+    return is_digit(curr_char(self), base);
 }
 
 func at_printable(self: *Lexer): Bool {
@@ -176,10 +176,27 @@ func scan_word(self: *Lexer) {
 }
 
 func scan_number(self: *Lexer) {
-    next_char(self);
-    while (is_digit(curr_char(self))) {
+    var base = 10;
+    if (eat_char(self, '0')) {
+        if (eat_char(self, 'x')) {
+            base = 16;
+        } else if (eat_char(self, 'b')) {
+            base = 2;
+        } else if (eat_char(self, 'o')) {
+            base = 8;
+        }
+    }
+
+    if (base != 10 && !at_digit(self, base)) {
+        error_at(&self.pos);
+        fprintf(stderr, "Expected base-%d digit.\n", base);
+        exit(1);
+    }
+
+    while (at_digit(self, base)) {
         next_char(self);
     }
+
     var lexeme = make_lexeme(self);
     finish_token(self, Tok_Int, lexeme);
 }
@@ -239,7 +256,7 @@ func lexer_next(self: *Lexer, token: *Tok) {
             continue;
         } else if (at_word_start(self)) {
             scan_word(self);
-        } else if (at_digit(self)) {
+        } else if (at_digit(self, 10)) {
             scan_number(self);
         } else if (at_char(self, '\"')) {
             scan_string(self);
