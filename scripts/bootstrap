@@ -153,6 +153,8 @@ stage "chore: Rename the language from Cog to Bittle"
 
 stage "fix(compiler): Allow more than 8 field arguments in struct initializer"
 
+stage "fix(compiler): Fix very bad miscompilation of array indexing"
+
 if [ "$bootstrap_next" = "1" ]; then
     stage "master"
 fi
