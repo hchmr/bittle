@@ -39,6 +39,7 @@ func list_len(self: *List): Int;
 func list_get(self: *List, i: Int): *Void;
 func list_set(self: *List, i: Int, elem: *Void);
 func list_push(self: *List, elem: *Void);
+func list_pop(self: *List): *Void;
 
 func str_eq(a: *Char, b: *Char): Bool;
 

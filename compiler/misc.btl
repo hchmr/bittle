@@ -126,6 +126,12 @@ func list_push(self: *List, elem: *Void) {
     self.len += 1;
 }
 
+func list_pop(self: *List): *Void {
+    assert(self.len > 0, "list_pop: empty list");
+    self.len -= 1;
+    return self.elems[self.len];
+}
+
 func str_eq(a: *Char, b: *Char): Bool {
     return strcmp(a, b) == 0;
 }

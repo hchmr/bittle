@@ -28,6 +28,13 @@ enum Reg {
     FP = Reg_X29, LR = Reg_X30, SP = Reg_X31,
 }
 
+const N_REGS = 32;
+const N_CALLEE_SAVED_REGS = Reg_X28 - Reg_X19 + 1;
+
+func reg_is_callee_saved(reg: Reg): Bool {
+    return Reg_X19 <= reg && reg <= Reg_X28;
+}
+
 enum AsmOperandKind {
     AsmOperand_Reg,
     AsmOperand_Mem,
@@ -63,7 +70,6 @@ struct AsmIntOperand : AsmOperand {
     shift: Int,
 }
 
-// e.g. my_global
 // e.g. .L0
 struct AsmLabelOperand : AsmOperand {
     counter: Int, // Only used for auto-generated labels
@@ -97,6 +103,7 @@ struct AsmFunc {
     name: *Char,
     instrs: *List, // List<*AsmInstr>
     frame_size: Int,
+    is_reg_used: [Bool; N_REGS],
 }
 
 func asm_mk_reg_operand(width: Int, reg: Reg, shift: Int): *AsmRegOperand {
@@ -533,16 +540,41 @@ func asm_print_instr(fun: *AsmFunc, instr: *AsmInstr) {
 }
 
 func asm_print_func(fun: *AsmFunc) {
-    // prologue
+    var spills: [Reg; 2 + N_CALLEE_SAVED_REGS];
+
+    spills[0] = Reg_X29;
+    spills[1] = Reg_X30;
+    var n_spills = 2; // x29, x30
+
+    for (var i = 0; i < N_REGS; i += 1) {
+        if (fun.is_reg_used[i] && reg_is_callee_saved(i as Reg)) {
+            spills[n_spills] = i as Reg;
+            n_spills += 1;
+        }
+    }
+
+    var spill_size = align_up(n_spills * 8, 16);
+
     printf("  .text\n");
     printf("  .align 2\n");
     printf("  .global %s\n", fun.name);
     printf("%s:\n", fun.name);
-    printf("  stp  x29, x30, [sp, #-16]!\n");
+
+    // prologue
+    printf("  // prologue\n");
+    printf("  sub  sp, sp, #%d\n", spill_size);
+    for (var i = 0; i < n_spills; i += 2) {
+        if (i + 1 < n_spills) {
+            printf("  stp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
+        } else {
+            printf("  str  x%d, [sp, #%d]\n", spills[i], i * 8);
+        }
+    }
     printf("  mov  x29, sp\n");
     printf("  sub  sp, sp, #%d\n", fun.frame_size);
 
     // body
+    printf("  // body\n");
     var n_instrs = list_len(fun.instrs);
     for (var i = 0; i < n_instrs; i += 1) {
         var instr: *AsmInstr = list_get(fun.instrs, i);
@@ -550,13 +582,31 @@ func asm_print_func(fun: *AsmFunc) {
     }
 
     // epilogue
+    printf("  // epilogue\n");
     printf("  add  sp, sp, #%d\n", fun.frame_size);
-    printf("  ldp  x29, x30, [sp], #16\n");
+    for (var i = 0; i < n_spills; i += 2) {
+        if (i + 1 < n_spills) {
+            printf("  ldp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
+        } else {
+            printf("  ldr  x%d, [sp, #%d]\n", spills[i], i * 8);
+        }
+    }
+    printf("  add  sp, sp, #%d\n", spill_size);
     printf("  ret\n");
 }
 
 //==============================================================================
 //== Codegen Context
+
+struct RegReservation {
+    did_spill: Bool,
+}
+
+struct RegState {
+    reservations: *List, // List<RegReservation>
+    is_locked: Bool,
+    n_writes: Int,
+}
 
 struct LoopCtx {
     step_label: Int,
@@ -590,6 +640,9 @@ struct CodegenCtx {
 
     // asm builder
     builder: *List,
+
+    // register allocation
+    regs: [RegState; N_REGS],
 }
 
 func next_label(ctx: *CodegenCtx): Int {
@@ -623,6 +676,120 @@ func write_pop(ctx: *CodegenCtx, reg: Reg) {
     ctx.scratch_size -= 8;
 }
 
+func lock_reg(ctx: *CodegenCtx, reg: Reg) {
+    var state = &ctx.regs[reg as Int];
+    state.is_locked = true;
+    state.n_writes += 1;
+}
+
+func unlock_reg(ctx: *CodegenCtx, reg: Reg) {
+    var state = &ctx.regs[reg as Int];
+    assert(state.is_locked, "unlock_reg: register should be locked.");
+    state.is_locked = false;
+}
+
+func spill_reg(ctx: *CodegenCtx, reg: Reg) {
+    var state = &ctx.regs[reg as Int];
+    assert(state.is_locked, "spill_reg: register should be locked.");
+    write_push(ctx, reg);
+    unlock_reg(ctx, reg);
+
+    asm_comment_prev(ctx.builder, "// 8 byte spill");
+}
+
+func unspill_reg(ctx: *CodegenCtx, reg: Reg) {
+    var state = &ctx.regs[reg as Int];
+    assert(!state.is_locked, "unspill_reg: register should not be locked.");
+    write_pop(ctx, reg);
+    lock_reg(ctx, reg);
+
+    asm_comment_prev(ctx.builder, "// 8 byte reload");
+}
+
+func reserve_reg(ctx: *CodegenCtx, reg: Reg) {
+    var state = &ctx.regs[reg as Int];
+    var spill_needed = state.is_locked;
+    if (spill_needed) {
+        spill_reg(ctx, reg);
+    }
+
+    var reservation: *RegReservation = calloc(1, sizeof(RegReservation));
+    *reservation = RegReservation(did_spill: spill_needed);
+    list_push(state.reservations, reservation);
+}
+
+func free_reg(ctx: *CodegenCtx, reg: Reg) {
+    var state = &ctx.regs[reg as Int];
+    var reservation: *RegReservation = list_pop(state.reservations);
+    var did_spill = reservation.did_spill;
+    free(reservation);
+
+    if (state.is_locked) {
+        unlock_reg(ctx, reg);
+    }
+    if (did_spill) {
+        unspill_reg(ctx, reg);
+    }
+}
+
+func next_reg_except_2(ctx: *CodegenCtx, x1: Reg, x2: Reg): Reg {
+    /*
+        Register usage:
+        - SP The Stack Pointer.
+        - r30 / LR - The Link Register.
+        - r29 / FP - The Frame Pointer
+        - r19...r28 Callee-saved registers
+        - r18 The Platform Register.
+        - r17 IP1 The second intra-procedure-call temporary register.
+        - r16 IP0 The first intra-procedure-call scratch register.
+        - r9...r15 Temporary registers
+        - r8 Indirect result location register
+        - r0...r7 Parameter/result registers
+    */
+
+    var priority: [Reg; 30] = [
+        Reg_X0, Reg_X1, Reg_X2, Reg_X3, Reg_X4, Reg_X5, Reg_X6, Reg_X7,
+        Reg_X8,
+        Reg_X9, Reg_X10, Reg_X11, Reg_X12, Reg_X13, Reg_X14, Reg_X15,
+        Reg_X19, Reg_X20, Reg_X21, Reg_X22, Reg_X23, Reg_X24, Reg_X25, Reg_X26, Reg_X27, Reg_X28,
+        Reg_X16, Reg_X17, Reg_X18,
+        Reg_X30,
+    ];
+
+    for (var i = 0; i < 30; i += 1) {
+        var reg = priority[i];
+        if (reg != x1 && reg != x2) {
+            var state = &ctx.regs[reg as Int];
+            if (!state.is_locked) {
+                reserve_reg(ctx, reg);
+                return reg;
+            }
+        }
+    }
+
+    unreachable("next_reg_except_2: no free registers available.");
+}
+
+func next_reg_except_1(ctx: *CodegenCtx, x1: Reg): Reg {
+    return next_reg_except_2(ctx, x1, x2: x1);
+}
+
+func spill_before_call(ctx: *CodegenCtx) {
+    for (var i = 0; i < N_REGS; i += 1) {
+        if (!reg_is_callee_saved(i as Reg)) {
+            reserve_reg(ctx, i as Reg);
+        }
+    }
+}
+
+func unspill_after_call(ctx: *CodegenCtx) {
+    for (var i = N_REGS - 1; i >= 0; i -= 1) {
+        if (!reg_is_callee_saved(i as Reg)) {
+            free_reg(ctx, i as Reg);
+        }
+    }
+}
+
 func write_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
     var width = type_size(type);
     var offset = ctx.slots[slot_index].offset + type_size(type);
@@ -654,34 +821,32 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg);
 
 func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg);
 
-func asm_lower_operands(ctx: *CodegenCtx, e1: *HirExpr, e2: *HirExpr, xd: Reg, x1: Reg) {
-    asm_lower_expr(ctx, e1, xd);
-    write_push(ctx, xd);
-    asm_lower_expr(ctx, e2, x1);
-    write_pop(ctx, xd);
-}
-
-func asm_lower_assign_operands(ctx: *CodegenCtx, dst: *HirExpr, src: *HirExpr, xd: Reg, x1: Reg) {
-    asm_lower_expr_addr(ctx, dst, xd);
-    write_push(ctx, xd);
-    asm_lower_expr(ctx, src, x1);
-    write_pop(ctx, xd);
-}
-
 func asm_lower_expr_binary(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, xd: Reg) {
-    // x0, x1 <- ...
-    asm_lower_operands(ctx, e1, e2, Reg_X0, Reg_X1);
-    // {op} xd, x0, x1
-    asm_write_binary_op_rr(ctx.builder, op, xd, Reg_X0, Reg_X1);
+    var x1 = next_reg_except_1(ctx, xd);
+
+    // xd <- ...
+    asm_lower_expr(ctx, e1, xd);
+    // x1 <- ...
+    asm_lower_expr(ctx, e2, x1);
+    // {op} xd, xd, x1
+    asm_write_binary_op_rr(ctx.builder, op, xd, xd, x1);
+
+    free_reg(ctx, x1);
 }
 
 func asm_lower_expr_cmp(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, xd: Reg) {
-    // x0, x1 <- ...
-    asm_lower_operands(ctx, e1, e2, Reg_X0, Reg_X1);
-    // cmp x0, x1
-    asm_write_cmp_rr(ctx.builder, width: 8, Reg_X0, Reg_X1);
+    var x1 = next_reg_except_1(ctx, xd);
+
+    // xd <- ...
+    asm_lower_expr(ctx, e1, xd);
+    // x1 <- ...
+    asm_lower_expr(ctx, e2, x1);
+    // cmp xd, x1
+    asm_write_cmp_rr(ctx.builder, width: 8, xd, x1);
     // cset xd, op
     asm_write_cset(ctx.builder, width: 8, xd, op);
+
+    free_reg(ctx, x1);
 }
 
 func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
@@ -732,25 +897,39 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         asm_lower_expr(ctx, e.expr, xd);
     } else if (e.kind == HirExpr_Index) {
         var e = e as *HirIndexExpr;
+        var x1 = next_reg_except_1(ctx, xd);
+        var x2 = next_reg_except_2(ctx, xd, x1);
         if (e.indexee.type.kind == Type_Ptr) {
-            asm_lower_operands(ctx, e.indexee, e.index, Reg_X0, Reg_X1);
+            // xd <- ...
+            asm_lower_expr(ctx, e.indexee, xd);
+            // x1 <- ...
+            asm_lower_expr(ctx, e.index, x1);
         } else if (e.indexee.type.kind == Type_Arr) {
-            asm_lower_assign_operands(ctx, e.indexee, e.index, Reg_X0, Reg_X1);
+            // xd <- ...
+            asm_lower_expr_addr(ctx, e.indexee, xd);
+            // x1 <- ...
+            asm_lower_expr(ctx, e.index, x1);
         } else {
             unreachable("asm_lower_expr_addr: indexee should be a pointer or an array.");
         }
         var elem_size = type_size(e.type);
-        asm_write_mov_i(ctx.builder, width: 8, Reg_X2, elem_size);
-        asm_write_binary_op_rrr(ctx.builder, "madd", xd, Reg_X1, Reg_X2, Reg_X0);
+        asm_write_mov_i(ctx.builder, width: 8, x2, elem_size);
+        asm_write_binary_op_rrr(ctx.builder, "madd", xd, x1, x2, xd);
+        free_reg(ctx, x1);
     } else {
         unreachable("asm_lower_expr_addr");
     }
+    lock_reg(ctx, xd);
 }
 
 func asm_lower_seq_expr(ctx: *CodegenCtx, e: *HirSeqExpr, xd: Reg) {
     var first = e.first;
     var second = e.second;
-    asm_lower_expr(ctx, first, Reg_X0);
+    // x1 <- ...
+    var x1 = next_reg_except_1(ctx, xd);
+    asm_lower_expr(ctx, first, x1);
+    free_reg(ctx, x1);
+    // xd <- ...
     asm_lower_expr(ctx, second, xd);
 }
 
@@ -774,22 +953,28 @@ func asm_lower_cond_expr(ctx: *CodegenCtx, e: *HirCondExpr, xd: Reg) {
     var then_label = next_label(ctx);
     var else_label = next_label(ctx);
     var end_label = next_label(ctx);
+
     // L.if:
     asm_write_label(ctx.builder, if_label, "if");
     // x0 <- ...
-    asm_lower_expr(ctx, cond, Reg_X0);
+    asm_lower_expr(ctx, cond, xd);
     // cbz x0, L.else
-    asm_write_cbz(ctx.builder, Reg_X0, else_label, "else");
+    asm_write_cbz(ctx.builder, xd, else_label, "else");
+    unlock_reg(ctx, xd);
+
     // L.then:
     asm_write_label(ctx.builder, then_label, "then");
     // {xd} <- ...
     asm_lower_expr(ctx, then_expr, xd);
     // b L.end
     asm_write_b(ctx.builder, end_label, "end");
+
     // L.else:
+    unlock_reg(ctx, xd);
     asm_write_label(ctx.builder, else_label, "else");
     // {xd} <- ...
     asm_lower_expr(ctx, else_expr, xd);
+
     // L.end:
     asm_write_label(ctx.builder, end_label, "end");
 }
@@ -810,19 +995,25 @@ func asm_lower_loop_expr(ctx: *CodegenCtx, e: *HirLoopExpr, xd: Reg) {
     // L.while:
     asm_write_label(ctx.builder, while_label, "while");
     // x0 <- ...
-    asm_lower_expr(ctx, cond, Reg_X0);
+    asm_lower_expr(ctx, cond, xd);
     // cbz x0, L.done
-    asm_write_cbz(ctx.builder, Reg_X0, done_label, "done");
+    asm_write_cbz(ctx.builder, xd, done_label, "done");
+    unlock_reg(ctx, xd);
+
     // L.do:
     asm_write_label(ctx.builder, do_label, "do");
     // x0 <- ...
-    asm_lower_expr(ctx, body, Reg_X0);
+    asm_lower_expr(ctx, body, xd);
+    unlock_reg(ctx, xd);
+
     // L.step:
     asm_write_label(ctx.builder, step_label, "step");
     // x0 <- ...
-    asm_lower_expr(ctx, step, Reg_X0);
+    asm_lower_expr(ctx, step, xd);
+    unlock_reg(ctx, xd);
     // b L.while
     asm_write_b(ctx.builder, while_label, "while");
+
     // L.done:
     asm_write_label(ctx.builder, done_label, "done");
 
@@ -843,10 +1034,18 @@ func asm_lower_jump_expr(ctx: *CodegenCtx, e: *HirJumpExpr, xd: Reg) {
 func asm_lower_return_expr(ctx: *CodegenCtx, e: *HirReturnExpr, xd: Reg) {
     var subexpr = e.expr;
     if (subexpr) {
+        reserve_reg(ctx, Reg_X0);
+
+        // x0 <- ...
         asm_lower_expr(ctx, subexpr, Reg_X0);
+        // b .L.ret
+        asm_write_b(ctx.builder, ctx.ret_label, "ret");
+
+        free_reg(ctx, Reg_X0);
+    } else {
+        // b .L.ret
+        asm_write_b(ctx.builder, ctx.ret_label, "ret");
     }
-    // b .L.ret
-    asm_write_b(ctx.builder, ctx.ret_label, "ret");
 }
 
 func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
@@ -886,11 +1085,19 @@ func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
     } else if (op == HirOp_Div) {
         asm_lower_expr_binary(ctx, "sdiv", e1, e2, xd);
     } else if (op == HirOp_Rem) {
-        asm_lower_operands(ctx, e1, e2, Reg_X1, Reg_X2);
+        var x1 = next_reg_except_1(ctx, xd);
+        var x2 = next_reg_except_2(ctx, xd, x1);
+        // x1 <- ...
+        asm_lower_expr(ctx, e1, x1);
+        // x2 <- ...
+        asm_lower_expr(ctx, e2, x2);
         // sdiv x0, x1, x2
-        asm_write_binary_op_rr(ctx.builder, "sdiv", Reg_X0, Reg_X1, Reg_X2);
+        asm_write_binary_op_rr(ctx.builder, "sdiv", xd, x1, x2);
         // msub {xd}, x0, x2, x1
-        asm_write_binary_op_rrr(ctx.builder, "msub", xd, Reg_X0, Reg_X2, Reg_X1);
+        asm_write_binary_op_rrr(ctx.builder, "msub", xd, xd, x2, x1);
+
+        free_reg(ctx, x2);
+        free_reg(ctx, x1);
     } else {
         unreachable("asm_lower_binary_op_expr");
     }
@@ -907,26 +1114,24 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     snprintf(comment, 100, "// prepare call to %s", sym.name);
     asm_write_raw(ctx.builder, comment);
 
+    spill_before_call(ctx);
+
     var i = 0;
     while (i < arg_count) {
         var arg = list_get(args, i);
-        asm_lower_expr(ctx, arg, Reg_X0);
-        write_push(ctx, Reg_X0);
+        // x{i} <- ...
+        asm_lower_expr(ctx, arg, i as Reg);
         i += 1;
     }
-    while (i > 0) {
-        i -= 1;
-        // x{i} <- ...
-        write_pop(ctx, i as Reg);
-    }
+
     // bl {name}
     asm_write_bl(ctx.builder, sym.name);
-    if (type.kind == Type_Never) {
-        return;
-    }
-    if (type.kind != Type_Void) {
+
+    if (type.kind != Type_Void && type.kind != Type_Never) {
         write_sign_extend(ctx, type, xd, Reg_X0);
     }
+
+    unspill_after_call(ctx);
 
     comment = calloc(100, sizeof(Char));
     snprintf(comment, 100, "// call to %s done", sym.name);
@@ -942,21 +1147,30 @@ func asm_lower_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, xd: Reg) {
     var dst = e.dst;
     var src = e.src;
     if (is_scalar(dst.type)) {
-        // x0, x1 <- ...
-        asm_lower_assign_operands(ctx, dst, src, Reg_X0, Reg_X1);
-        // strx x1, [x0]
-        asm_write_str_r(ctx.builder, type_size(dst.type), Reg_X1, Reg_X0);
+        var x1 = next_reg_except_1(ctx, xd);
+        var x2 = next_reg_except_2(ctx, xd, x1);
+
+        // x1 <- ...
+        asm_lower_expr_addr(ctx, dst, x1);
+        // x2 <- ...
+        asm_lower_expr(ctx, src, x2);
+        // strx x2, [x1]
+        asm_write_str_r(ctx.builder, type_size(dst.type), x2, x1);
+
+        free_reg(ctx, x2);
+        free_reg(ctx, x1);
     } else {
+        spill_before_call(ctx);
+
         // x0, x1 <- ...
         asm_lower_expr_addr(ctx, dst, Reg_X0);
-        write_push(ctx, Reg_X0);
         asm_lower_expr_addr(ctx, src, Reg_X1);
-        write_pop(ctx, Reg_X0);
-
         // mov x2, #{size}
         asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(dst.type));
         // bl memcpy
         asm_write_bl(ctx.builder, "memcpy");
+
+        unspill_after_call(ctx);
     }
 }
 
@@ -1010,6 +1224,7 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     } else {
         unreachable("asm_lower_expr");
     }
+    lock_reg(ctx, xd);
 }
 
 func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
@@ -1059,7 +1274,17 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     ctx.builder = list_new();
 
+    memset(&ctx.regs, 0, sizeof([RegState; N_REGS]));
+    for (var i = 0; i < N_REGS; i += 1) {
+        ctx.regs[i].reservations = list_new();
+    }
+
     asm_lower_func(ctx, sym, hir_body);
+
+    var is_reg_used: [Bool; N_REGS];
+    for (var i = 0; i < N_REGS; i += 1) {
+        is_reg_used[i] = ctx.regs[i].n_writes > 0;
+    }
 
     var frame_size = align_up(ctx.slots_size + ctx.max_scratch, 16);
     var asm_fun: *AsmFunc = calloc(1, sizeof(AsmFunc));
@@ -1067,6 +1292,7 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         name: sym.name,
         instrs: ctx.builder,
         frame_size: frame_size,
+        is_reg_used: is_reg_used,
     );
     asm_print_func(asm_fun);
 }
@@ -1111,19 +1337,7 @@ func emit_string(id: Int, str_val: *Char) {
 
 func emit_program(syms: *List) {
     var ctx = calloc(1, sizeof(CodegenCtx)) as *CodegenCtx;
-    *ctx = CodegenCtx(
-        current_func: null,
-        current_loop: LoopCtx(0, 0),
-        slots_size: 0,
-        n_slots: 0,
-        slots: null,
-        scratch_size: 0,
-        max_scratch: 0,
-        n_labels: 0,
-        ret_label: 0,
-        strings: list_new(),
-        builder: null,
-    );
+    ctx.strings = list_new();
 
     for (var i = 0; i < list_len(syms); i += 1) {
         var sym = list_get(syms, i);
