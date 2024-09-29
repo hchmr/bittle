@@ -1365,10 +1365,14 @@ export class Elaborator {
 
     private tryCoerce(node: ExprNode, expected: Type) {
         if (expected.kind === TypeKind.Int && expected.size && node instanceof LiteralExprNode && node.literalNode instanceof IntLiteralNode) {
-            const bitsRequired = Math.ceil(Math.log2(parseInt(node.syntax.text)) + 1);
+            const bitsRequired = numBinaryDigits(parseInt(node.syntax.text));
             if (bitsRequired < expected.size) {
                 this.nodeTypeMap.set(node.syntax, expected);
             }
+        }
+
+        function numBinaryDigits(n: number): number {
+            return Math.floor(Math.max(0, Math.log2(Math.abs(n))) + 1);
         }
     }
 
