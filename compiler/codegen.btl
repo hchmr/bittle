@@ -226,7 +226,8 @@ func emit_expr_addr(ctx: *CodegenCtx, e: *HirExpr, t0: Int) {
             unreachable("emit_expr_addr: indexee should be a pointer or an array.");
         }
         var elem_size = type_size(e.type);
-        printf("  add x%d, x0, x1, lsl #%d // &_[_]\n", t0, ilog2(elem_size));
+        printf("  mov x2, #%d\n", elem_size);
+        printf("  madd x%d, x1, x2, x0 // &x0[x1]\n", t0, elem_size);
     } else {
         unreachable("emit_expr_addr");
     }
