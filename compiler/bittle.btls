@@ -44,6 +44,7 @@ func str_eq(a: *Char, b: *Char): Bool;
 
 func align_up(size: Int , align: Int): Int;
 func ilog2(n: Int): Int;
+func iabs(n: Int): Int;
 func int_min(a: Int, b: Int): Int;
 
 func read_file(file: *File): *Char;

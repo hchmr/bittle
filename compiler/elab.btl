@@ -243,8 +243,8 @@ func try_coerce(e: *Expr, target: *Type): *Expr {
     } else if (e.kind == Expr_Literal && (e as *LiteralExpr).literal.kind == Literal_Int && target.kind == Type_Int) {
         var target = target as *IntType;
         var integer_value = ((e as *LiteralExpr).literal as *IntLiteral).value;
-        var size = ilog2(integer_value) + 1;
-        if (size < target.size) {
+        var bit_size = ilog2(iabs(integer_value)) + 1; // Excluding sign bit
+        if (bit_size < target.size * 8) {
             e.type = target;
         }
     } else {

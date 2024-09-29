@@ -143,6 +143,10 @@ func ilog2(n: Int): Int {
     return i;
 }
 
+func iabs(n: Int): Int {
+    return n < 0 ? -n : n;
+}
+
 func int_min(a: Int, b: Int): Int {
     return a > b ? b : a;
 }
