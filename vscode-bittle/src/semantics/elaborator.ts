@@ -555,7 +555,7 @@ export class Elaborator {
         } else if (node instanceof LiteralExprNode) {
             const literalNode = node.literalNode;
             if (literalNode instanceof IntLiteralNode) {
-                return parseInt(literalNode.numberLiteralToken!.text);
+                return Number(literalNode.numberLiteralToken!.text);
             } else if (literalNode instanceof CharLiteralNode) {
                 return parseChar(literalNode.charLiteralToken!.text);
             }

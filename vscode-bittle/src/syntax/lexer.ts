@@ -224,9 +224,29 @@ export class Lexer {
     }
 
     private scanNumber() {
-        while (!this.isEof && /\d/.test(this.cc)) {
+        let base = 10;
+        if (this.isAt('0')) {
+            this.bump();
+            if (this.isAt('b') || this.isAt('B')) {
+                this.bump();
+                base = 2;
+            } else if (this.isAt('o') || this.isAt('O')) {
+                this.bump();
+                base = 8;
+            } else if (this.isAt('x') || this.isAt('X')) {
+                this.bump();
+                base = 16;
+            }
+        }
+
+        if (base != 10 && !isDigit(this.cc, base)) {
+            this.addError(this.pos, 'Expected digit');
+        }
+
+        while (!this.isEof && isDigit(this.cc, base)) {
             this.bump();
         }
+
         return this.makeToken('number_literal');
     }
 
@@ -313,4 +333,8 @@ function createRule<Self>(
     scanner: (this: Self) => Token | undefined,
 ) {
     return { filter, scanner };
+}
+
+function isDigit(char: string, base: number) {
+    return !Number.isNaN(parseInt(char, base));
 }
