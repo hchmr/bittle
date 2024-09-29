@@ -90,6 +90,7 @@ struct AsmInstr {
     op: *Char,
     n_args: Int,
     args: **AsmOperand,
+    comment: *Char,
 }
 
 struct AsmFunc {
@@ -188,6 +189,7 @@ func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
         op: op,
         n_args: n_args,
         args: calloc(n_args, sizeof(*AsmOperand)),
+        comment: null,
     );
     return instr;
 }
@@ -438,6 +440,11 @@ func asm_write_raw(builder: *List, raw: *Char) {
     asm_write_instr(builder, raw, n_args: 0);
 }
 
+func asm_comment_prev(builder: *List, comment: *Char) {
+    var instr: *AsmInstr = list_get(builder, list_len(builder) - 1);
+    instr.comment = comment;
+}
+
 //==============================================================================
 //== Printing Assembly
 
@@ -516,6 +523,10 @@ func asm_print_instr(fun: *AsmFunc, instr: *AsmInstr) {
             printf(", ");
         }
         asm_print_operand(fun, arg);
+    }
+
+    if (instr.comment != null) {
+        printf("  %s", instr.comment);
     }
 
     printf("\n");
@@ -677,7 +688,12 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Local) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *LocalSym;
+
+        var comment: *Char = calloc(100, sizeof(Char));
+        snprintf(comment, 100, "// local '%s' @ %d", sym.name, sym.slot_index);
+
         write_slot_addr(ctx, sym.type, sym.slot_index, xd);
+        asm_comment_prev(ctx.builder, comment);
     } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *GlobalSym;
@@ -693,14 +709,24 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     } else if (e.kind == HirExpr_Temp) {
         var e = e as *HirTempExpr;
         var temp = e.temp;
+
+        var comment: *Char = calloc(100, sizeof(Char));
+        snprintf(comment, 100, "// temp @ %d", temp.slot_index);
+
         write_slot_addr(ctx, temp.type, temp.slot_index, xd);
+        asm_comment_prev(ctx.builder, comment);
     } else if (e.kind == HirExpr_Member) {
         var e = e as *HirMemberExpr;
         var fields = (e.left.type as *StructType).sym.fields;
         var field: *StructField = list_get(fields, e.field_index);
+
+        var comment: *Char = calloc(100, sizeof(Char));
+        snprintf(comment, 100, "// member '%s'", field.name);
+
         asm_lower_expr_addr(ctx, e.left, xd);
         // add {xd}, {xd}, #{offset}
         asm_write_add_ri(ctx.builder, width: 8, xd, xd, field.offset);
+        asm_comment_prev(ctx.builder, comment);
     } else if (e.kind == HirExpr_Deref) {
         var e = e as *HirDerefExpr;
         asm_lower_expr(ctx, e.expr, xd);
@@ -877,6 +903,10 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     var arg_count = list_len(args);
     var type = e.type;
 
+    var comment: *Char = calloc(100, sizeof(Char));
+    snprintf(comment, 100, "// prepare call to %s", sym.name);
+    asm_write_raw(ctx.builder, comment);
+
     var i = 0;
     while (i < arg_count) {
         var arg = list_get(args, i);
@@ -897,6 +927,10 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     if (type.kind != Type_Void) {
         write_sign_extend(ctx, type, xd, Reg_X0);
     }
+
+    comment = calloc(100, sizeof(Char));
+    snprintf(comment, 100, "// call to %s done", sym.name);
+    asm_write_raw(ctx.builder, comment);
 }
 
 func asm_lower_addr_expr(ctx: *CodegenCtx, e: *HirAddrExpr, xd: Reg) {

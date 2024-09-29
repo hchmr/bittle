@@ -40,3 +40,4 @@ extern func perror(message: *Char): Void;
 extern func memcpy(dest: *Void, src: *Void, n: Int): *Void;
 extern func strlen(s: *Char): Int;
 extern func strcmp(a: *Char, b: *Char): Int32;
+extern func snprintf(buf: *Char, n: Int, fmt: *Char, ...): Int32;
