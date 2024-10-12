@@ -30,6 +30,9 @@ export interface SyntaxNode {
     descendantForPosition(position: Point): SyntaxNode;
     descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
 
+    descendantsForPosition(position: Point): Array<SyntaxNode>;
+    descendantsForPosition(startPosition: Point, endPosition: Point): Array<SyntaxNode>;
+
     closest(types: string | Array<string>): SyntaxNode | null;
 }
 

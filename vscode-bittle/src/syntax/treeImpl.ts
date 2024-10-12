@@ -1,5 +1,6 @@
 import util from 'util';
-import { Point, pointLe } from './position';
+import { stream } from '../utils/stream';
+import { Point, PointRange, rangeContains } from './position';
 import { Token, TokenKind } from './token.js';
 import { SyntaxNode, Tree } from './tree.js';
 
@@ -141,19 +142,27 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
     descendantForPosition(position: Point): SyntaxNode;
     descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
     descendantForPosition(startPosition: Point, endPosition?: Point): SyntaxNode {
-        endPosition ??= startPosition;
-        return (function search(node: SyntaxNodeImpl): SyntaxNode | null {
-            if (!pointLe(node.startPosition, startPosition) || !pointLe(endPosition, node.endPosition)) {
-                return null;
-            }
-            for (const child of node._children) {
-                const node = search(child.node);
-                if (node) {
-                    return node;
-                }
-            }
-            return node;
-        })(this) || this;
+        const searchRange: PointRange = { startPosition, endPosition: endPosition ?? startPosition };
+        return (function search(node: SyntaxNodeImpl): SyntaxNode {
+            return stream(node._children)
+                .filter(child => rangeContains(child.node, searchRange))
+                .map(child => search(child.node))
+                .first() ?? node;
+        })(this);
+    }
+
+    descendantsForPosition(position: Point): Array<SyntaxNode>;
+    descendantsForPosition(startPosition: Point, endPosition: Point): Array<SyntaxNode>;
+    descendantsForPosition(startPosition: Point, endPosition?: Point): Array<SyntaxNode> {
+        const searchRange: PointRange = { startPosition, endPosition: endPosition ?? startPosition };
+        return Array.from(
+            (function search(node: SyntaxNodeImpl): Iterable<SyntaxNode> {
+                return stream(node._children)
+                    .filter(child => rangeContains(child.node, searchRange))
+                    .flatMap(child => search(child.node))
+                    .defaultIfEmpty(node);
+            })(this),
+        );
     }
 
     closest(types: string | Array<string>): SyntaxNode | null {
@@ -233,4 +242,11 @@ function prettyPosition(pos: Point): string {
 
 function indent(level: number) {
     return '  '.repeat(level);
+}
+
+function* rev<T>(source: Iterable<T>): Iterable<T> {
+    const array = Array.from(source);
+    for (let i = array.length; i-- > 0;) {
+        yield array[i - 1];
+    }
 }

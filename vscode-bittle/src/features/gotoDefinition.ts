@@ -10,7 +10,6 @@ import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
 import { fromVscPosition, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { getNodesAtPosition } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
 
 export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
@@ -27,9 +26,8 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
-        return stream(getNodesAtPosition(tree, position))
-            .filter(node => node.type === 'string_literal'
-            && node.parent?.type === NodeTypes.IncludeDecl)
+        return stream(tree.rootNode.descendantsForPosition(position))
+            .filter(node => node.type === NodeTypes.StringLiteral && node.parent?.type === NodeTypes.IncludeDecl)
             .filterMap(node => {
                 const stringValue = JSON.parse(node.text);
                 const includePath = this.resolveInclude(document.uri.fsPath, stringValue);
@@ -83,8 +81,8 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
 
     private getDefinitionOrigins(filePath: string, position: Point, definitionOnly = false): vscode.LocationLink[] {
         const tree = this.parsingService.parse(filePath);
-        return getNodesAtPosition(tree, position)
-            .filter(node => node.type === 'identifier')
+        return stream(tree.rootNode.descendantsForPosition(position))
+            .filter(node => node.type === NodeTypes.identifier)
             .flatMap(nameNode => {
                 const symbol = this.semanticsService.resolveSymbol(filePath, nameNode);
                 if (!symbol) {
@@ -97,7 +95,8 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
                     .distinctBy(origin => origin.file + '|' + origin.node.startIndex)
                     .map(origin => originToLocationLink(nameNode, origin))
                     .toArray();
-            });
+            })
+            .toArray();
     }
 
     private getSameSymbolInReferringFiles(symbol: Sym) {
@@ -129,7 +128,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     ) {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
-        return stream(getNodesAtPosition(tree, position))
+        return stream(tree.rootNode.descendantsForPosition(position))
             .filterMap(startNode => {
                 // Essentially the same algorithm as in the hover provider
                 for (let node: SyntaxNode | null = startNode; node; node = node.parent) {
@@ -154,7 +153,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     }
 
     getTypeForNode(filePath: string, node: SyntaxNode): Type | undefined {
-        if (node.type === 'identifier') {
+        if (node.type === NodeTypes.identifier) {
             const sym = this.semanticsService.resolveSymbol(filePath, node);
             if (!sym || sym.kind === SymKind.Func) {
                 return;

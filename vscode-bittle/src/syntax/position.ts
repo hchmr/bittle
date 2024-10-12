@@ -38,14 +38,14 @@ export function rangeEq(x1: PointRange, x2: PointRange): boolean {
     return pointEq(x1.startPosition, x2.startPosition) && pointEq(x1.endPosition, x2.endPosition);
 }
 
-export function rangeContains(x1: PointRange, x2: PointRange): boolean {
-    return pointLe(x1.startPosition, x2.startPosition)
-        && pointLe(x2.endPosition, x1.endPosition);
+export function rangeContains(bounds: PointRange, candidate: PointRange): boolean {
+    return pointLe(bounds.startPosition, candidate.startPosition)
+        && pointLe(candidate.endPosition, bounds.endPosition);
 }
 
-export function rangeContainsPoint(range: PointRange, point: Point): boolean {
-    return pointLe(range.startPosition, point)
-        && pointLe(point, range.endPosition);
+export function rangeContainsPoint(bounds: PointRange, point: Point): boolean {
+    return pointLe(bounds.startPosition, point)
+        && pointLe(point, bounds.endPosition);
 }
 
 export function isRangeEmpty(range: PointRange): boolean {

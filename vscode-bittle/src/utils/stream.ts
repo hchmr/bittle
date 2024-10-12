@@ -11,6 +11,7 @@ export interface Stream<T> extends Iterable<T> {
     filterMap<U>(f: (x: T) => U | undefined): Stream<U>;
     zip<U>(other: Iterable<U>): Stream<[T, U]>;
     zipLongest<U>(other: Iterable<U>): Stream<[T, U] | [undefined, U] | [T, undefined]>;
+    defaultIfEmpty(defaultValue: T): Stream<T>;
     reduce<U>(f: (acc: U, x: T, i: number) => U, initial: U): U;
     reduce(f: (acc: T, x: T) => T): T;
     find(p: (x: T) => unknown): T | undefined;
@@ -134,6 +135,19 @@ class StreamImpl<T> implements Stream<T> {
                     [T, U] | [undefined, U] | [T, undefined];
             }
         })(this.source, other));
+    }
+
+    defaultIfEmpty(defaultValue: T): Stream<T> {
+        return new StreamImpl((function* (source) {
+            let isEmpty = true;
+            for (const x of source) {
+                isEmpty = false;
+                yield x;
+            }
+            if (isEmpty) {
+                yield defaultValue;
+            }
+        })(this.source));
     }
 
     reduce(f: (acc: T, x: T) => T): T;
