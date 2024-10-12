@@ -636,7 +636,7 @@ struct CodegenCtx {
     ret_label: Int,
 
     // strings
-    strings: *List, // List<*Char>
+    strings: *List, // List<*StringBuffer>
 
     // asm builder
     builder: *List,
@@ -651,7 +651,7 @@ func next_label(ctx: *CodegenCtx): Int {
     return label;
 }
 
-func define_global_string(ctx: *CodegenCtx, value: *Char, xd: Reg): Int {
+func define_global_string(ctx: *CodegenCtx, value: *StringBuffer, xd: Reg): Int {
     list_push(ctx.strings, value);
     return list_len(ctx.strings) - 1;
 }
@@ -1317,20 +1317,20 @@ func emit_sym(ctx: *CodegenCtx, sym: *Sym) {
     }
 }
 
-func emit_string(id: Int, str_val: *Char) {
+func emit_string(id: Int, str: *StringBuffer) {
     printf("  .text\n");
     printf("  .section .rodata\n");
     printf("  .align 3\n");
     printf(".L.str.%d:\n", id);
     printf("  .string \"");
     var i = 0;
-    while (str_val[i] != '\0') {
-        if (!is_print(str_val[i]) || str_val[i] == '\"' || str_val[i] == '\\') {
-            printf("\\%03o", str_val[i]);
+    for (var i = 0; i < sb_len(str); i += 1) {
+        var c = sb_get(str, i);
+        if (!is_print(c) || c == '\"' || c == '\\') {
+            printf("\\%03o", c);
         } else {
-            printf("%c", str_val[i]);
+            printf("%c", c);
         }
-        i += 1;
     }
     printf("\"\n");
 }

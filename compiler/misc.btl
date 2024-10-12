@@ -37,8 +37,18 @@ func sb_new(): *StringBuffer {
     return calloc(1, sizeof(StringBuffer));
 }
 
+func sb_free(self: *StringBuffer) {
+    free(self.buf);
+    free(self);
+}
+
 func sb_len(self: *StringBuffer): Int {
     return self.len;
+}
+
+func sb_get(self: *StringBuffer, i: Int): Char {
+    assert(0 <= i && i < self.len, "sb_get: index out of bounds");
+    return self.buf[i];
 }
 
 func sb_cstr(self: *StringBuffer): *Char {
@@ -231,14 +241,14 @@ func is_print(c: Int32): Bool {
 }
 
 func parse_char(s: *Char): Char {
-    var string = parse_string(s);
-    assert(strlen(string) <= 1, "parse_char: expected single character");
-    var char = string[0];
-    free(string);
+    var sb = parse_string(s);
+    assert(sb_len(sb) == 1, "parse_char: expected single character");
+    var char = sb_get(sb, 0);
+    sb_free(sb);
     return char;
 }
 
-func parse_string(s: *Char): *Char {
+func parse_string(s: *Char): *StringBuffer {
     var sb = sb_new();
     var i = 0;
     var quote = s[i];
@@ -271,6 +281,5 @@ func parse_string(s: *Char): *Char {
         }
     }
     assert(s[i] == quote, "parse_string: expected quote");
-
-    return sb_finish(sb);
+    return sb;
 }

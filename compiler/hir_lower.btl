@@ -54,7 +54,7 @@ func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
     return result;
 }
 
-func hir_mk_str_expr(value: *Char, pos: *Pos): *HirStrExpr {
+func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
     var result: *HirStrExpr = calloc(1, sizeof(HirStrExpr));
     *result = HirStrExpr(HirExpr_Str, mk_ptr_type(mk_int_type(1)), *pos, value);
     return result;
