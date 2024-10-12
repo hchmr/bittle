@@ -25,7 +25,9 @@ func die(msg: *Char): !;
 func die_at(pos: *Pos, msg: *Char): !;
 
 func sb_new(): *StringBuffer;
+func sb_free(self: *StringBuffer);
 func sb_len(self: *StringBuffer): Int;
+func sb_get(self: *StringBuffer, i: Int): Char;
 func sb_cstr(self: *StringBuffer): *Char;
 func sb_ensure_cap(self: *StringBuffer, cap: Int);
 func sb_shrink_to_fit(self: *StringBuffer);
@@ -60,7 +62,7 @@ func is_word_part(c: Int32): Bool;
 func is_print(c: Int32): Bool;
 
 func parse_char(c: *Char): Char;
-func parse_string(s: *Char): *Char;
+func parse_string(s: *Char): *StringBuffer;
 
 //==============================================================================
 //== type.btl
@@ -355,7 +357,7 @@ struct CharLiteral: Literal {
     value: Char,
 }
 struct StringLiteral: Literal {
-    value: *Char,
+    value: *StringBuffer,
 }
 
 // Expr
@@ -648,7 +650,7 @@ struct HirIntExpr: HirExpr {
 }
 
 struct HirStrExpr: HirExpr {
-    value: *Char,
+    value: *StringBuffer,
 }
 
 struct HirVarExpr: HirExpr {

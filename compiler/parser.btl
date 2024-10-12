@@ -823,7 +823,7 @@ func parse_file(self: *Parser, decls: *List) {
             expect(self, Tok_Semicolon);
 
             var file_dir = get_directory(pos.file);
-            var file_path = join_paths(file_dir, file_name);
+            var file_path = join_paths(file_dir, sb_cstr(file_name));
             var file = fopen(file_path, "r");
             if (!file) {
                 die_at(&pos, "Cannot open file.");
