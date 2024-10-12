@@ -11,7 +11,7 @@ import { keywords } from '../syntax/token';
 import { fromVscPosition, toVscRange } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
+import { countPrecedingCommas } from '../utils/nodeSearch';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(
@@ -30,7 +30,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         const tree = this.parsingService.parse(filePath);
         const position = fromVscPosition(vscPosition);
-        const node = getNodesAtPosition(tree, position)[0];
+        const node = tree.rootNode.descendantForPosition(position);
         if (!node) {
             return;
         }

@@ -5,7 +5,7 @@ import { SemanticsService } from '../services/semanticsService';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { fromVscPosition } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { countPrecedingCommas, getNodesAtPosition } from '../utils/nodeSearch';
+import { countPrecedingCommas } from '../utils/nodeSearch';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(
@@ -24,7 +24,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
 
         const tree = this.parsingService.parse(filePath);
         const position = fromVscPosition(vscPosition);
-        const node = getNodesAtPosition(tree, position)[0];
+        const node = tree.rootNode.descendantForPosition(position);
         if (!node) {
             return;
         }
