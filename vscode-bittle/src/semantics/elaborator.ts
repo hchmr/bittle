@@ -1213,6 +1213,7 @@ export class Elaborator {
         }
         if (!(calleeNode instanceof NameExprNode)) {
             this.reportError(calleeNode, `Function or struct name expected.`);
+            this.elabExprInfer(calleeNode);
             return this.elabCallExprUnknown(node);
         }
 
@@ -1233,6 +1234,7 @@ export class Elaborator {
             return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym));
         } else {
             this.reportError(calleeNode, `'${calleeName}' is not a function or struct.`);
+            this.elabExprInfer(calleeNode);
             return this.elabCallExprUnknown(node);
         }
     }
