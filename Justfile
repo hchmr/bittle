@@ -2,6 +2,9 @@ build:
     mkdir -p out
     make -C compiler "BUILD_DIR=../out"
 
+clean:
+    make -C compiler clean
+
 debug:
     @just build
     lldb --source scripts/debug.lldb
