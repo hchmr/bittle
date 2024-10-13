@@ -2,10 +2,11 @@ import * as vscode from 'vscode';
 import { FuncParamSym, FuncSym, prettyCallableSym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
-import { ExprNodeTypes } from '../syntax/nodeTypes';
-import { fromVscPosition } from '../utils';
+import { SyntaxNode } from '../syntax';
+import { ExprNodeTypes, NodeTypes } from '../syntax/nodeTypes';
+import { fromVscPosition, Nullish } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { countPrecedingCommas } from '../utils/nodeSearch';
+import { countPrecedingCommas, nodeEndsAt, nodeStartsAt } from '../utils/nodeSearch';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(
@@ -29,7 +30,18 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return;
         }
 
-        const callNode = node.closest(ExprNodeTypes.CallExpr);
+        let argListNode: SyntaxNode | Nullish = node.closest(NodeTypes.CallArgList);
+        while (
+            argListNode
+            && (nodeStartsAt(position, argListNode) || nodeEndsAt(position, argListNode))
+        ) {
+            argListNode = argListNode.parent?.closest(NodeTypes.CallArgList);
+        }
+        if (!argListNode) {
+            return;
+        }
+
+        const callNode = argListNode.closest(NodeTypes.CallExpr);
         if (!callNode) {
             return;
         }
