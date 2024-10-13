@@ -9,13 +9,9 @@ struct Pos {
     col: Int32,
 }
 
-struct List {
-    elems: *(*Void),
-    len: Int,
-    cap: Int,
-}
-
 struct StringBuffer;
+
+struct List;
 
 func assert(cond: Bool, because: *Char);
 func unreachable(function: *Char): !;
