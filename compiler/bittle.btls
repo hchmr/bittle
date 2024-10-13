@@ -69,7 +69,7 @@ struct Sym;
 struct StructSym;
 struct EnumSym;
 
-enum {
+enum TypeKind {
     Type_Void,
     Type_Bool,
     Type_Int,
@@ -81,7 +81,7 @@ enum {
 }
 
 struct Type {
-    kind: Int32,
+    kind: TypeKind,
 }
 
 struct VoidType: Type {
@@ -140,7 +140,7 @@ func pretty_type(file: *File, type: *Type): Void;
 struct Sym;
 struct Stmt;
 
-enum {
+enum SymKind {
     Sym_Enum,
     Sym_Struct,
     Sym_Global,
@@ -150,7 +150,7 @@ enum {
 }
 
 struct Sym {
-    kind: Int32,
+    kind: SymKind,
     name: *Char,
 }
 
@@ -208,7 +208,7 @@ func find_struct_field(sym: *Sym, name: *Char): Int;
 //== tok.btl
 
 // NOTE: When updating this declaration, remember to also update `pretty_tok_kind` and `lookup_keyword`.
-enum {
+enum TokKind {
     Tok_Eof = 1,
     // Identifier
     Tok_Ident,
@@ -286,7 +286,7 @@ enum {
 }
 
 struct Tok {
-    kind: Int32,
+    kind: TokKind,
     pos: Pos,
     lexeme: *Char,
 }
@@ -300,18 +300,18 @@ struct Expr;
 
 // Type
 
-struct TypeExpr;
-
-struct TypeExpr {
-    kind: Int32,
-    pos: Pos,
-}
-
-enum {
+enum TypeExprKind {
     TypeExpr_Named,
     TypeExpr_Ptr,
     TypeExpr_Arr,
     TypeExpr_Never,
+}
+
+struct TypeExpr;
+
+struct TypeExpr {
+    kind: TypeExprKind,
+    pos: Pos,
 }
 
 struct NamedTypeExpr: TypeExpr {
@@ -331,7 +331,7 @@ struct ArrTypeExpr: TypeExpr {
 
 struct Literal;
 
-enum {
+enum LiteralKind {
     Literal_Null,
     Literal_Bool,
     Literal_Int,
@@ -340,7 +340,7 @@ enum {
 }
 
 struct Literal {
-    kind: Int32,
+    kind: LiteralKind,
 }
 
 struct BoolLiteral: Literal {
@@ -358,7 +358,7 @@ struct StringLiteral: Literal {
 
 // Expr
 
-enum {
+enum ExprKind {
     Expr_Ident,
     Expr_Literal,
     Expr_Array,
@@ -373,7 +373,7 @@ enum {
 }
 
 struct Expr {
-    kind: Int32,
+    kind: ExprKind,
     pos: Pos,
     type: *Type,
 }
@@ -442,14 +442,7 @@ struct CastExpr: Expr {
 
 // Stmt
 
-struct Stmt;
-
-struct Stmt {
-    kind: Int32,
-    pos: Pos,
-}
-
-enum {
+enum StmtKind {
     Stmt_Block,
     Stmt_Local,
     Stmt_If,
@@ -459,6 +452,11 @@ enum {
     Stmt_Break,
     Stmt_Continue,
     Stmt_Expr,
+}
+
+struct Stmt {
+    kind: StmtKind,
+    pos: Pos,
 }
 
 struct BlockStmt: Stmt {
@@ -500,7 +498,7 @@ struct ExprStmt: Stmt {
 
 // Decl
 
-enum {
+enum DeclKind {
     Decl_Struct,
     Decl_Func,
     Decl_Enum,
@@ -508,15 +506,15 @@ enum {
     Decl_Global,
 }
 
+struct Decl {
+    kind: DeclKind,
+    pos: Pos,
+}
+
 struct StructFieldDecl {
     pos: Pos,
     name: *Char,
     type: *TypeExpr,
-}
-
-struct Decl {
-    kind: Int32,
-    pos: Pos,
 }
 
 struct StructDecl: Decl {
@@ -576,7 +574,7 @@ struct HirTemp {
     slot_index: Int,
 }
 
-enum {
+enum HirOpKind {
     HirOp_Or,
     HirOp_Xor,
     HirOp_And,
@@ -597,7 +595,7 @@ enum {
 
 struct HirExpr;
 
-enum {
+enum HirExprKind {
     // Composition primitives
     HirExpr_Skip,
     HirExpr_Seq,
@@ -631,7 +629,7 @@ enum {
 }
 
 struct HirExpr {
-    kind: Int32,
+    kind: HirExprKind,
     type: *Type,
     pos: Pos,
 }

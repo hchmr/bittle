@@ -3,7 +3,7 @@ include "bittle.btls";
 //==============================================================================
 //== Helper functions
 
-func try_keyword(lexeme: *Char, keyword: *Char, out: *Int32, kind: Int32): Bool {
+func try_keyword(lexeme: *Char, keyword: *Char, out: *TokKind, kind: TokKind): Bool {
     if (str_eq(lexeme, keyword)) {
         *out = kind;
         return true;
@@ -12,7 +12,7 @@ func try_keyword(lexeme: *Char, keyword: *Char, out: *Int32, kind: Int32): Bool 
     }
 }
 
-func lookup_keyword(lexeme: *Char, out: *Int32): Bool {
+func lookup_keyword(lexeme: *Char, out: *TokKind): Bool {
     return try_keyword(lexeme, "as", out, Tok_As)
         || try_keyword(lexeme, "break", out, Tok_Break)
         || try_keyword(lexeme, "const", out, Tok_Const)
@@ -41,7 +41,7 @@ struct Lexer {
     input: *Char,
     index: Int,
     pos: Pos,
-    tok_kind: Int32,
+    tok_kind: TokKind,
     tok_index: Int,
     tok_pos: Pos,
     tok_lexeme: *Char,
@@ -77,7 +77,7 @@ func begin_token(self: *Lexer) {
     self.tok_pos = self.pos;
 }
 
-func finish_token(self: *Lexer, tok_kind: Int32, lexeme: *Char) {
+func finish_token(self: *Lexer, tok_kind: TokKind, lexeme: *Char) {
     self.tok_kind = tok_kind;
     self.tok_lexeme = lexeme;
 }
