@@ -6,7 +6,7 @@ import { TypeKind } from '../semantics/type';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { rangeContains, SyntaxNode } from '../syntax';
-import { ExprNodeTypes, isArgNode, TopLevelNodeTypes } from '../syntax/nodeTypes';
+import { ExprNodeTypes, isArgNode, NodeTypes, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
 import { fromVscPosition, toVscRange } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
@@ -99,7 +99,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
 
-        const callNode = node.closest(ExprNodeTypes.CallExpr);
+        const callNode = node.closest(NodeTypes.CallArgList)?.closest(NodeTypes.CallExpr);
         if (!callNode) {
             return;
         }
