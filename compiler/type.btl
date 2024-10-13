@@ -150,7 +150,7 @@ func type_size(type: *Type): Int {
         return type_size(mk_int_type(type.sym.size));
     } else if (type.kind == Type_Struct) {
         var type = type as *StructType;
-        return type.sym.fields.len == 0 ? -1 : align_up(type.sym.unpadded_size, type_align(type));
+        return list_len(type.sym.fields) == 0 ? -1 : align_up(type.sym.unpadded_size, type_align(type));
     } else if (type.kind == Type_Never) {
         return -1;
     } else {

@@ -28,7 +28,7 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
     if (scope == null || max_depth == 0) {
         return -1;
     }
-    for (var i = 0; i < scope.entries.len; i += 1) {
+    for (var i = 0; i < list_len(scope.entries); i += 1) {
         var entry: *ScopeEntry = list_get(scope.entries, i);
         if (str_eq(entry.name, name)) {
             return entry.sym_index;
@@ -78,7 +78,7 @@ func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
 
 func add_sym(ctx: *ElabCtx, sym: *Sym) {
     var entry: *ScopeEntry = calloc(1, sizeof(ScopeEntry));
-    *entry = ScopeEntry(name: sym.name, sym_index: ctx.syms.len);
+    *entry = ScopeEntry(name: sym.name, sym_index: list_len(ctx.syms));
     list_push(ctx.syms, sym);
     list_push(ctx.scope.entries, entry);
 }
@@ -118,10 +118,10 @@ func declare_struct(
 }
 
 func params_eq(xs: *List, ys: *List): Bool {
-    if (xs.len != ys.len) {
+    if (list_len(xs) != list_len(ys)) {
         return false;
     }
-    for (var i = 0; i < xs.len; i += 1) {
+    for (var i = 0; i < list_len(xs); i += 1) {
         var param1: *FuncParam = list_get(xs, i);
         var param2: *FuncParam = list_get(ys, i);
         if (!type_eq(param1.type, param2.type)) {
@@ -211,7 +211,7 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
         die_at(pos, "Symbol is already defined");
     }
 
-    var slot_index = ctx.current_func.locals.len;
+    var slot_index = list_len(ctx.current_func.locals);
 
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
     *sym = LocalSym(Sym_Local, name, type, slot_index: slot_index);
@@ -774,7 +774,7 @@ func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
 
 func elab_block_stmt(ctx: *ElabCtx, stmt: *BlockStmt) {
     enter_scope(ctx);
-    for (var i = 0; i < stmt.stmts.len; i += 1) {
+    for (var i = 0; i < list_len(stmt.stmts); i += 1) {
         var stmt = list_get(stmt.stmts, i);
         elab_stmt(ctx, stmt);
     }
@@ -1160,7 +1160,7 @@ func elab(ast: *Ast): *List { // *List<*Sym>
         loop_depth: 0,
     );
 
-    for (var i = 0; i < ast.decls.len; i += 1) {
+    for (var i = 0; i < list_len(ast.decls); i += 1) {
         var decl = list_get(ast.decls, i);
         elab_decl(ctx, decl);
     }

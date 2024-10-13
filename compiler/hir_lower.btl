@@ -462,7 +462,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
 
         var body = mk_skip_stmt(pos);
 
-        for (var i = 0; i < args.len; i += 1) {
+        for (var i = 0; i < list_len(args); i += 1) {
             var ast_arg: *CallArg = list_get(args, i);
             var field: *StructField = list_get(fields, i);
 
@@ -527,7 +527,7 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr;
 func lower_block_stmt(ctx: *Context, stmt: *BlockStmt): *HirExpr {
     var current = mk_skip_stmt(&stmt.pos);
 
-    for (var i = 0; i < stmt.stmts.len; i += 1) {
+    for (var i = 0; i < list_len(stmt.stmts); i += 1) {
         var ast_stmt = list_get(stmt.stmts, i);
         var hir_stmt = lower_stmt(ctx, ast_stmt);
 

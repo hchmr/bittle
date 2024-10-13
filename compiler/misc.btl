@@ -1,5 +1,17 @@
 include "bittle.btls";
 
+struct StringBuffer {
+    buf: *Char,
+    len: Int,
+    cap: Int,
+}
+
+struct List {
+    elems: **Void,
+    len: Int,
+    cap: Int,
+}
+
 func assert(cond: Bool, because: *Char) {
     if (!cond) {
         fprintf(stderr, "\n*** Assertion failed: %s\n", because);
@@ -25,12 +37,6 @@ func die_at(pos: *Pos, msg: *Char): ! {
     error_at(pos);
     fprintf(stderr, "%s\n", msg);
     exit(1);
-}
-
-struct StringBuffer {
-    buf: *Char,
-    len: Int,
-    cap: Int,
 }
 
 func sb_new(): *StringBuffer {
