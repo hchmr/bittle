@@ -1,6 +1,7 @@
+import assert from 'assert';
 import util from 'util';
 import { stream } from '../utils/stream';
-import { Point, PointRange, rangeContains } from './position';
+import { Point, pointGe, pointGt, pointLe, pointLt, PointRange, rangeContains, rangeContainsPoint } from './position';
 import { Token, TokenKind } from './token.js';
 import { SyntaxNode, Tree } from './tree.js';
 
@@ -163,6 +164,33 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
                     .defaultIfEmpty(node);
             })(this),
         );
+    }
+
+    closestDescendantsForPosition(position: Point): Array<SyntaxNode> {
+        if (!this.childCount) {
+            return [this];
+        }
+
+        const leftIdx = this._children.findLastIndex(child => pointLt(child.node.startPosition, position));
+        if (leftIdx === -1) {
+            // The position is before the first child.
+            return this.firstChild!.closestDescendantsForPosition(position);
+        } else if (pointGt(this._children[leftIdx].node.endPosition, position)) {
+            // The position is inside the left child.
+            return this._children[leftIdx].node.closestDescendantsForPosition(position);
+        } else if (leftIdx === this.childCount - 1) {
+            // The position is after the last child.
+            return this.lastChild!.closestDescendantsForPosition(position);
+        } else {
+            // The position is between two children.
+            const rightIdx = leftIdx + 1;
+            const leftDescendants = this._children[leftIdx].node.closestDescendantsForPosition(position);
+            const rightDescendants = this._children[rightIdx].node.closestDescendantsForPosition(position);
+            return [
+                leftDescendants[leftDescendants.length - 1],
+                rightDescendants[0],
+            ];
+        }
     }
 
     closest(types: string | Array<string>): SyntaxNode | null {
