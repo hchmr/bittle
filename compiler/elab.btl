@@ -240,13 +240,6 @@ func try_coerce(e: *Expr, target: *Type): *Expr {
         var cast: *CastExpr = calloc(1, sizeof(CastExpr));
         *cast = CastExpr(Expr_Cast, e.pos, target, expr: e, type_expr: null);
         e = cast;
-    } else if (e.kind == Expr_Literal && (e as *LiteralExpr).literal.kind == Literal_Int && target.kind == Type_Int) {
-        var target = target as *IntType;
-        var integer_value = ((e as *LiteralExpr).literal as *IntLiteral).value;
-        var bit_size = ilog2(iabs(integer_value)) + 1; // Excluding sign bit
-        if (bit_size < target.size * 8) {
-            e.type = target;
-        }
     } else {
         // Err
     }
@@ -393,10 +386,10 @@ func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
 //==============================================================================
 //== Expressions
 
-func elab_expr_infer(ctx: *ElabCtx, expr: *Expr);
+func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
 
 func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type) {
-    elab_expr_infer(ctx, *expr);
+    elab_expr_infer(ctx, *expr, type_hint: expected);
     check_type(expr, expected);
 }
 
@@ -404,8 +397,8 @@ func elab_expr_bool(ctx: *ElabCtx, expr: **Expr) {
     elab_expr_expect(ctx, expr, mk_bool_type());
 }
 
-func elab_expr_int(ctx: *ElabCtx, expr: **Expr) {
-    elab_expr_infer(ctx, *expr);
+func elab_expr_int(ctx: *ElabCtx, expr: **Expr, type_hint: *Type) {
+    elab_expr_infer(ctx, *expr, type_hint);
     check_type_int(expr);
 }
 
@@ -432,7 +425,7 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
     expr.type = type;
 }
 
-func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr) {
+func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr, type_hint: *Type) {
     var literal = expr.literal;
 
     if (literal.kind == Literal_Null) {
@@ -440,7 +433,11 @@ func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr) {
     } else if (literal.kind == Literal_Bool) {
         expr.type = mk_bool_type();
     } else if (literal.kind == Literal_Int) {
-        expr.type = mk_int_type(8);
+        if (type_hint && type_hint.kind == Type_Int) {
+            expr.type = type_hint;
+        } else {
+            expr.type = mk_int_type(8);
+        }
     } else if (literal.kind == Literal_Char) {
         expr.type = mk_int_type(1);
     } else if (literal.kind == Literal_String) {
@@ -450,7 +447,12 @@ func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr) {
     }
 }
 
-func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr) {
+func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
+    var elem_type_hint: *Type = null;
+    if (type_hint && type_hint.kind == Type_Arr) {
+        elem_type_hint = (type_hint as *ArrType).elem;
+    }
+
     var elems = expr.elems;
 
     var elem_type: *Type = null;
@@ -458,12 +460,12 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr) {
 
     for (var i = 0; i < elem_count; i += 1) {
         var elem: *Expr = list_get(elems, i);
-        elab_expr_infer(ctx, elem);
+        elab_expr_infer(ctx, elem, elem_type_hint);
         if (i == 0) {
             elem_type = elem.type;
         } else {
             var prev_expr: *Expr = list_get(elems, i - 1);
-            unify_types(&elem, &prev_expr);
+            check_type(&elem, elem_type);
             list_set(elems, i, elem);
             list_set(elems, i - 1, prev_expr);
         }
@@ -518,7 +520,7 @@ func elab_call_expr_part2(
     }
     for (; i < arg_count; i += 1) {
         var arg: *CallArg = list_get(args, i);
-        elab_expr_infer(ctx, arg.expr);
+        elab_expr_infer(ctx, arg.expr, type_hint: null);
         if (!is_scalar(arg.expr.type)) {
             die_at(&expr.pos, "Variadic argument must be scalar.");
         }
@@ -572,8 +574,8 @@ func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
     var indexee = expr.indexee;
     var index = expr.index;
 
-    elab_expr_infer(ctx, indexee);
-    elab_expr_infer(ctx, index);
+    elab_expr_infer(ctx, indexee, type_hint: null);
+    elab_expr_infer(ctx, index, type_hint: null);
 
     var indexee_type = indexee.type;
     if (indexee_type.kind != Type_Arr && indexee_type.kind != Type_Ptr) {
@@ -593,7 +595,7 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
     var left = expr.left;
     var field_name = expr.name;
 
-    elab_expr_infer(ctx, left);
+    elab_expr_infer(ctx, left, type_hint: null);
 
     var left_type = left.type;
     if (left_type.kind == Type_Ptr) {
@@ -622,34 +624,40 @@ func elab_sizeof_expr(ctx: *ElabCtx, expr: *SizeofExpr) {
     expr.type = mk_int_type(8);
 }
 
-func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr) {
+func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
     var op = expr.op;
     var right = expr.right;
 
-    elab_expr_infer(ctx, right);
-
     if (op == Tok_Minus || op == Tok_Tilde) {
+        elab_expr_infer(ctx, right, type_hint);
         check_type_int(&right);
         expr.type = right.type;
         expr.right = right;
     } else if (op == Tok_Bang) {
-        check_type_bool(&right);
+        elab_expr_bool(ctx, &right);
         expr.type = mk_bool_type();
         expr.right = right;
     } else if (op == Tok_Star) {
+        var right_type_hint: *Type = mk_ptr_type(type_hint);
+        elab_expr_infer(ctx, right, type_hint: right_type_hint);
         var pointee_type = right.type;
         if (pointee_type.kind != Type_Ptr) {
             die_at(&right.pos, "Expected a pointer");
         }
         expr.type = (pointee_type as *PtrType).pointee;
     } else if (op == Tok_Amp) {
+        var right_type_hint: *Type = null;
+        if (right_type_hint && type_hint.kind == Type_Ptr) {
+            right_type_hint = (type_hint as *PtrType).pointee;
+        }
+        elab_expr_infer(ctx, right, right_type_hint);
         expr.type = mk_ptr_type(right.type);
     } else {
         unreachable("elab_unary_expr");
     }
 }
 
-func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr) {
+func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
     var op = expr.op;
     var left = expr.left;
     var right = expr.right;
@@ -659,9 +667,9 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr) {
             die_at(&left.pos, "L-value expected");
         }
         if (op != Tok_Eq) {
-            elab_expr_int(ctx, &left);
+            elab_expr_int(ctx, &left, type_hint: null);
         } else {
-            elab_expr_infer(ctx, left);
+            elab_expr_infer(ctx, left, type_hint: null);
         }
         elab_expr_expect(ctx, &right, left.type);
         if (!is_sized(left.type)) {
@@ -677,8 +685,8 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr) {
         expr.left = left;
         expr.right = right;
     } else if (op == Tok_EqEq || op == Tok_BangEq || op == Tok_Lt || op == Tok_LtEq || op == Tok_Gt || op == Tok_GtEq) {
-        elab_expr_infer(ctx, left);
-        elab_expr_infer(ctx, right);
+        elab_expr_infer(ctx, left, type_hint: null);
+        elab_expr_infer(ctx, right, type_hint: left.type);
         unify_types(&left, &right);
         if (!is_scalar(left.type)) {
             die_at(&left.pos, "Operands type is not comparable");
@@ -687,8 +695,8 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr) {
         expr.left = left;
         expr.right = right;
     } else if (op == Tok_Amp || op == Tok_Bar || op == Tok_Caret || op == Tok_LtLt || op == Tok_GtGt || op == Tok_Plus || op == Tok_Minus || op == Tok_Star || op == Tok_Slash || op == Tok_Percent) {
-        elab_expr_int(ctx, &left);
-        elab_expr_int(ctx, &right);
+        elab_expr_int(ctx, &left, type_hint);
+        elab_expr_int(ctx, &right, left.type);
         unify_types(&left, &right);
         expr.type = left.type;
         expr.left = left;
@@ -698,14 +706,14 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr) {
     }
 }
 
-func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr) {
+func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
     var cond = expr.cond;
     var then_expr = expr.then_expr;
     var else_expr = expr.else_expr;
 
     elab_expr_bool(ctx, &cond);
-    elab_expr_infer(ctx, then_expr);
-    elab_expr_infer(ctx, else_expr);
+    elab_expr_infer(ctx, then_expr, type_hint: type_hint);
+    elab_expr_infer(ctx, else_expr, type_hint: then_expr.type);
 
     unify_types(&then_expr, &else_expr);
     expr.type = then_expr.type;
@@ -716,7 +724,7 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr) {
 
 func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     var subexpr = expr.expr;
-    elab_expr_infer(ctx, subexpr);
+    elab_expr_infer(ctx, subexpr, type_hint: null);
 
     var source_type = subexpr.type;
     var target_type = eval_type(ctx, expr.type_expr);
@@ -728,13 +736,13 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     expr.type = target_type;
 }
 
-func elab_expr_infer2(ctx: *ElabCtx, expr: *Expr) {
+func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
     if (expr.kind == Expr_Ident) {
         elab_ident_expr(ctx, expr as *IdentExpr);
     } else if (expr.kind == Expr_Literal) {
-        elab_literal_expr(ctx, expr as *LiteralExpr);
+        elab_literal_expr(ctx, expr as *LiteralExpr, type_hint);
     } else if (expr.kind == Expr_Array) {
-        elab_array_expr(ctx, expr as *ArrayExpr);
+        elab_array_expr(ctx, expr as *ArrayExpr, type_hint);
     } else if (expr.kind == Expr_Call) {
         elab_call_expr(ctx, expr as *CallExpr);
     } else if (expr.kind == Expr_Index) {
@@ -744,20 +752,16 @@ func elab_expr_infer2(ctx: *ElabCtx, expr: *Expr) {
     } else if (expr.kind == Expr_Sizeof) {
         elab_sizeof_expr(ctx, expr as *SizeofExpr);
     } else if (expr.kind == Expr_Unary) {
-        elab_unary_expr(ctx, expr as *UnaryExpr);
+        elab_unary_expr(ctx, expr as *UnaryExpr, type_hint);
     } else if (expr.kind == Expr_Binary) {
-        elab_binary_expr(ctx, expr as *BinaryExpr);
+        elab_binary_expr(ctx, expr as *BinaryExpr, type_hint);
     } else if (expr.kind == Expr_Ternary) {
-        elab_ternary_expr(ctx, expr as *TernaryExpr);
+        elab_ternary_expr(ctx, expr as *TernaryExpr, type_hint);
     } else if (expr.kind == Expr_Cast) {
         elab_cast_expr(ctx, expr as *CastExpr);
     } else {
         unreachable("elab_expr_infer");
     }
-}
-
-func elab_expr_infer(ctx: *ElabCtx, expr: *Expr) {
-    elab_expr_infer2(ctx, expr);
     assert(expr.type, "elab_expr_infer");
 }
 
@@ -789,7 +793,7 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *LocalStmt) {
     var type: *Type = typeExpr ? eval_type(ctx, typeExpr) : null;
     if (init) {
         if (!type) {
-            elab_expr_infer(ctx, init);
+            elab_expr_infer(ctx, init, type_hint: null);
             type = init.type;
         } else {
             elab_expr_expect(ctx, &init, type);
@@ -851,7 +855,7 @@ func elab_for_stmt(ctx: *ElabCtx, stmt: *ForStmt) {
         stmt.cond = cond;
     }
     if (step) {
-        elab_expr_infer(ctx, step);
+        elab_expr_infer(ctx, step, type_hint: null);
     }
 
     ctx.loop_depth += 1;
@@ -887,7 +891,7 @@ func elab_continue_stmt(ctx: *ElabCtx, stmt: *Stmt) {
 
 func elab_expr_stmt(ctx: *ElabCtx, stmt: *ExprStmt) {
     var expr = stmt.expr;
-    elab_expr_infer(ctx, expr);
+    elab_expr_infer(ctx, expr, type_hint: null);
 }
 
 func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
