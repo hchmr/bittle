@@ -1,6 +1,6 @@
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
-import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StructExprNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
 import { Nullish } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
@@ -225,6 +225,8 @@ class ControlFlowAnalyzer {
             return this.analyzeFieldExpr(node, state);
         } else if (node instanceof CastExprNode) {
             return this.analyzeCastExpr(node, state);
+        } else if (node instanceof StructExprNode) {
+            return this.analyzeStructExpr(node, state);
         } else {
             const unreachable: never = node;
             throw new Error(`Unexpected node type: ${unreachable}`);
@@ -321,6 +323,19 @@ class ControlFlowAnalyzer {
     private analyzeCastExpr(node: CastExprNode, state: ExecutionState): ExecutionState {
         const exprNode = node.expr;
         return this.analyzeExpr(exprNode, state);
+    }
+
+    private analyzeStructExpr(node: StructExprNode, state: ExecutionState): ExecutionState {
+        const fieldNodes = node.fields?.fieldInitNodes;
+
+        if (!fieldNodes) {
+            return state;
+        }
+
+        return fieldNodes.reduce(
+            (state, fieldNode) => this.analyzeExpr(fieldNode.value, state),
+            state,
+        );
     }
 
     //=========================================================================

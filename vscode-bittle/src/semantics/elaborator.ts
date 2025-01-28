@@ -5,7 +5,7 @@ import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
 import {
     ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode,
-    LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
+    LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructExprNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
 } from '../syntax/generated';
 import { Nullish } from '../utils';
 import { stream } from '../utils/stream';
@@ -1006,6 +1006,8 @@ export class Elaborator {
                 return this.elabFieldExpr(node);
             } else if (node instanceof CastExprNode) {
                 return this.elabCastExpr(node);
+            } else if (node instanceof StructExprNode) {
+                return this.elabStructExpr(node);
             } else {
                 const unreachable: never = node;
                 throw new Error(`Unexpected node type: ${unreachable} `);
@@ -1366,6 +1368,74 @@ export class Elaborator {
         }
 
         return castType;
+    }
+
+    private elabStructExpr(node: StructExprNode): Type {
+        const nameNode = node.name!;
+
+        const sym = this.resolveName(nameNode);
+        if (!sym) {
+            return this.elabStructExprUnknown(node);
+        }
+        if (sym.kind !== SymKind.Struct) {
+            this.reportError(nameNode, `Expected a struct name.`);
+            return this.elabStructExprUnknown(node);
+        }
+
+        if (!sym.isDefined) {
+            this.reportError(nameNode, `'${sym.name}' has incomplete type.`);
+            return this.elabStructExprUnknown(node);
+        }
+
+        return this.elabStructExprPart2(node, sym);
+    }
+
+    private elabStructExprPart2(node: StructExprNode, sym: StructSym): Type {
+        const fieldListNode = node.fields!;
+        const fieldNodes = fieldListNode.fieldInitNodes;
+
+        const seenFields = new Set<string>();
+
+        for (const fieldNode of fieldNodes) {
+            const nameNode = fieldNode.name;
+            const valueNode = fieldNode.value;
+
+            let fieldType = mkErrorType();
+            if (nameNode) {
+                const field = this.resolveStructField(sym.qualifiedName, nameNode);
+                if (!field) {
+                    this.reportError(nameNode, `Unknown field.`);
+                } else {
+                    this.recordNameResolution(field, nameNode);
+                    if (seenFields.has(field.name)) {
+                        this.reportError(nameNode, `Field is already initialized.`);
+                    }
+                    seenFields.add(field.name);
+                    fieldType = field.type;
+                }
+            }
+            if (valueNode) {
+                this.elabExpr(valueNode, fieldType);
+            }
+        }
+
+        const uninitializedFields = sym.fields.filter(field => !seenFields.has(field.name));
+        for (const field of uninitializedFields) {
+            this.reportError(node, `Field '${field.name}' is not initialized.`);
+        }
+
+        return mkStructType(sym);
+    }
+
+    private elabStructExprUnknown(node: StructExprNode): Type {
+        const fieldListNode = node.fields!;
+        for (const fieldNode of fieldListNode.fieldInitNodes) {
+            const valueNode = fieldNode.value;
+            if (valueNode) {
+                this.elabExprInfer(valueNode, { typeHint: undefined });
+            }
+        }
+        return mkErrorType();
     }
 
     //==============================================================================

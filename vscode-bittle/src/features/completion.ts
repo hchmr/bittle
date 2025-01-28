@@ -12,6 +12,7 @@ import { fromVscPosition, toVscRange } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas } from '../utils/nodeSearch';
+import { stream } from '../utils/stream';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(
@@ -40,6 +41,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         return this.autoCompleteFieldAccess(filePath, node)
+            || this.autoCompleteFieldInit(filePath, node)
             || this.autoCompleteArgumentLabel(filePath, node)
             || this.autoCompleteDefinition(filePath, node)
             || this.autoCompleteDefault(filePath, node);
@@ -93,6 +95,51 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         return results.map(toCompletionItem);
+    }
+
+    private autoCompleteFieldInit(
+        filePath: string,
+        node: SyntaxNode,
+    ): vscode.CompletionItem[] | undefined {
+        let searchText: string;
+        if (node.type === 'identifier') {
+            if (node.parent?.type !== NodeTypes.FieldInit) {
+                return;
+            }
+            searchText = node.text;
+            node = node.parent;
+        } else if (node.type === ',' || node.type === '{') {
+            searchText = '';
+        } else {
+            return;
+        }
+        if (node.parent?.type !== NodeTypes.FieldInitList) {
+            return;
+        }
+        const structExprNode = node.parent.closest(NodeTypes.StructExpr);
+        if (!structExprNode) {
+            return;
+        }
+        const structNameNode = structExprNode.childForFieldName('name');
+        if (!structNameNode) {
+            return;
+        }
+        const structSym = this.semanticsService.resolveSymbol(filePath, structNameNode);
+        if (!structSym || structSym.kind !== SymKind.Struct) {
+            return;
+        }
+
+        const usedNames = stream(structExprNode.childForFieldName('fields')!.children)
+            .filter(x => x.type === NodeTypes.FieldInit)
+            .filterMap(x => x.childForFieldName('name') ?? undefined)
+            .map(x => x.text)
+            .filter(x => x !== searchText)
+            .toSet();
+
+        const candidates = structSym.fields.filter(f => !usedNames.has(f.name));
+
+        return fuzzySearch(searchText, candidates, { key: 'name' })
+            .map(toCompletionItem);
     }
 
     private autoCompleteArgumentLabel(

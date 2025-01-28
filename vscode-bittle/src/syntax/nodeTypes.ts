@@ -56,6 +56,7 @@ export const ExprNodeTypes = {
     IndexExpr: AstNodeTypes.IndexExpr,
     FieldExpr: AstNodeTypes.FieldExpr,
     CastExpr: AstNodeTypes.CastExpr,
+    StructExpr: AstNodeTypes.StructExpr,
 } as const;
 
 export const LiteralNodeTypes = {

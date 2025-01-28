@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
-import { FuncParamSym, FuncSym, prettyCallableSym, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
+import { FuncParamSym, FuncSym, prettyCallableSym, prettyStructWithFields, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
-import { SyntaxNode } from '../syntax';
+import { Point, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, NodeTypes } from '../syntax/nodeTypes';
 import { fromVscPosition, Nullish } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas, nodeEndsAt, nodeStartsAt } from '../utils/nodeSearch';
+import { stream } from '../utils/stream';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(
@@ -30,17 +31,29 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return;
         }
 
-        let argListNode: SyntaxNode | Nullish = node.closest(NodeTypes.CallArgList);
+        let listNode: SyntaxNode | Nullish = node.closest([NodeTypes.CallArgList, NodeTypes.FieldInitList]);
         while (
-            argListNode
-            && (nodeStartsAt(position, argListNode) || nodeEndsAt(position, argListNode))
+            listNode
+            && (nodeStartsAt(position, listNode) || nodeEndsAt(position, listNode))
         ) {
-            argListNode = argListNode.parent?.closest(NodeTypes.CallArgList);
+            listNode = listNode.parent?.closest([NodeTypes.CallArgList, NodeTypes.FieldInitList]);
         }
-        if (!argListNode) {
+        if (!listNode) {
             return;
         }
 
+        if (listNode.type === NodeTypes.CallArgList) {
+            return this.provideSignatureHelpForCallArgList(filePath, position, listNode);
+        } else {
+            return this.provideSignatureHelpForFieldInitList(filePath, position, listNode);
+        }
+    }
+
+    private provideSignatureHelpForCallArgList(
+        filePath: string,
+        position: Point,
+        argListNode: SyntaxNode,
+    ) {
         const callNode = argListNode.closest(NodeTypes.CallExpr);
         if (!callNode) {
             return;
@@ -53,6 +66,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         if (!calleeNameNode) {
             return;
         }
+
         const argNodes = callNode.childForFieldName('args')!.children;
         const argIndex = countPrecedingCommas(argNodes, position);
 
@@ -67,6 +81,53 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             calleeSym.kind === SymKind.Func && calleeSym.isVariadic,
             argIndex,
         );
+    }
+
+    private provideSignatureHelpForFieldInitList(
+        filePath: string,
+        position: Point,
+        fieldInitListNode: SyntaxNode,
+    ) {
+        const structNode = fieldInitListNode.closest(NodeTypes.StructExpr);
+        if (!structNode) {
+            return;
+        }
+
+        const structNameNode = structNode.childForFieldName('name');
+        if (!structNameNode) {
+            return;
+        }
+
+        const structSym = this.semanticsService.resolveSymbol(filePath, structNameNode);
+        if (!structSym || structSym.kind !== SymKind.Struct) {
+            return;
+        }
+
+        const fieldListNodes = structNode.childForFieldName('fields')!.children;
+        const fieldInitNodes = fieldListNodes.filter((node) => node.type === NodeTypes.FieldInit);
+        const fieldIndex = countPrecedingCommas(fieldListNodes, position);
+        const fieldInitNode = fieldInitNodes[fieldIndex];
+        const fieldName
+            = fieldInitNode?.childForFieldName('name')?.text
+            ?? nextUninitializedFieldName(structSym, fieldListNodes);
+        if (!fieldName) {
+            return;
+        }
+
+        return createSignatureHelpForStruct(
+            structSym,
+            structSym.fields,
+            fieldName,
+        );
+
+        function nextUninitializedFieldName(structSym: StructSym, fieldInitNodes: SyntaxNode[]): string | undefined {
+            const usedNames = stream(fieldInitNodes)
+                .filterMap((node) => node.childForFieldName('name')?.text)
+                .toSet();
+            return structSym.fields
+                .map(x => x.name)
+                .find(x => !usedNames.has(x));
+        }
     }
 }
 
@@ -91,6 +152,22 @@ function createSignatureHelp(
     if (isVariadic) {
         signatureHelp.activeParameter = Math.min(paramIndex, params.length);
     }
+
+    return signatureHelp;
+}
+
+function createSignatureHelpForStruct(
+    sym: StructSym,
+    fields: StructFieldSym[],
+    fieldIndex: string,
+): vscode.SignatureHelp {
+    const signature = new vscode.SignatureInformation(prettyStructWithFields(sym));
+    signature.parameters = fields.map((param) => new vscode.ParameterInformation(param.name));
+
+    const signatureHelp = new vscode.SignatureHelp();
+    signatureHelp.signatures = [signature];
+    signatureHelp.activeSignature = 0;
+    signatureHelp.activeParameter = fields.findIndex((param) => param.name === fieldIndex);
 
     return signatureHelp;
 }

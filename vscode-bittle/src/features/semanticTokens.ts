@@ -32,6 +32,9 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
             } else if (node.type === ExprNodeTypes.CallExpr) {
                 const nameNode = node.childForFieldName('callee')?.firstChild;
                 makeToken(builder, nameNode, 'function');
+            } else if (node.type === ExprNodeTypes.StructExpr) {
+                const nameNode = node.childForFieldName('name');
+                makeToken(builder, nameNode, 'type');
             }
         }
 

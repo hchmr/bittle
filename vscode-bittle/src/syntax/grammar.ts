@@ -236,6 +236,7 @@ export const grammar = createGrammar({
         $.LiteralExpr,
         $.ArrayExpr,
         $.CallExpr,
+        $.StructExpr,
         $.BinaryExpr,
         $.TernaryExpr,
         $.UnaryExpr,
@@ -322,6 +323,23 @@ export const grammar = createGrammar({
         label('expr', $.Expr),
         'as',
         label('type', $.Type),
+    ),
+
+    StructExpr: $ => seq(
+        label('name', 'identifier'),
+        label('fields', $.FieldInitList),
+    ),
+
+    FieldInitList: $ => seq(
+        '{',
+        commaSep($.FieldInit),
+        '}',
+    ),
+
+    FieldInit: $ => seq(
+        label('name', 'identifier'),
+        ':',
+        label('value', $.Expr),
     ),
 
     Literal: $ => choice(

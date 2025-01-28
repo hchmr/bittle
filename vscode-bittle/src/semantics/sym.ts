@@ -145,12 +145,17 @@ export function prettyCallableSym(sym: FuncSym | StructSym): string {
         const returnType = prettyType(sym.returnType);
         return `${sym.name}(${params}${dots}): ${returnType}`;
     } else if (sym.kind === SymKind.Struct) {
-        const params = sym.fields.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ') || '';
+        const params = sym.fields.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ');
         return `${sym.name}(${params})`;
     } else {
         const unreachable: never = sym;
         return unreachable;
     }
+}
+
+export function prettyStructWithFields(sym: StructSym): string {
+    const fields = sym.fields.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ');
+    return `${sym.name} { ${fields} }`;
 }
 
 function prettyBase(sym: StructSym) {

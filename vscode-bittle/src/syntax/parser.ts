@@ -733,6 +733,15 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.GroupedExpr);
     }
 
+    // either 'identifier' or 'identifier { struct_fields }
+    identExpr() {
+        if (this.match('identifier', '{')) {
+            this.structExpr();
+        } else {
+            this.nameExpr();
+        }
+    }
+
     nameExpr() {
         this.beginNode(CompositeNodeTypes.NameExpr);
         this.bump('identifier');
@@ -855,6 +864,35 @@ export class Parser extends ParserBase {
         this.type();
         this.finishField('type');
         this.finishNode(CompositeNodeTypes.CastExpr);
+    }
+
+    structExpr() {
+        this.beginNode(CompositeNodeTypes.StructExpr);
+        this.beginField('name');
+        this.expect('identifier');
+        this.finishField('name');
+        this.beginField('fields');
+        this.fieldInitList();
+        this.finishField('fields');
+        this.finishNode(CompositeNodeTypes.StructExpr);
+    }
+
+    fieldInitList() {
+        this.beginNode(CompositeNodeTypes.FieldInitList);
+        this.delimited('{', '}', ',', () => this.fieldInit());
+        this.finishNode(CompositeNodeTypes.FieldInitList); ;
+    }
+
+    fieldInit() {
+        this.beginNode(CompositeNodeTypes.FieldInit);
+        this.beginField('name');
+        this.expect('identifier');
+        this.finishField('name');
+        this.expect(':');
+        this.beginField('value');
+        this.expr();
+        this.finishField('value');
+        this.finishNode(CompositeNodeTypes.FieldInit);
     }
 
     //=========================================================================
@@ -1018,7 +1056,7 @@ const nudTable: Record<TokenKind, Nud> = (function () {
     return createTable(
         mkRow('(', parser => parser.groupExpr()),
         mkRow('[', parser => parser.arrayExpr()),
-        mkRow('identifier', parser => parser.nameExpr()),
+        mkRow('identifier', parser => parser.identExpr()),
         ...(['number_literal', 'string_literal', 'char_literal', 'null', 'true', 'false'] as const)
             .map(kind => mkRow(kind, parser => parser.literalExpr())),
         ...(['-', '~', '!', '&', '*'] as const)
