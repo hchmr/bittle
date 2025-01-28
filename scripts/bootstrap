@@ -155,6 +155,8 @@ stage "fix(compiler): Allow more than 8 field arguments in struct initializer"
 
 stage "fix(compiler): Fix very bad miscompilation of array indexing"
 
+stage "feat(compiler): Add struct field initialization shorthand"
+
 if [ "$bootstrap_next" = "1" ]; then
     stage "master"
 fi
