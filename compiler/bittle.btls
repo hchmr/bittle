@@ -370,6 +370,7 @@ enum ExprKind {
     Expr_Binary,
     Expr_Ternary,
     Expr_Cast,
+    Expr_Struct,
 }
 
 struct Expr {
@@ -438,6 +439,17 @@ struct TernaryExpr: Expr {
 struct CastExpr: Expr {
     expr: *Expr,
     type_expr: *TypeExpr,
+}
+
+struct FieldInitializer {
+    pos: Pos,
+    name: *Char,
+    expr: *Expr,
+}
+
+struct StructExpr: Expr {
+    name: *Char,
+    fields: *List, // List<FieldInit>
 }
 
 // Stmt

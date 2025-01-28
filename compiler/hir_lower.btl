@@ -405,6 +405,18 @@ func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
     return hir_mk_cast_expr(subexpr, target_type);
 }
 
+// Evaluate and discard the initializers
+func lower_struct_expr(ctx: *Context, expr: *StructExpr): *HirExpr {
+    var sequence = mk_skip_stmt(&expr.pos);
+    var n_initializers = list_len(expr.fields);
+    for (var i = 0; i < n_initializers; i += 1) {
+        var field: *FieldInitializer = list_get(expr.fields, i);
+        var hir_expr = lower_expr(ctx, field.expr);
+        sequence = hir_mk_seq_expr(sequence, hir_expr);
+    }
+    return sequence;
+}
+
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
     if (expr.kind == Expr_Ident) {
         return lower_ident_expr(ctx, expr as *IdentExpr);
@@ -428,6 +440,8 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
         return lower_ternary_expr(ctx, expr as *TernaryExpr);
     } else if (expr.kind == Expr_Cast) {
         return lower_cast_expr(ctx, expr as *CastExpr);
+    } else if (expr.kind == Expr_Struct) {
+        return lower_struct_expr(ctx, expr as *StructExpr);
     } else {
         unreachable("lower_expr");
     }
@@ -449,10 +463,8 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
                 (*t2).next = null
         */
 
-        var resolved_callee = (ast_src as *CallExpr).resolved_callee;
+        var fields = ((ast_src as *CallExpr).resolved_callee as *StructSym).fields;
         var args = (ast_src as *CallExpr).args;
-        var structSym = resolved_callee;
-        var fields = (structSym as *StructSym).fields;
 
         var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
 
@@ -469,6 +481,43 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
             var temp_deref = hir_mk_deref_expr(temp, pos);
             var field_access = hir_mk_member_expr(temp_deref, field.name, i, field.type);
             var assignment = lower_assign_expr(ctx, field_access, ast_arg.expr, &ast_arg.expr.pos);
+            body = hir_mk_seq_expr(body, assignment);
+        }
+
+        return hir_mk_seq_expr(temp_init, body);
+    } else if (ast_src.kind == Expr_Struct) {
+        /*
+            Desugar
+                x = Pair { value: 1, y: List { value: 2, next: null } }
+            to
+                temp t1: *Pair;
+                t1 = &x;
+                (*t1).value = 1;
+                let t2: *List = &t1.next;
+                (*t2).value = 2;
+                (*t2).next = null
+        */
+
+        var struct_type = ast_src.type as *StructType;
+        var initializers = (ast_src as *StructExpr).fields;
+
+        var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
+
+        var temp_var = mk_temp_var(ctx, addr_dst.type);
+        var temp = hir_mk_temp_expr(temp_var, pos);
+        var temp_init = hir_mk_assign_expr(temp, addr_dst);
+
+        var body = mk_skip_stmt(pos);
+
+        var n_initializers = list_len(initializers);
+        for (var i = 0; i < n_initializers; i += 1) {
+            var initializer: *FieldInitializer = list_get(initializers, i);
+            var field_index = find_struct_field(struct_type.sym, initializer.name);
+            var field: *StructField = list_get(struct_type.sym.fields, field_index);
+
+            var temp_deref = hir_mk_deref_expr(temp, pos);
+            var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
+            var assignment = lower_assign_expr(ctx, field_access, initializer.expr, &initializer.expr.pos);
             body = hir_mk_seq_expr(body, assignment);
         }
 

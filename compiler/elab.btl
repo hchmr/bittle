@@ -737,6 +737,57 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     expr.type = target_type;
 }
 
+func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
+    var sym = lookup(ctx, expr.name);
+    if (!sym) {
+        die_at(&expr.pos, "Unknown struct type");
+    }
+    if (sym.kind != Sym_Struct) {
+        die_at(&expr.pos, "Expected a struct type");
+    }
+    var struct_sym = sym as *StructSym;
+    if (!struct_sym.is_defined) {
+        die_at(&expr.pos, "Struct has incomplete type");
+    }
+
+    var fields = struct_sym.fields;
+    var n_fields = list_len(fields);
+
+    var initializers = expr.fields;
+    var n_initializers = list_len(initializers);
+
+    var is_initialized: *Bool = calloc(n_fields, sizeof(*Bool));
+
+    for (var i = 0; i < n_initializers; i += 1) {
+        var initializer: *FieldInitializer = list_get(initializers, i);
+        var field_name = initializer.name;
+        var field_index = find_struct_field(struct_sym, field_name);
+        if (field_index == -1) {
+            die_at(&initializer.pos, "Unknown field");
+        }
+        var field: *StructField = list_get(fields, field_index);
+
+        if (is_initialized[field_index]) {
+            die_at(&initializer.pos, "Field is already initialized");
+        }
+        is_initialized[field_index] = true;
+        elab_expr_expect(ctx, &initializer.expr, field.type);
+    }
+
+    for (var i = 0; i < n_fields; i += 1) {
+        if (!is_initialized[i]) {
+            var field: *StructField = list_get(fields, i);
+            error_at(&expr.pos);
+            fprintf(stderr, "Field '%s' is not initialized.\n", field.name);
+            exit(1);
+        }
+    }
+
+    free(is_initialized);
+
+    expr.type = mk_struct_type(struct_sym);
+}
+
 func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
     if (expr.kind == Expr_Ident) {
         elab_ident_expr(ctx, expr as *IdentExpr);
@@ -760,6 +811,8 @@ func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
         elab_ternary_expr(ctx, expr as *TernaryExpr, type_hint);
     } else if (expr.kind == Expr_Cast) {
         elab_cast_expr(ctx, expr as *CastExpr);
+    } else if (expr.kind == Expr_Struct) {
+        elab_struct_expr(ctx, expr as *StructExpr, type_hint);
     } else {
         unreachable("elab_expr_infer");
     }

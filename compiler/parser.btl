@@ -360,13 +360,50 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
     return result;
 }
 
+func p_field_initializer(self: *Parser): *FieldInitializer {
+    var pos = self.tok.pos;
+    var name = p_ident(self);
+    expect(self, Tok_Colon);
+    var expr = p_expr(self, 0);
+
+    var result: *FieldInitializer = calloc(1, sizeof(FieldInitializer));
+    *result = FieldInitializer(pos, name, expr);
+    return result;
+}
+
+func p_struct_expr(self: *Parser): *Expr {
+    var pos = self.tok.pos;
+    var name = p_ident(self);
+    var field_initializers: *List = list_new();
+    expect(self, Tok_LBrace);
+    while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+        var field_initializer = p_field_initializer(self);
+        list_push(field_initializers, field_initializer);
+        if (!at(self, Tok_RBrace)) {
+            expect(self, Tok_Comma);
+        }
+    }
+
+    var result: *StructExpr = calloc(1, sizeof(StructExpr));
+    *result = StructExpr(Expr_Struct, pos, type: null, name, field_initializers);
+    return result;
+}
+
+func p_ident_expr(self: *Parser): *Expr {
+    if (next_is(self, Tok_LBrace)) {
+        return p_struct_expr(self);
+    } else {
+        return p_name_expr(self);
+    }
+}
+
 func p_expr(self: *Parser, max_prec: Int32): *Expr {
     var lhs: *Expr;
 
     if (at(self, Tok_LParen)) {
         lhs = p_grouped_expr(self);
     } else if (at(self, Tok_Ident)) {
-        lhs = p_name_expr(self);
+        lhs = p_ident_expr(self);
     } else if (at(self, Tok_Null) || at(self, Tok_True) || at(self, Tok_False) || at(self, Tok_Int) || at(self, Tok_Char) || at(self, Tok_String)) {
         lhs = p_literal_expr(self);
     } else if (at(self, Tok_LBracket)) {

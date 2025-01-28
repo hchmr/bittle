@@ -33,7 +33,7 @@ func area(shape: *Shape): Int {
 
 func main() {
     var rect = Rectangle(Shape_Rectangle, 10, 20);
-    var circle = Circle(Shape_Circle, 5);
+    var circle = Circle { kind: Shape_Circle, radius: 7 };
 
     printf("Rectangle area: %d\n", area(&rect));
     printf("Circle area: %d\n", area(&circle));
