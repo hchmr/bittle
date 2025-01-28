@@ -882,7 +882,7 @@ export class Elaborator {
 
         const declaredType = typeNode ? this.typeEval(typeNode) : undefined;
 
-        const inferedType = initNode ? this.elabExprInfer(initNode) : undefined;
+        const inferedType = initNode ? this.elabExprInfer(initNode, { typeHint: declaredType }) : undefined;
 
         if (declaredType && inferedType) {
             this.checkType(initNode!, declaredType);
@@ -927,7 +927,7 @@ export class Elaborator {
         this.enterScope(node);
         this.elabStmt(initNode);
         this.elabExprBool(condNode);
-        this.elabExprInfer(stepNode);
+        this.elabExprInfer(stepNode, { typeHint: undefined });
         this.elabStmtWithScope(bodyNode);
         this.exitScope();
     }
@@ -945,7 +945,7 @@ export class Elaborator {
 
     private elabExprStmt(node: ExprStmtNode) {
         const exprNode = node.expr;
-        this.elabExprInfer(exprNode);
+        this.elabExprInfer(exprNode, { typeHint: undefined });
     }
 
     //==============================================================================
@@ -955,7 +955,7 @@ export class Elaborator {
         if (!node)
             return mkErrorType();
 
-        this.elabExprInfer(node);
+        this.elabExprInfer(node, { typeHint: expectedType });
         this.checkType(node, expectedType);
     }
 
@@ -964,44 +964,42 @@ export class Elaborator {
         return mkBoolType();
     }
 
-    private elabExprInt(node: ExprNode | Nullish, expectedType?: Type): Type {
+    private elabExprInferInt(node: ExprNode | Nullish, { typeHint }: { typeHint: Type | undefined }): Type {
         if (!node)
             return mkErrorType();
 
-        assert(!expectedType || expectedType.kind === TypeKind.Int);
-
-        const type = this.elabExprInfer(node);
+        const type = this.elabExprInfer(node, { typeHint });
         if (type.kind !== TypeKind.Int) {
             if (type.kind !== TypeKind.Err) {
                 this.reportError(node, `Expected integer expression.`);
             }
-            return expectedType ?? mkErrorType();
+            return typeHint ?? mkErrorType();
         } else {
             return type;
         }
     }
 
-    private elabExprInfer(node: ExprNode | Nullish): Type {
+    private elabExprInfer(node: ExprNode | Nullish, { typeHint }: { typeHint: Type | undefined }): Type {
         if (!node)
             return mkErrorType();
 
         return this.trackTyping(node, () => {
             if (node instanceof GroupedExprNode) {
-                return this.elabGroupedExpr(node);
+                return this.elabGroupedExpr(node, typeHint);
             } else if (node instanceof NameExprNode) {
                 return this.elabNameExpr(node);
             } else if (node instanceof SizeofExprNode) {
                 return this.elabSizeofExpr(node);
             } else if (node instanceof LiteralExprNode) {
-                return this.elabLiteralExpr(node);
+                return this.elabLiteralExpr(node, typeHint);
             } else if (node instanceof ArrayExprNode) {
-                return this.elabArrayExpr(node);
+                return this.elabArrayExpr(node, typeHint);
             } else if (node instanceof BinaryExprNode) {
-                return this.elabBinaryExpr(node);
+                return this.elabBinaryExpr(node, typeHint);
             } else if (node instanceof TernaryExprNode) {
-                return this.elabTernaryExpr(node);
+                return this.elabTernaryExpr(node, typeHint);
             } else if (node instanceof UnaryExprNode) {
-                return this.elabUnaryExpr(node);
+                return this.elabUnaryExpr(node, typeHint);
             } else if (node instanceof CallExprNode) {
                 return this.elabCallExpr(node);
             } else if (node instanceof IndexExprNode) {
@@ -1017,8 +1015,8 @@ export class Elaborator {
         });
     }
 
-    private elabGroupedExpr(node: GroupedExprNode): Type {
-        return this.elabExprInfer(node.exprNode);
+    private elabGroupedExpr(node: GroupedExprNode, typeHint: Type | undefined): Type {
+        return this.elabExprInfer(node.exprNode, { typeHint });
     }
 
     private elabNameExpr(nameExpr: NameExprNode): Type {
@@ -1055,12 +1053,16 @@ export class Elaborator {
         return mkIntType(64);
     }
 
-    private elabLiteralExpr(node: LiteralExprNode): Type {
+    private elabLiteralExpr(node: LiteralExprNode, typeHint: Type | undefined): Type {
         const literal = node.literalNode!;
         if (literal instanceof BoolLiteralNode) {
             return mkBoolType();
         } else if (literal instanceof IntLiteralNode) {
-            return mkIntType(64);
+            if (typeHint?.kind === TypeKind.Int) {
+                return typeHint;
+            } else {
+                return mkIntType(64);
+            }
         } else if (literal instanceof CharLiteralNode) {
             return mkIntType(8);
         } else if (literal instanceof StringLiteralNode) {
@@ -1073,14 +1075,16 @@ export class Elaborator {
         }
     }
 
-    private elabArrayExpr(node: ArrayExprNode): Type {
+    private elabArrayExpr(node: ArrayExprNode, typeHint: Type | undefined): Type {
         const elemNodes = node.exprNodes;
         if (elemNodes.length === 0) {
             this.reportError(node, `Empty array literal.`);
             return mkErrorType();
         }
 
-        const elemType = this.elabExprInfer(elemNodes[0]);
+        const elemTypeHint = typeHint?.kind === TypeKind.Arr ? typeHint.elemType : undefined;
+
+        const elemType = this.elabExprInfer(elemNodes[0], { typeHint: elemTypeHint });
         for (let i = 1; i < elemNodes.length; i++) {
             this.elabExpr(elemNodes[i], elemType);
         }
@@ -1088,21 +1092,25 @@ export class Elaborator {
         return mkArrayType(elemType, elemNodes.length);
     }
 
-    private elabUnaryExpr(node: UnaryExprNode): Type {
+    private elabUnaryExpr(node: UnaryExprNode, typeHint: Type | undefined): Type {
         const op = node.op!.text;
         const operandNode = node.right;
         switch (op) {
             case '!':
                 return this.elabExprBool(operandNode);
             case '-':
-                return this.elabExprInt(operandNode);
+                return this.elabExprInferInt(operandNode, { typeHint });
             case '~':
-                return this.elabExprInt(operandNode);
-            case '&':
-                return mkPointerType(this.elabExprInfer(operandNode));
+                return this.elabExprInferInt(operandNode, { typeHint });
+            case '&': {
+                const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint.pointeeType : undefined;
+                const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
+                return mkPointerType(operandType);
+            }
             case '*':
             {
-                const operandType = this.elabExprInfer(operandNode);
+                const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
+                const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
                 if (operandType?.kind !== TypeKind.Ptr) {
                     if (operandNode && operandType.kind !== TypeKind.Err) {
                         this.reportError(operandNode, `Expected pointer type.`);
@@ -1116,7 +1124,7 @@ export class Elaborator {
         }
     }
 
-    private elabBinaryExpr(node: BinaryExprNode): Type {
+    private elabBinaryExpr(node: BinaryExprNode, typeHint: Type | undefined): Type {
         const op = node.op!.text;
         switch (op) {
             case '=':
@@ -1138,8 +1146,8 @@ export class Elaborator {
                     this.reportError(leftNode ?? node, `L-value expected.`);
                 }
                 const leftType = op !== '='
-                    ? this.elabExprInt(leftNode)
-                    : this.elabExprInfer(leftNode);
+                    ? this.elabExprInferInt(leftNode, { typeHint })
+                    : this.elabExprInfer(leftNode, { typeHint: undefined });
 
                 if (rightNode) {
                     this.elabExpr(rightNode, leftType);
@@ -1159,8 +1167,8 @@ export class Elaborator {
             {
                 const leftNode = node.left;
                 const rightNode = node.right;
-                this.elabExprInt(leftNode);
-                this.elabExprInt(rightNode);
+                const leftType = this.elabExprInferInt(leftNode, { typeHint });
+                const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
                 return this.unifyTypes(node, leftNode, rightNode);
             }
             case '==':
@@ -1172,8 +1180,8 @@ export class Elaborator {
             {
                 const leftNode = node.left;
                 const rightNode = node.right;
-                this.elabExprInfer(leftNode);
-                this.elabExprInfer(rightNode);
+                const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
+                const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
                 const cmpType = this.unifyTypes(node, leftNode, rightNode);
                 if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
                     this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
@@ -1194,12 +1202,12 @@ export class Elaborator {
         }
     }
 
-    private elabTernaryExpr(node: TernaryExprNode): Type {
+    private elabTernaryExpr(node: TernaryExprNode, typeHint: Type | undefined): Type {
         this.elabExprBool(node.cond);
         const thenNode = node.then;
         const elseNode = node.else;
-        this.elabExprInfer(thenNode);
-        this.elabExprInfer(elseNode);
+        const thenType = this.elabExprInfer(thenNode, { typeHint });
+        const _elseType = this.elabExprInfer(elseNode, { typeHint: thenType });
         return this.unifyTypes(node, thenNode, elseNode);
     }
 
@@ -1213,7 +1221,7 @@ export class Elaborator {
         }
         if (!(calleeNode instanceof NameExprNode)) {
             this.reportError(calleeNode, `Function or struct name expected.`);
-            this.elabExprInfer(calleeNode);
+            this.elabExprInfer(calleeNode, { typeHint: undefined });
             return this.elabCallExprUnknown(node);
         }
 
@@ -1234,7 +1242,7 @@ export class Elaborator {
             return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym));
         } else {
             this.reportError(calleeNode, `'${calleeName}' is not a function or struct.`);
-            this.elabExprInfer(calleeNode);
+            this.elabExprInfer(calleeNode, { typeHint: undefined });
             return this.elabCallExprUnknown(node);
         }
     }
@@ -1272,7 +1280,7 @@ export class Elaborator {
             } else {
                 let argType = mkErrorType();
                 if (argValueNode) {
-                    argType = this.elabExprInfer(argValueNode);
+                    argType = this.elabExprInfer(argValueNode, { typeHint: undefined });
                 }
                 if (isVariadic) {
                     if (argLabelNode) {
@@ -1293,7 +1301,7 @@ export class Elaborator {
 
         for (const argNode of argListNode.callArgNodes.filter(x => x.value)) {
             const valueNode = argNode.value!;
-            this.elabExprInfer(valueNode);
+            this.elabExprInfer(valueNode, { typeHint: undefined });
         }
         return mkErrorType();
     }
@@ -1302,8 +1310,8 @@ export class Elaborator {
         const indexeeNode = node.indexee;
         const indexNode = node.index;
 
-        const indexeeType = this.elabExprInfer(indexeeNode);
-        const _indexType = this.elabExprInt(indexNode);
+        const indexeeType = this.elabExprInfer(indexeeNode, { typeHint: undefined });
+        const _indexType = this.elabExprInferInt(indexNode, { typeHint: undefined });
 
         if (indexeeType.kind !== TypeKind.Arr && indexeeType.kind !== TypeKind.Ptr) {
             if (indexeeType.kind !== TypeKind.Err) {
@@ -1321,7 +1329,7 @@ export class Elaborator {
         const leftNode = node.left;
         const nameNode = node.name;
 
-        let leftType = this.elabExprInfer(leftNode);
+        let leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
         if (leftType.kind === TypeKind.Ptr) {
             leftType = leftType.pointeeType;
         }
@@ -1349,7 +1357,7 @@ export class Elaborator {
         const exprNode = node.expr;
 
         const castType = this.typeEval(typeNode);
-        const exprType = this.elabExprInfer(exprNode);
+        const exprType = this.elabExprInfer(exprNode, { typeHint: undefined });
 
         if (!typeConvertible(exprType, castType)) {
             this.reportError(node, `Invalid cast type.`);
