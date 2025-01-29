@@ -28,7 +28,7 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
     if (scope == null || max_depth == 0) {
         return -1;
     }
-    for (var i = 0; i < list_len(scope.entries); i += 1) {
+    for (var i = list_len(scope.entries) - 1; i >= 0; i -= 1) {
         var entry: *ScopeEntry = list_get(scope.entries, i);
         if (str_eq(entry.name, name)) {
             return entry.sym_index;
@@ -207,7 +207,8 @@ func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_defin
 
 func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym {
     var existing = try_get_existing(ctx, name);
-    if (existing) {
+    var is_conflicting_redefinition = existing && existing.kind != Sym_Local;
+    if (is_conflicting_redefinition) {
         die_at(pos, "Symbol is already defined");
     }
 
