@@ -451,13 +451,11 @@ export class Elaborator {
         }
 
         const existing = this.lookupExistingSymbol(nameNode.text);
-        if (existing) {
-            if (existing.kind !== SymKind.Local) {
-                this.reportError(nameNode, `Another symbol with the same name already exists.`);
-            } else {
-                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
-            }
+        const isConflictingRedefinition = existing && existing.kind !== SymKind.Local;
+        if (isConflictingRedefinition) {
+            this.reportError(nameNode, `Another symbol with the same name already exists.`);
         }
+
         const sym: LocalSym = {
             kind: SymKind.Local,
             name: nameNode.text,
@@ -466,7 +464,7 @@ export class Elaborator {
             type,
         };
 
-        if (!existing) {
+        if (!isConflictingRedefinition) {
             this.addSym(sym);
         }
         return sym;
