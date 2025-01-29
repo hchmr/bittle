@@ -395,7 +395,7 @@ struct ArrayExpr: Expr {
 struct CallExpr: Expr {
     callee: *Expr,
     args: *List, // List<CallArg>
-    resolved_callee: *Sym,
+    resolved_callee: *FuncSym,
 }
 
 struct CallArg {

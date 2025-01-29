@@ -343,8 +343,6 @@ func lower_array_expr(ctx: *Context, expr: *ArrayExpr): *HirExpr {
 }
 
 func lower_call_expr(ctx: *Context, expr: *CallExpr): *HirExpr {
-    assert(expr.resolved_callee.kind == Sym_Func, "lower_call_expr: callee should be a function");
-    var resolved_callee = expr.resolved_callee as *FuncSym;
     var ast_args = expr.args;
 
     var hir_args = list_new();
@@ -353,7 +351,7 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr): *HirExpr {
         var hir_arg = lower_expr(ctx, ast_arg.expr);
         list_push(hir_args, hir_arg);
     }
-    return hir_mk_call_expr(resolved_callee, hir_args, &expr.pos);
+    return hir_mk_call_expr(expr.resolved_callee, hir_args, &expr.pos);
 }
 
 func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
@@ -552,42 +550,7 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
 func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
     var type = dst.type;
 
-    if (ast_src.kind == Expr_Call && (ast_src as *CallExpr).resolved_callee.kind == Sym_Struct) {
-        /*
-            Desugar
-                x = Pair(1, List(2, null))
-            to
-                temp t1: *Pair;
-                t1 = &x;
-                (*t1).value = 1;
-                let t2: *List = &t1.next;
-                (*t2).value = 2;
-                (*t2).next = null
-        */
-
-        var fields = ((ast_src as *CallExpr).resolved_callee as *StructSym).fields;
-        var args = (ast_src as *CallExpr).args;
-
-        var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
-
-        var temp_var = mk_temp_var(ctx, addr_dst.type);
-        var temp = hir_mk_temp_expr(temp_var, pos);
-        var temp_init = hir_mk_assign_expr(temp, addr_dst);
-
-        var body = mk_skip_stmt(pos);
-
-        for (var i = 0; i < list_len(args); i += 1) {
-            var ast_arg: *CallArg = list_get(args, i);
-            var field: *StructField = list_get(fields, i);
-
-            var temp_deref = hir_mk_deref_expr(temp, pos);
-            var field_access = hir_mk_member_expr(temp_deref, field.name, i, field.type);
-            var assignment = lower_assign_expr(ctx, field_access, ast_arg.expr, &ast_arg.expr.pos);
-            body = hir_mk_seq_expr(body, assignment);
-        }
-
-        return hir_mk_seq_expr(temp_init, body);
-    } else if (ast_src.kind == Expr_Struct) {
+    if (ast_src.kind == Expr_Struct) {
         /*
             Desugar
                 x = Pair { value: 1, y: List { value: 2, next: null } }

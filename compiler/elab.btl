@@ -485,21 +485,28 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
     expr.type = mk_array_type(elem_type, elem_count);
 }
 
-func elab_call_expr_part2(
-    ctx: *ElabCtx,
-    sym: *Sym,
-    expr: *Expr,
-    params: *List, // List<FuncParam>
-    args: *List, // List<CallArg>
-    is_variadic: Bool,
-    return_type: *Type
-) {
-    (expr as *CallExpr).resolved_callee = sym;
 
-    var param_count = list_len(params);
+
+func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
+    var callee = expr.callee;
+    var args = expr.args;
+
+    if (callee.kind != Expr_Ident) {
+        die_at(&callee.pos, "Expected function name");
+    }
+    var sym = lookup(ctx, (callee as *IdentExpr).name);
+    if (!sym) {
+        die_at(&callee.pos, "Unknown function");
+    }
+    if (sym.kind != Sym_Func) {
+        die_at(&callee.pos, "Expected a function");
+    }
+    var func_sym = sym as *FuncSym;
+
+    var param_count = list_len(func_sym.params);
     var arg_count = list_len(args);
 
-    if (sym.kind != Sym_Struct && arg_count > MAX_PARAMS) {
+    if (arg_count > MAX_PARAMS) {
         die_at(&expr.pos, "Too many arguments");
     }
     if (arg_count < param_count) {
@@ -507,14 +514,14 @@ func elab_call_expr_part2(
         fprintf(stderr, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
         exit(1);
     }
-    if (!is_variadic && arg_count > param_count) {
+    if (!func_sym.is_variadic && arg_count > param_count) {
         error_at(&expr.pos);
         fprintf(stderr, "Too many arguments provided (%d > %d).\n", arg_count, param_count);
         exit(1);
     }
     var i = 0;
     for (; i < param_count; i += 1) {
-        var param: *FuncParam = list_get(params, i);
+        var param: *FuncParam = list_get(func_sym.params, i);
         var arg: *CallArg = list_get(args, i);
         if (arg.label && !str_eq(arg.label, param.name)) {
             die_at(&arg.expr.pos, "Argument label does not match parameter name");
@@ -528,49 +535,9 @@ func elab_call_expr_part2(
             die_at(&expr.pos, "Variadic argument must be scalar.");
         }
     }
-    expr.type = return_type;
-}
 
-func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
-    var callee = expr.callee;
-    var args = expr.args;
-
-    if (callee.kind != Expr_Ident) {
-        die_at(&callee.pos, "Expected function name");
-    }
-    var sym = lookup(ctx, (callee as *IdentExpr).name);
-    if (!sym) {
-        die_at(&callee.pos, "Unknown function");
-    }
-    if (sym.kind == Sym_Func) {
-        var params = (sym as *FuncSym).params;
-        var return_type = (sym as *FuncSym).return_type;
-        var is_variadic = (sym as *FuncSym).is_variadic;
-        elab_call_expr_part2(
-            ctx,
-            sym,
-            expr,
-            params,
-            args,
-            is_variadic,
-            return_type
-        );
-    } else if (sym.kind == Sym_Struct) {
-        var sym = sym as *StructSym;
-        var fields = sym.fields;
-        var return_type = mk_struct_type(sym);
-        elab_call_expr_part2(
-            ctx,
-            sym,
-            expr,
-            fields, // StructField has the same layout as FuncParam
-            args,
-            false,
-            return_type
-        );
-    } else {
-        die_at(&callee.pos, "Expected a function");
-    }
+    expr.resolved_callee = func_sym;
+    expr.type = func_sym.return_type;
 }
 
 func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
