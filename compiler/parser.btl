@@ -362,8 +362,17 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
 
 func p_field_initializer(self: *Parser): *FieldInitializer {
     var pos = self.tok.pos;
-    var name = p_ident(self);
-    expect(self, Tok_Colon);
+
+    if (!at(self, Tok_Ident)) {
+        die_at(&self.tok.pos, "Field name expected.");
+    }
+    var name = self.tok.lexeme;
+
+    if (next_is(self, Tok_Colon)) {
+        expect(self, Tok_Ident);
+        expect(self, Tok_Colon);
+    }
+
     var expr = p_expr(self, 0);
 
     var result: *FieldInitializer = calloc(1, sizeof(FieldInitializer));
