@@ -1220,7 +1220,7 @@ export class Elaborator {
             return this.elabCallExprUnknown(node);
         }
         if (!(calleeNode instanceof NameExprNode)) {
-            this.reportError(calleeNode, `Function or struct name expected.`);
+            this.reportError(calleeNode, `Function name expected.`);
             this.elabExprInfer(calleeNode, { typeHint: undefined });
             return this.elabCallExprUnknown(node);
         }
@@ -1232,40 +1232,28 @@ export class Elaborator {
         if (!sym) {
             return this.elabCallExprUnknown(node);
         }
-        if (sym.kind == SymKind.Func) {
-            return this.elabCallExprPart2(node, sym.params, sym.isVariadic, sym.returnType);
-        } else if (sym.kind === SymKind.Struct) {
-            if (!sym.isDefined) {
-                this.reportError(calleeNode, `'${calleeName}' has incomplete type.`);
-                return this.elabCallExprUnknown(node);
-            }
-            return this.elabCallExprPart2(node, sym.fields, false, mkStructType(sym));
-        } else {
-            this.reportError(calleeNode, `'${calleeName}' is not a function or struct.`);
+        if (sym.kind != SymKind.Func) {
+            this.reportError(calleeNode, `'${calleeName}' is not a function.`);
             this.elabExprInfer(calleeNode, { typeHint: undefined });
             return this.elabCallExprUnknown(node);
         }
-    }
 
-    elabCallExprPart2(
-        node: CallExprNode,
-        params: (FuncParamSym | StructFieldSym)[],
-        isVariadic: boolean,
-        returnType: Type,
-    ): Type {
-        const argListNode = node.args!;
+        const params = sym.params;
         const argNodes = argListNode.callArgNodes;
 
-        if (argNodes.length < params.length) {
-            this.reportError(argListNode, `Too few arguments provided (${argNodes.length} < ${params.length}).`);
-        } else if (argNodes.length > params.length && !isVariadic) {
-            this.reportError(argListNode, `Too many arguments provided (${argNodes.length} > ${params.length}).`);
+        const nParams = sym.params.length;
+        const nArgs = argListNode.callArgNodes.length;
+
+        if (nArgs < nParams) {
+            this.reportError(argListNode, `Too few arguments provided (${nArgs} < ${nParams}).`);
+        } else if (nArgs > nParams && !sym.isVariadic) {
+            this.reportError(argListNode, `Too many arguments provided (${nArgs} > ${nParams}).`);
         }
-        for (let i = 0; i < argNodes.length; i++) {
+        for (let i = 0; i < nArgs; i++) {
             const argNode = argNodes[i];
             const argLabelNode = argNode.label;
             const argValueNode = argNode.value;
-            if (i < params.length) {
+            if (i < nParams) {
                 if (argLabelNode) {
                     const paramName = params[i].name;
                     if (argLabelNode.text !== paramName) {
@@ -1282,7 +1270,7 @@ export class Elaborator {
                 if (argValueNode) {
                     argType = this.elabExprInfer(argValueNode, { typeHint: undefined });
                 }
-                if (isVariadic) {
+                if (sym.isVariadic) {
                     if (argLabelNode) {
                         this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
                     }
@@ -1293,7 +1281,7 @@ export class Elaborator {
             }
         }
 
-        return returnType;
+        return sym.returnType;
     }
 
     private elabCallExprUnknown(node: CallExprNode): Type {
@@ -1372,6 +1360,7 @@ export class Elaborator {
 
     private elabStructExpr(node: StructExprNode): Type {
         const nameNode = node.name!;
+        const fieldListNode = node.fields!;
 
         const sym = this.resolveName(nameNode);
         if (!sym) {
@@ -1387,16 +1376,9 @@ export class Elaborator {
             return this.elabStructExprUnknown(node);
         }
 
-        return this.elabStructExprPart2(node, sym);
-    }
-
-    private elabStructExprPart2(node: StructExprNode, structSym: StructSym): Type {
-        const fieldListNode = node.fields!;
-        const fieldNodes = fieldListNode.fieldInitNodes;
-
         const seenFields = new Set<string>();
 
-        for (const fieldNode of fieldNodes) {
+        for (const fieldNode of fieldListNode.fieldInitNodes) {
             const valueNode = fieldNode.value;
 
             let nameNode = fieldNode.name;
@@ -1406,7 +1388,7 @@ export class Elaborator {
 
             let fieldType = mkErrorType();
             if (nameNode) {
-                const fieldSym = this.resolveStructField(structSym.qualifiedName, nameNode);
+                const fieldSym = this.resolveStructField(sym.qualifiedName, nameNode);
                 if (fieldSym) {
                     if (seenFields.has(fieldSym.name)) {
                         this.reportError(nameNode, `Field is already initialized.`);
@@ -1421,12 +1403,12 @@ export class Elaborator {
             }
         }
 
-        const uninitializedFields = structSym.fields.filter(field => !seenFields.has(field.name));
+        const uninitializedFields = sym.fields.filter(field => !seenFields.has(field.name));
         for (const field of uninitializedFields) {
             this.reportError(node, `Field '${field.name}' is not initialized.`);
         }
 
-        return mkStructType(structSym);
+        return mkStructType(sym);
     }
 
     private elabStructExprUnknown(node: StructExprNode): Type {

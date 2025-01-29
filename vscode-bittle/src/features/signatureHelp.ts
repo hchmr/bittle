@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { FuncParamSym, FuncSym, prettyCallableSym, prettyStructWithFields, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
+import { FuncParamSym, FuncSym, prettyFuncSym, prettyStructWithFields, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { Point, SyntaxNode } from '../syntax';
@@ -71,14 +71,14 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         const argIndex = countPrecedingCommas(argNodes, position);
 
         const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleeNameNode);
-        if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
+        if (!calleeSym || calleeSym.kind !== SymKind.Func) {
             return;
         }
 
-        return createSignatureHelp(
+        return createSignatureHelpForFunc(
             calleeSym,
-            calleeSym.kind === SymKind.Func ? calleeSym.params : calleeSym.fields,
-            calleeSym.kind === SymKind.Func && calleeSym.isVariadic,
+            calleeSym.params,
+            calleeSym.isVariadic,
             argIndex,
         );
     }
@@ -143,13 +143,13 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     }
 }
 
-function createSignatureHelp(
-    sym: FuncSym | StructSym,
-    params: (FuncParamSym | StructFieldSym)[],
+function createSignatureHelpForFunc(
+    sym: FuncSym,
+    params: FuncParamSym[],
     isVariadic: boolean,
     paramIndex: number,
 ): vscode.SignatureHelp {
-    const signature = new vscode.SignatureInformation(prettyCallableSym(sym));
+    const signature = new vscode.SignatureInformation(prettyFuncSym(sym));
     signature.parameters = params.map((param) => {
         return new vscode.ParameterInformation(param.name);
     });

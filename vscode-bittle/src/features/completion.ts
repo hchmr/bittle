@@ -188,14 +188,11 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleeNameNode);
-        if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
+        if (!calleeSym || calleeSym.kind !== SymKind.Func) {
             return;
         }
 
-        const labelSym
-            = calleeSym.kind === SymKind.Func
-                ? calleeSym.params[argIndex]
-                : calleeSym.fields?.[argIndex];
+        const labelSym = calleeSym.params[argIndex];
         if (!labelSym) {
             return;
         }
@@ -286,7 +283,7 @@ function toCompletionItem(candidate: CompletionCandidate): vscode.CompletionItem
     }
 }
 
-function toLabelCompletionItem(labelSym: StructFieldSym | FuncParamSym, labelNode: SyntaxNode | null): vscode.CompletionItem {
+function toLabelCompletionItem(labelSym: FuncParamSym, labelNode: SyntaxNode | null): vscode.CompletionItem {
     const insertText = `${labelSym.name}:`;
     const item = new vscode.CompletionItem(insertText, vscode.CompletionItemKind.Text);
     item.filterText = labelSym.name;
