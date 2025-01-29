@@ -80,7 +80,11 @@ func p_named_type(self: *Parser): *TypeExpr {
     var pos = self.tok.pos;
     var name = p_ident(self);
     var result: *NamedTypeExpr = calloc(1, sizeof(NamedTypeExpr));
-    *result = NamedTypeExpr(TypeExpr_Named, pos, name);
+    *result = NamedTypeExpr {
+        kind: TypeExpr_Named,
+        pos,
+        name,
+    };
     return result;
 }
 
@@ -97,7 +101,11 @@ func p_ptr_type(self: *Parser): *TypeExpr {
     var pointee = p_type(self);
 
     var result: *PtrTypeExpr = calloc(1, sizeof(PtrTypeExpr));
-    *result = PtrTypeExpr(TypeExpr_Ptr, pos, pointee);
+    *result = PtrTypeExpr {
+        kind: TypeExpr_Ptr,
+        pos,
+        pointee,
+    };
     return result;
 }
 
@@ -110,7 +118,12 @@ func p_arr_type(self: *Parser): *TypeExpr {
     expect(self, Tok_RBracket);
 
     var result: *ArrTypeExpr = calloc(1, sizeof(ArrTypeExpr));
-    *result = ArrTypeExpr(TypeExpr_Arr, pos, elem, size);
+    *result = ArrTypeExpr {
+        kind: TypeExpr_Arr,
+        pos,
+        elem,
+        size,
+    };
     return result;
 }
 
@@ -119,7 +132,10 @@ func p_never_type(self: *Parser): *TypeExpr {
     expect(self, Tok_Bang);
 
     var result: *TypeExpr = calloc(1, sizeof(TypeExpr));
-    *result = TypeExpr(TypeExpr_Never, pos);
+    *result = TypeExpr {
+        kind: TypeExpr_Never,
+        pos,
+    };
     return result;
 }
 
@@ -161,27 +177,30 @@ func p_literal(self: *Parser): *Literal {
 
     if (at(self, Tok_Null)) {
         var literal: *Literal = calloc(1, sizeof(Literal));
-        *literal = Literal(Literal_Null);
+        *literal = Literal { kind: Literal_Null };
         result = literal;
     } else if (at(self, Tok_True)) {
         var literal: *BoolLiteral = calloc(1, sizeof(BoolLiteral));
-        *literal = BoolLiteral(Literal_Bool, value: true);
+        *literal = BoolLiteral { kind: Literal_Bool, value: true };
         result = literal;
     } else if (at(self, Tok_False)) {
         var literal: *BoolLiteral = calloc(1, sizeof(BoolLiteral));
-        *literal = BoolLiteral(Literal_Bool, value: false);
+        *literal = BoolLiteral { kind: Literal_Bool, value: false };
         result = literal;
     } else if (at(self, Tok_Int)) {
+        var value = parse_int_lexeme(self.tok.lexeme);
         var literal: *IntLiteral = calloc(1, sizeof(IntLiteral));
-        *literal = IntLiteral(Literal_Int, value: parse_int_lexeme(self.tok.lexeme));
+        *literal = IntLiteral { kind: Literal_Int, value };
         result = literal;
     } else if (at(self, Tok_Char)) {
+        var value = parse_char(self.tok.lexeme);
         var literal: *CharLiteral = calloc(1, sizeof(CharLiteral));
-        *literal = CharLiteral(Literal_Char, value: parse_char(self.tok.lexeme));
+        *literal = CharLiteral { kind: Literal_Char, value };
         result = literal;
     } else if (at(self, Tok_String)) {
+        var value = parse_string(self.tok.lexeme);
         var literal: *StringLiteral = calloc(1, sizeof(StringLiteral));
-        *literal = StringLiteral(Literal_String, value: parse_string(self.tok.lexeme));
+        *literal = StringLiteral { kind: Literal_String, value };
         result = literal;
     } else {
         die_at(&self.tok.pos, "Unexpected start of literal.");
@@ -226,7 +245,13 @@ func p_name_expr(self: *Parser): *Expr {
     var name = p_ident(self);
 
     var result: *IdentExpr = calloc(1, sizeof(IdentExpr));
-    *result = IdentExpr(Expr_Ident, pos, type: null, name, sym: null);
+    *result = IdentExpr {
+        kind: Expr_Ident,
+        pos,
+        type: null,
+        name,
+        sym: null,
+    };
     return result;
 }
 
@@ -235,7 +260,12 @@ func p_literal_expr(self: *Parser): *Expr {
     var literal = p_literal(self);
 
     var result: *LiteralExpr = calloc(1, sizeof(LiteralExpr));
-    *result = LiteralExpr(Expr_Literal, pos, type: null, literal);
+    *result = LiteralExpr {
+        kind: Expr_Literal,
+        pos,
+        type: null,
+        literal,
+    };
     return result;
 }
 
@@ -247,7 +277,13 @@ func p_sizeof_expr(self: *Parser): *Expr {
     expect(self, Tok_RParen);
 
     var result: *SizeofExpr = calloc(1, sizeof(SizeofExpr));
-    *result = SizeofExpr(Expr_Sizeof, pos, type: null, type, size: -1);
+    *result = SizeofExpr {
+        kind: Expr_Sizeof,
+        pos,
+        type_expr: type,
+        type: null,
+        size: -1,
+    };
     return result;
 }
 
@@ -255,17 +291,22 @@ func p_array_expr(self: *Parser): *Expr {
     var pos = self.tok.pos;
 
     expect(self, Tok_LBracket);
-    var elements: *List = list_new();
+    var elems: *List = list_new();
     while (!at_eof(self) && !eat(self, Tok_RBracket)) {
         var element = p_expr(self, 0);
-        list_push(elements, element);
+        list_push(elems, element);
         if (!at(self, Tok_RBracket)) {
             expect(self, Tok_Comma);
         }
     }
 
     var result: *ArrayExpr = calloc(1, sizeof(ArrayExpr));
-    *result = ArrayExpr(Expr_Array, pos, type: null, elements);
+    *result = ArrayExpr {
+        kind: Expr_Array,
+        pos,
+        type: null,
+        elems,
+    };
     return result;
 }
 
@@ -276,7 +317,13 @@ func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
     expect(self, Tok_RBracket);
 
     var result: *IndexExpr = calloc(1, sizeof(IndexExpr));
-    *result = IndexExpr(Expr_Index, pos, type: null, indexee, index);
+    *result = IndexExpr {
+        kind: Expr_Index,
+        pos,
+        type: null,
+        indexee,
+        index,
+    };
     return result;
 }
 
@@ -307,7 +354,14 @@ func p_call_expr(self: *Parser, callee: *Expr): *Expr {
     }
 
     var result: *CallExpr = calloc(1, sizeof(CallExpr));
-    *result = CallExpr(Expr_Call, pos, type: null, callee, args, resolved_callee: null);
+    *result = CallExpr {
+        kind: Expr_Call,
+        pos,
+        type: null,
+        callee,
+        args,
+        resolved_callee: null,
+    };
     return result;
 }
 
@@ -317,7 +371,14 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
     var name = p_ident(self);
 
     var result: *MemberExpr = calloc(1, sizeof(MemberExpr));
-    *result = MemberExpr(Expr_Member, pos, type: null, left, name, resolved_field: -1);
+    *result = MemberExpr {
+        kind: Expr_Member,
+        pos,
+        type: null,
+        left,
+        name,
+        resolved_field: -1,
+    };
     return result;
 }
 
@@ -326,7 +387,13 @@ func p_unary_expr(self: *Parser, op: Int32): *Expr {
     var right = p_expr(self, Prec_Unary);
 
     var result: *UnaryExpr = calloc(1, sizeof(UnaryExpr));
-    *result = UnaryExpr(Expr_Unary, pos, type: null, op, right);
+    *result = UnaryExpr {
+        kind: Expr_Unary,
+        pos,
+        type: null,
+        op,
+        right,
+    };
     return result;
 }
 
@@ -335,16 +402,29 @@ func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
     var type = p_type(self);
 
     var result: *CastExpr = calloc(1, sizeof(CastExpr));
-    *result = CastExpr(Expr_Cast, pos, type: null, expr, type);
+    *result = CastExpr {
+        kind: Expr_Cast,
+        pos,
+        type: null,
+        expr,
+        type_expr: type,
+    };
     return result;
 }
 
-func p_binary_expr(self: *Parser, lhs: *Expr, op: Int32, prec: Int32): *Expr {
+func p_binary_expr(self: *Parser, left: *Expr, op: Int32, prec: Int32): *Expr {
     var pos = self.tok.pos;
-    var rhs = p_expr(self, prec);
+    var right = p_expr(self, prec);
 
     var result: *BinaryExpr = calloc(1, sizeof(BinaryExpr));
-    *result = BinaryExpr(Expr_Binary, pos, type: null, op, lhs, rhs);
+    *result = BinaryExpr {
+        kind: Expr_Binary,
+        pos,
+        type: null,
+        op,
+        left,
+        right,
+    };
     return result;
 }
 
@@ -356,7 +436,14 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
     var else_expr = p_expr(self, Prec_Cond);
 
     var result: *TernaryExpr = calloc(1, sizeof(TernaryExpr));
-    *result = TernaryExpr(Expr_Ternary, pos, type: null, cond, then_expr, else_expr);
+    *result = TernaryExpr {
+        kind: Expr_Ternary,
+        pos,
+        type: null,
+        cond,
+        then_expr,
+        else_expr,
+    };
     return result;
 }
 
@@ -376,7 +463,11 @@ func p_field_initializer(self: *Parser): *FieldInitializer {
     var expr = p_expr(self, 0);
 
     var result: *FieldInitializer = calloc(1, sizeof(FieldInitializer));
-    *result = FieldInitializer(pos, name, expr);
+    *result = FieldInitializer {
+        pos,
+        name,
+        expr,
+    };
     return result;
 }
 
@@ -394,7 +485,13 @@ func p_struct_expr(self: *Parser): *Expr {
     }
 
     var result: *StructExpr = calloc(1, sizeof(StructExpr));
-    *result = StructExpr(Expr_Struct, pos, type: null, name, field_initializers);
+    *result = StructExpr {
+        kind: Expr_Struct,
+        pos: pos,
+        type: null,
+        name: name,
+        fields: field_initializers,
+    };
     return result;
 }
 
@@ -525,7 +622,11 @@ func p_block(self: *Parser): *Stmt {
         list_push(stmts, stmt);
     }
     var result: *BlockStmt = calloc(1, sizeof(BlockStmt));
-    *result = BlockStmt(Stmt_Block, pos, stmts);
+    *result = BlockStmt {
+        kind: Stmt_Block,
+        pos,
+        stmts,
+    };
     return result;
 }
 
@@ -544,7 +645,14 @@ func p_local(self: *Parser): *Stmt {
     expect(self, Tok_Semicolon);
 
     var result: *LocalStmt = calloc(1, sizeof(LocalStmt));
-    *result = LocalStmt(Stmt_Local, pos, name, type, init, sym: null);
+    *result = LocalStmt {
+        kind: Stmt_Local,
+        pos,
+        name,
+        type,
+        init,
+        sym: null,
+    };
     return result;
 }
 
@@ -561,7 +669,13 @@ func p_if_stmt(self: *Parser): *Stmt {
     }
 
     var result: *IfStmt = calloc(1, sizeof(IfStmt));
-    *result = IfStmt(Stmt_If, pos, cond, then_stmt, else_stmt);
+    *result = IfStmt {
+        kind: Stmt_If,
+        pos,
+        cond,
+        then_stmt,
+        else_stmt,
+    };
     return result;
 }
 
@@ -574,7 +688,12 @@ func p_while_stmt(self: *Parser): *Stmt {
     var body = p_stmt(self);
 
     var result: *WhileStmt = calloc(1, sizeof(WhileStmt));
-    *result = WhileStmt(Stmt_While, pos, cond, body);
+    *result = WhileStmt {
+        kind: Stmt_While,
+        pos,
+        cond,
+        body,
+    };
     return result;
 }
 
@@ -603,7 +722,14 @@ func p_for_stmt(self: *Parser): *Stmt {
     var body = p_stmt(self);
 
     var result: *ForStmt = calloc(1, sizeof(ForStmt));
-    *result = ForStmt(Stmt_For, pos, init, cond, step, body);
+    *result = ForStmt {
+        kind: Stmt_For,
+        pos,
+        init,
+        cond,
+        step,
+        body,
+    };
     return result;
 }
 
@@ -618,7 +744,11 @@ func p_return_stmt(self: *Parser): *Stmt {
     }
 
     var result: *ReturnStmt = calloc(1, sizeof(ReturnStmt));
-    *result = ReturnStmt(Stmt_Return, pos, expr);
+    *result = ReturnStmt {
+        kind: Stmt_Return,
+        pos,
+        expr,
+    };
     return result;
 }
 
@@ -628,7 +758,10 @@ func p_break_stmt(self: *Parser): *Stmt {
     expect(self, Tok_Semicolon);
 
     var result: *Stmt = calloc(1, sizeof(Stmt));
-    *result = Stmt(Stmt_Break, pos);
+    *result = Stmt {
+        kind: Stmt_Break,
+        pos,
+    };
     return result;
 }
 
@@ -638,7 +771,10 @@ func p_continue_stmt(self: *Parser): *Stmt {
     expect(self, Tok_Semicolon);
 
     var result: *Stmt = calloc(1, sizeof(Stmt));
-    *result = Stmt(Stmt_Continue, pos);
+    *result = Stmt {
+        kind: Stmt_Continue,
+        pos,
+    };
     return result;
 }
 
@@ -648,7 +784,11 @@ func p_expr_stmt(self: *Parser): *Stmt {
     expect(self, Tok_Semicolon);
 
     var result: *ExprStmt = calloc(1, sizeof(ExprStmt));
-    *result = ExprStmt(Stmt_Expr, pos, expr);
+    *result = ExprStmt {
+        kind: Stmt_Expr,
+        pos,
+        expr,
+    };
     return result;
 }
 
@@ -684,7 +824,11 @@ func p_struct_field(self: *Parser): *StructFieldDecl {
     var type = p_type(self);
 
     var result: *StructFieldDecl = calloc(1, sizeof(StructFieldDecl));
-    *result = StructFieldDecl(pos, name, type);
+    *result = StructFieldDecl {
+        pos,
+        name,
+        type,
+    };
     return result;
 }
 
@@ -712,7 +856,13 @@ func p_struct_decl(self: *Parser): *Decl {
     }
 
     var result: *StructDecl = calloc(1, sizeof(StructDecl));
-    *result = StructDecl(Decl_Struct, pos, name, base, body);
+    *result = StructDecl {
+        kind: Decl_Struct,
+        pos,
+        name,
+        base,
+        fields: body,
+    };
     return result;
 }
 
@@ -759,8 +909,8 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
     }
 
     var result: *FuncDecl = calloc(1, sizeof(FuncDecl));
-    *result = FuncDecl(
-        Decl_Func,
+    *result = FuncDecl {
+        kind: Decl_Func,
         pos,
         is_extern,
         name,
@@ -768,7 +918,7 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
         is_variadic,
         return_type,
         body,
-    );
+    };
     return result;
 }
 
@@ -781,7 +931,11 @@ func p_enum_member(self: *Parser): *EnumMember {
     }
 
     var result: *EnumMember = calloc(1, sizeof(EnumMember));
-    *result = EnumMember(pos, name, value);
+    *result = EnumMember {
+        pos,
+        name,
+        value,
+    };
     return result;
 }
 
@@ -803,7 +957,12 @@ func p_enum_decl(self: *Parser): *Decl {
     }
 
     var result: *EnumDecl = calloc(1, sizeof(EnumDecl));
-    *result = EnumDecl(Decl_Enum, pos, name, members);
+    *result = EnumDecl {
+        kind: Decl_Enum,
+        pos,
+        name,
+        members,
+    };
     return result;
 }
 
@@ -816,7 +975,12 @@ func p_const_decl(self: *Parser): *Decl {
     expect(self, Tok_Semicolon);
 
     var result: *ConstDecl = calloc(1, sizeof(ConstDecl));
-    *result = ConstDecl(Decl_Const, pos, name, value);
+    *result = ConstDecl {
+        kind: Decl_Const,
+        pos,
+        name,
+        value,
+    };
     return result;
 }
 
@@ -829,7 +993,13 @@ func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
     expect(self, Tok_Semicolon);
 
     var result: *GlobalDecl = calloc(1, sizeof(GlobalDecl));
-    *result = GlobalDecl(Decl_Global, pos, is_extern, name, type);
+    *result = GlobalDecl {
+        kind: Decl_Global,
+        pos,
+        is_extern,
+        name,
+        type,
+    };
     return result;
 }
 

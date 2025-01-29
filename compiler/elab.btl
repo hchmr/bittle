@@ -15,7 +15,7 @@ struct Scope {
 
 func scope_new(parent: *Scope): *Scope {
     var scope: *Scope = calloc(1, sizeof(Scope));
-    *scope = Scope(entries: list_new(), parent: parent);
+    *scope = Scope { entries: list_new(), parent: parent };
     return scope;
 }
 
@@ -78,7 +78,7 @@ func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
 
 func add_sym(ctx: *ElabCtx, sym: *Sym) {
     var entry: *ScopeEntry = calloc(1, sizeof(ScopeEntry));
-    *entry = ScopeEntry(name: sym.name, sym_index: list_len(ctx.syms));
+    *entry = ScopeEntry { name: sym.name, sym_index: list_len(ctx.syms) };
     list_push(ctx.syms, sym);
     list_push(ctx.scope.entries, entry);
 }
@@ -90,7 +90,7 @@ func define_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
     }
 
     var sym = calloc(1, sizeof(EnumSym)) as *EnumSym;
-    *sym = EnumSym(Sym_Enum, name, size: 4);
+    *sym = EnumSym { kind: Sym_Enum, name, size: 4 };
     add_sym(ctx, sym);
     return sym;
 }
@@ -111,7 +111,7 @@ func declare_struct(
         }
     } else {
         sym = calloc(1, sizeof(StructSym)) as *StructSym;
-        *sym = Sym(Sym_Struct, name); // TODO
+        *sym = Sym { kind: Sym_Struct, name }; // TODO
         add_sym(ctx, sym);
     }
     return sym as *StructSym;
@@ -160,7 +160,9 @@ func declare_func(
         }
     } else {
         sym = calloc(1, sizeof(FuncSym)) as *FuncSym;
-        *(sym as *FuncSym) = FuncSym(Sym_Func, name,
+        *(sym as *FuncSym) = FuncSym {
+            kind: Sym_Func,
+            name,
             params: params,
             return_type: return_type,
             is_variadic: is_variadic,
@@ -168,7 +170,7 @@ func declare_func(
             locals: list_new(),
             temps: list_new(),
             body: null
-        );
+        };
         add_sym(ctx, sym);
     }
     return sym as *FuncSym;
@@ -181,7 +183,7 @@ func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, value: Int
     }
 
     var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
-    *sym = ConstSym(Sym_Const, name, type, value);
+    *sym = ConstSym { kind: Sym_Const, name, type, value };
     add_sym(ctx, sym);
 }
 
@@ -199,7 +201,7 @@ func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_defin
         }
     } else {
         sym = calloc(1, sizeof(GlobalSym)) as *GlobalSym;
-        *(sym as *GlobalSym) = GlobalSym(Sym_Global, name, type, is_defined: false);
+        *(sym as *GlobalSym) = GlobalSym { kind: Sym_Global, name, type, is_defined: false };
         add_sym(ctx, sym);
     }
     return sym as *GlobalSym;
@@ -215,7 +217,7 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
     var slot_index = list_len(ctx.current_func.locals);
 
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
-    *sym = LocalSym(Sym_Local, name, type, slot_index: slot_index);
+    *sym = LocalSym { kind: Sym_Local, name, type, slot_index: slot_index };
     add_sym(ctx, sym);
 
     list_push(ctx.current_func.locals, sym);
@@ -239,7 +241,7 @@ func try_coerce(e: *Expr, target: *Type): *Expr {
         // Ok
     } else if (type_implicitly_convertible(e.type, target)) {
         var cast: *CastExpr = calloc(1, sizeof(CastExpr));
-        *cast = CastExpr(Expr_Cast, e.pos, target, expr: e, type_expr: null);
+        *cast = CastExpr { kind: Expr_Cast, pos: e.pos, type: target, expr: e, type_expr: null };
         e = cast;
     } else {
         // Err
@@ -1022,11 +1024,11 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
     var field_offset = align_up(struct_size, field_align);
 
     var field: *StructField = calloc(1, sizeof(StructField));
-    *field = StructField(
+    *field = StructField {
         name: field_name,
         type: field_type,
-        offset: field_offset
-    );
+        offset: field_offset,
+    };
 
     list_push((sym as *StructSym).fields, field);
     (sym as *StructSym).unpadded_size = field_offset + field_size;
@@ -1053,14 +1055,14 @@ func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym) {
         list_push(fields, copy);
     }
 
-    *struct_sym = StructSym(
+    *struct_sym = StructSym {
         kind: Sym_Struct,
         name: struct_sym.name,
         base: baseSym,
         fields: fields,
         unpadded_size: baseSym.unpadded_size,
-        is_defined: false
-    );
+        is_defined: false,
+    };
 }
 
 func elab_struct_decl(ctx: *ElabCtx, decl: *StructDecl) {
@@ -1128,7 +1130,7 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
     }
 
     var result: *FuncParam = calloc(1, sizeof(FuncParam));
-    *result = FuncParam(name, type);
+    *result = FuncParam { name, type };
     return result;
 }
 
@@ -1211,12 +1213,12 @@ func elab_decl(ctx: *ElabCtx, decl: *Decl) {
 
 func elab(ast: *Ast): *List { // *List<*Sym>
     var ctx: *ElabCtx = calloc(1, sizeof(ElabCtx));
-    *ctx = ElabCtx(
+    *ctx = ElabCtx {
         syms: list_new(),
         scope: scope_new(null),
         current_func: null,
         loop_depth: 0,
-    );
+    };
 
     for (var i = 0; i < list_len(ast.decls); i += 1) {
         var decl = list_get(ast.decls, i);

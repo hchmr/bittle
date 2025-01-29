@@ -21,31 +21,31 @@ func mk_bool_type(): *BoolType {
 
 func mk_int_type(size: Int): *IntType {
     var type: *IntType = calloc(1, sizeof(IntType));
-    *type = IntType(kind: Type_Int, size);
+    *type = IntType { kind: Type_Int, size };
     return type;
 }
 
 func mk_ptr_type(pointee: *Type): *PtrType {
     var type: *PtrType = calloc(1, sizeof(PtrType));
-    *type = PtrType(kind: Type_Ptr, pointee);
+    *type = PtrType { kind: Type_Ptr, pointee };
     return type;
 }
 
 func mk_array_type(elem: *Type, size: Int): *ArrType {
     var type: *ArrType = calloc(1, sizeof(ArrType));
-    *type = ArrType(kind: Type_Arr, elem, size);
+    *type = ArrType { kind: Type_Arr, elem, size };
     return type;
 }
 
 func mk_enum_type(sym: *EnumSym): *EnumType {
     var type: *EnumType = calloc(1, sizeof(EnumType));
-    *type = EnumType(kind: Type_Enum, sym);
+    *type = EnumType { kind: Type_Enum, sym };
     return type;
 }
 
 func mk_struct_type(sym: *StructSym): *StructType {
     var type: *StructType = calloc(1, sizeof(StructType));
-    *type = StructType(kind: Type_Struct, sym);
+    *type = StructType { kind: Type_Struct, sym };
     return type;
 }
 

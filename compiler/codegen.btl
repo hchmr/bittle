@@ -108,71 +108,71 @@ struct AsmFunc {
 
 func asm_mk_reg_operand(width: Int, reg: Reg, shift: Int): *AsmRegOperand {
     var operand: *AsmRegOperand = calloc(1, sizeof(AsmRegOperand));
-    *operand = AsmRegOperand(
+    *operand = AsmRegOperand {
         kind: AsmOperand_Reg,
         width: width,
         reg: reg,
         shift: shift,
-    );
+    };
     return operand;
 }
 
 func asm_mk_int_operand(value: Int): *AsmIntOperand {
     var operand: *AsmIntOperand = calloc(1, sizeof(AsmIntOperand));
-    *operand = AsmIntOperand(
+    *operand = AsmIntOperand {
         kind: AsmOperand_Int,
         value: value,
         shift: 0,
-    );
+    };
     return operand;
 }
 
 func asm_mk_label_operand(counter: Int, suffix: *Char): *AsmLabelOperand {
     var operand: *AsmLabelOperand = calloc(1, sizeof(AsmLabelOperand));
-    *operand = AsmLabelOperand(
+    *operand = AsmLabelOperand {
         kind: AsmOperand_Label,
         counter: counter,
         suffix: suffix,
-    );
+    };
     return operand;
 }
 
 func asm_mk_global_operand(relocation_spec: *Char, prefix: *Char, suffix: Int): *AsmGlobalOperand {
     var operand: *AsmGlobalOperand = calloc(1, sizeof(AsmGlobalOperand));
-    *operand = AsmGlobalOperand(
+    *operand = AsmGlobalOperand {
         kind: AsmOperand_Global,
         relocation_spec: relocation_spec,
         prefix: prefix,
         counter: suffix,
-    );
+    };
     return operand;
 }
 
 func asm_mk_sp_offset_operand(fp_offset: Int): *AsmSpOffsetOperand {
     var operand: *AsmSpOffsetOperand = calloc(1, sizeof(AsmSpOffsetOperand));
-    *operand = AsmSpOffsetOperand(
+    *operand = AsmSpOffsetOperand {
         kind: AsmOperand_SpOffset,
         fp_offset: fp_offset,
-    );
+    };
     return operand;
 }
 
 func asm_mk_raw_operand(op: *Char): *AsmRawOperand {
     var operand: *AsmRawOperand = calloc(1, sizeof(AsmRawOperand));
-    *operand = AsmRawOperand(
+    *operand = AsmRawOperand {
         kind: AsmOperand_Raw,
         op: op,
-    );
+    };
     return operand;
 }
 
 func asm_mk_mem_operand(n_args: Int): *AsmMemOperand {
     var operand: *AsmMemOperand = calloc(1, sizeof(AsmMemOperand));
-    *operand = AsmMemOperand(
+    *operand = AsmMemOperand {
         kind: AsmOperand_Mem,
         n_args: n_args,
         args: calloc(n_args, sizeof(*AsmOperand)),
-    );
+    };
     return operand;
 }
 
@@ -194,12 +194,12 @@ func asm_mk_frame_indexed_mem_operand(fp_offset: Int): *AsmMemOperand {
 
 func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
     var instr: *AsmInstr = calloc(1, sizeof(AsmInstr));
-    *instr = AsmInstr(
+    *instr = AsmInstr {
         op: op,
         n_args: n_args,
         args: calloc(n_args, sizeof(*AsmOperand)),
         comment: null,
-    );
+    };
     return instr;
 }
 
@@ -716,7 +716,7 @@ func reserve_reg(ctx: *CodegenCtx, reg: Reg) {
     }
 
     var reservation: *RegReservation = calloc(1, sizeof(RegReservation));
-    *reservation = RegReservation(did_spill: spill_needed);
+    *reservation = RegReservation { did_spill: spill_needed };
     list_push(state.reservations, reservation);
 }
 
@@ -992,7 +992,7 @@ func asm_lower_loop_expr(ctx: *CodegenCtx, e: *HirLoopExpr, xd: Reg) {
     var done_label = next_label(ctx);
 
     var outer_loop = ctx.current_loop;
-    ctx.current_loop = LoopCtx(step_label, done_label);
+    ctx.current_loop = LoopCtx { step_label, done_label };
 
     // L.while:
     asm_write_label(ctx.builder, while_label, "while");
@@ -1261,13 +1261,13 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     for (var i = 0; i < n_locals; i += 1) {
         var local: *LocalSym = list_get(sym.locals, i);
         var offset = align_up(slots_size, type_align(local.type));
-        slots[local.slot_index] = Slot(offset);
+        slots[local.slot_index] = Slot { offset };
         slots_size = offset + type_size(local.type);
     }
     for (var i = 0; i < n_temps; i += 1) {
         var temp: *HirTemp = list_get(sym.temps, i);
         var offset = align_up(slots_size, type_align(temp.type));
-        slots[temp.slot_index] = Slot(offset);
+        slots[temp.slot_index] = Slot { offset };
         slots_size = offset + type_size(temp.type);
     }
     ctx.n_slots = n_slots;
@@ -1290,12 +1290,12 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     var frame_size = align_up(ctx.slots_size + ctx.max_scratch, 16);
     var asm_fun: *AsmFunc = calloc(1, sizeof(AsmFunc));
-    *asm_fun = AsmFunc(
+    *asm_fun = AsmFunc {
         name: sym.name,
         instrs: ctx.builder,
         frame_size: frame_size,
         is_reg_used: is_reg_used,
-    );
+    };
     asm_print_func(asm_fun);
 }
 
