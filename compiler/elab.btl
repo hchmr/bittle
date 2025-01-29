@@ -501,9 +501,9 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     if (sym.kind != Sym_Func) {
         die_at(&callee.pos, "Expected a function");
     }
-    var func_sym = sym as *FuncSym;
+    var sym = sym as *FuncSym;
 
-    var param_count = list_len(func_sym.params);
+    var param_count = list_len(sym.params);
     var arg_count = list_len(args);
 
     if (arg_count > MAX_PARAMS) {
@@ -514,14 +514,14 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
         fprintf(stderr, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
         exit(1);
     }
-    if (!func_sym.is_variadic && arg_count > param_count) {
+    if (!sym.is_variadic && arg_count > param_count) {
         error_at(&expr.pos);
         fprintf(stderr, "Too many arguments provided (%d > %d).\n", arg_count, param_count);
         exit(1);
     }
     var i = 0;
     for (; i < param_count; i += 1) {
-        var param: *FuncParam = list_get(func_sym.params, i);
+        var param: *FuncParam = list_get(sym.params, i);
         var arg: *CallArg = list_get(args, i);
         if (arg.label && !str_eq(arg.label, param.name)) {
             die_at(&arg.expr.pos, "Argument label does not match parameter name");
@@ -536,8 +536,8 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
         }
     }
 
-    expr.resolved_callee = func_sym;
-    expr.type = func_sym.return_type;
+    expr.resolved_callee = sym;
+    expr.type = sym.return_type;
 }
 
 func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
@@ -574,9 +574,9 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
     if (left_type.kind != Type_Struct) {
         die_at(&left.pos, "Expected a struct");
     }
-    var struct_type = left_type as *StructType;
+    var left_type = left_type as *StructType;
 
-    var struct_sym = struct_type.sym;
+    var struct_sym = left_type.sym;
     var field_index = find_struct_field(struct_sym, field_name);
     if (field_index == -1) {
         die_at(&expr.pos, "Unknown field");
@@ -714,12 +714,12 @@ func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
     if (sym.kind != Sym_Struct) {
         die_at(&expr.pos, "Expected a struct type");
     }
-    var struct_sym = sym as *StructSym;
-    if (!struct_sym.is_defined) {
+    var sym = sym as *StructSym;
+    if (!sym.is_defined) {
         die_at(&expr.pos, "Struct has incomplete type");
     }
 
-    var fields = struct_sym.fields;
+    var fields = sym.fields;
     var n_fields = list_len(fields);
 
     var initializers = expr.fields;
@@ -730,7 +730,7 @@ func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
     for (var i = 0; i < n_initializers; i += 1) {
         var initializer: *FieldInitializer = list_get(initializers, i);
         var field_name = initializer.name;
-        var field_index = find_struct_field(struct_sym, field_name);
+        var field_index = find_struct_field(sym, field_name);
         if (field_index == -1) {
             die_at(&initializer.pos, "Unknown field");
         }
@@ -754,7 +754,7 @@ func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
 
     free(is_initialized);
 
-    expr.type = mk_struct_type(struct_sym);
+    expr.type = mk_struct_type(sym);
 }
 
 func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
