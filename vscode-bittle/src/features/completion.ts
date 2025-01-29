@@ -124,15 +124,14 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         if (!structNameNode) {
             return;
         }
-        const structSym = this.semanticsService.resolveSymbol(filePath, structNameNode);
+        const structSym = this.semanticsService.resolveUnambiguousSymbol(filePath, structNameNode);
         if (!structSym || structSym.kind !== SymKind.Struct) {
             return;
         }
 
         const usedNames = stream(structExprNode.childForFieldName('fields')!.children)
             .filter(x => x.type === NodeTypes.FieldInit)
-            .filterMap(x => x.childForFieldName('name') ?? undefined)
-            .map(x => x.text)
+            .filterMap(getFieldName)
             .filter(x => x !== searchText)
             .toSet();
 
@@ -140,6 +139,20 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         return fuzzySearch(searchText, candidates, { key: 'name' })
             .map(toCompletionItem);
+
+        function getFieldName(fieldInitNode: SyntaxNode): string | undefined {
+            const nameNode = fieldInitNode.childForFieldName('name');
+            if (nameNode) {
+                return nameNode.text;
+            }
+
+            const valueNode = fieldInitNode.childForFieldName('value');
+            if (valueNode && valueNode.type === ExprNodeTypes.NameExpr) {
+                return valueNode.text;
+            }
+
+            return undefined;
+        }
     }
 
     private autoCompleteArgumentLabel(
@@ -174,7 +187,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return; // Already has a label
         }
 
-        const calleeSym = this.semanticsService.resolveSymbol(filePath, calleeNameNode);
+        const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleeNameNode);
         if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
             return;
         }

@@ -43,7 +43,7 @@ export type SymReference = {
 export type ElaboratorResult = {
     scope: Scope;
     symbols: Map<string, Sym>;
-    nodeSymMap: WeakMap<SyntaxNode, string>;
+    nodeSymMap: WeakMap<SyntaxNode, string[]>;
     nodeTypeMap: WeakMap<SyntaxNode, Type>;
     references: Map<string, SymReference[]>;
     diagnostics: ElaborationDiag[];
@@ -60,7 +60,7 @@ export class Elaborator {
     private references: Map<string, SymReference[]> = new Map();
 
     // SyntaxNode -> Symbol.qualifiedName
-    private nodeSymMap: WeakMap<SyntaxNode, string> = new WeakMap();
+    private nodeSymMap: WeakMap<SyntaxNode, string[]> = new WeakMap();
     // SyntaxNode -> Type
     private nodeTypeMap: WeakMap<SyntaxNode, Type> = new WeakMap();
 
@@ -163,12 +163,12 @@ export class Elaborator {
 
     private recordNameIntroduction(sym: Sym, nameNode: SyntaxNode) {
         assert(nameNode.type === 'identifier');
-        this.nodeSymMap.set(nameNode, sym.qualifiedName);
+        appendInWeakMap(this.nodeSymMap, nameNode, sym.qualifiedName);
     }
 
     private recordNameResolution(sym: Sym, nameNode: SyntaxNode) {
         assert(nameNode.type === 'identifier');
-        this.nodeSymMap.set(nameNode, sym.qualifiedName);
+        appendInWeakMap(this.nodeSymMap, nameNode, sym.qualifiedName);
 
         const references = this.references.get(sym.qualifiedName) ?? [];
         references.push({ file: this.path, nameNode: nameNode });
@@ -1390,41 +1390,43 @@ export class Elaborator {
         return this.elabStructExprPart2(node, sym);
     }
 
-    private elabStructExprPart2(node: StructExprNode, sym: StructSym): Type {
+    private elabStructExprPart2(node: StructExprNode, structSym: StructSym): Type {
         const fieldListNode = node.fields!;
         const fieldNodes = fieldListNode.fieldInitNodes;
 
         const seenFields = new Set<string>();
 
         for (const fieldNode of fieldNodes) {
-            const nameNode = fieldNode.name;
             const valueNode = fieldNode.value;
+
+            let nameNode = fieldNode.name;
+            if (!nameNode && valueNode instanceof NameExprNode) {
+                nameNode = valueNode.identifierToken;
+            }
 
             let fieldType = mkErrorType();
             if (nameNode) {
-                const field = this.resolveStructField(sym.qualifiedName, nameNode);
-                if (!field) {
-                    this.reportError(nameNode, `Unknown field.`);
-                } else {
-                    this.recordNameResolution(field, nameNode);
-                    if (seenFields.has(field.name)) {
+                const fieldSym = this.resolveStructField(structSym.qualifiedName, nameNode);
+                if (fieldSym) {
+                    if (seenFields.has(fieldSym.name)) {
                         this.reportError(nameNode, `Field is already initialized.`);
                     }
-                    seenFields.add(field.name);
-                    fieldType = field.type;
+                    seenFields.add(fieldSym.name);
+                    fieldType = fieldSym.type;
                 }
             }
+
             if (valueNode) {
                 this.elabExpr(valueNode, fieldType);
             }
         }
 
-        const uninitializedFields = sym.fields.filter(field => !seenFields.has(field.name));
+        const uninitializedFields = structSym.fields.filter(field => !seenFields.has(field.name));
         for (const field of uninitializedFields) {
             this.reportError(node, `Field '${field.name}' is not initialized.`);
         }
 
-        return mkStructType(sym);
+        return mkStructType(structSym);
     }
 
     private elabStructExprUnknown(node: StructExprNode): Type {
@@ -1591,4 +1593,13 @@ function typeLooseEq(t1: Type, t2: Type): boolean {
 
 function paramsLooseEq(p1: FuncParamSym[], p2: FuncParamSym[]): boolean {
     return stream(p1).zipLongest(p2).every(([a, b]) => a && b && typeLooseEq(a.type, b.type));
+}
+
+function appendInWeakMap<K extends WeakKey, V>(map: WeakMap<K, V[]>, key: K, value: V): void {
+    const values = map.get(key);
+    if (values) {
+        values.push(value);
+    } else {
+        map.set(key, [value]);
+    }
 }

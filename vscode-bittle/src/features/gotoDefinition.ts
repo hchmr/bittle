@@ -1,7 +1,7 @@
 import path from 'path';
 import * as vscode from 'vscode';
 import { Origin, Sym, SymKind, symRelatedType } from '../semantics/sym';
-import { Type, TypeKind } from '../semantics/type';
+import { mkErrorType, Type, TypeKind, unifyTypes } from '../semantics/type';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
@@ -84,12 +84,9 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
         return stream(tree.rootNode.descendantsForPosition(position))
             .filter(node => node.type === NodeTypes.identifier)
             .flatMap(nameNode => {
-                const symbol = this.semanticsService.resolveSymbol(filePath, nameNode);
-                if (!symbol) {
-                    return [];
-                }
-
-                return stream([symbol]).concat(this.getSameSymbolInReferringFiles(symbol))
+                const symbols = this.semanticsService.resolveSymbol(filePath, nameNode);
+                return stream(symbols)
+                    .flatMap(sym => [sym, ...this.getSameSymbolInReferringFiles(sym)])
                     .flatMap(sym => sym.origins)
                     .filter(origin => !definitionOnly || !origin.isForwardDecl)
                     .distinctBy(origin => origin.file + '|' + origin.node.startIndex)
@@ -149,16 +146,20 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         if (!type) {
             return;
         }
-        return this.fromType(filePath, node, type);
+        return this.fromType(filePath, type);
     }
 
     getTypeForNode(filePath: string, node: SyntaxNode): Type | undefined {
         if (node.type === NodeTypes.identifier) {
-            const sym = this.semanticsService.resolveSymbol(filePath, node);
-            if (!sym || sym.kind === SymKind.Func) {
+            const syms = this.semanticsService
+                .resolveSymbol(filePath, node)
+                .filter(sym => sym.kind !== SymKind.Func);
+            if (!syms.length) {
                 return;
             }
-            return symRelatedType(sym);
+            return syms
+                .map(sym => symRelatedType(sym))
+                .reduce(unifyTypes);
         } else if (isExprNode(node)) {
             return this.semanticsService.inferType(filePath, node);
         } else if (isTypeNode(node)) {
@@ -166,7 +167,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         }
     }
 
-    fromType(filePath: string, node: SyntaxNode, type: Type): Sym | undefined {
+    fromType(filePath: string, type: Type): Sym | undefined {
         if (type.kind === TypeKind.Ptr) {
             type = type.pointeeType;
         }

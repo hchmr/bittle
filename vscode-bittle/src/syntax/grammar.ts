@@ -337,8 +337,10 @@ export const grammar = createGrammar({
     ),
 
     FieldInit: $ => seq(
-        label('name', 'identifier'),
-        ':',
+        optional(seq(
+            label('name', 'identifier'),
+            ':',
+        )),
         label('value', $.Expr),
     ),
 

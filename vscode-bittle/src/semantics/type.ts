@@ -263,6 +263,10 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
     }
 }
 
+export function unifyTypes(t1: Type, t2: Type): Type {
+    return tryUnifyTypes(t1, t2, () => { });
+}
+
 export function typeEq(t1: Type, t2: Type): boolean {
     if (t1 === t2) {
         return true;

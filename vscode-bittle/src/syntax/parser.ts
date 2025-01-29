@@ -885,10 +885,12 @@ export class Parser extends ParserBase {
 
     fieldInit() {
         this.beginNode(CompositeNodeTypes.FieldInit);
-        this.beginField('name');
-        this.expect('identifier');
-        this.finishField('name');
-        this.expect(':');
+        if (this.match('identifier', ':')) {
+            this.beginField('name');
+            this.bump('identifier');
+            this.finishField('name');
+            this.bump(':');
+        }
         this.beginField('value');
         this.expr();
         this.finishField('value');

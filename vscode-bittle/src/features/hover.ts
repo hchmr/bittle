@@ -41,36 +41,34 @@ export class HoverProvider implements vscode.HoverProvider {
 
     getDetailForNode(document: vscode.TextDocument, node: SyntaxNode): HoverDetail | undefined {
         if (node.type === 'identifier') {
-            const sym = this.semanticsService.resolveSymbol(document.fileName, node);
-            if (sym) {
-                return this.addLayout(document, { kind: 'sym', sym, node });
+            const syms = this.semanticsService.resolveSymbol(document.fileName, node);
+            if (syms.length) {
+                return this.addLayout({ kind: 'sym', syms, node });
             }
         }
         if (isExprNode(node)) {
             const type = this.semanticsService.inferType(document.fileName, node);
             if (type) {
-                return this.addLayout(document, { kind: 'type', type, node });
+                return this.addLayout({ kind: 'type', type, node });
             }
         }
         if (isTypeNode(node)) {
             const type = this.semanticsService.evalType(document.fileName, node);
             if (type) {
-                return this.addLayout(document, { kind: 'type', type, node });
+                return this.addLayout({ kind: 'type', type, node });
             }
         }
     }
 
-    addLayout(document: vscode.TextDocument, hoverDetail: HoverDetail): HoverDetail {
-        if (hoverDetail.kind === 'sym' && hoverDetail.sym.kind === SymKind.Func) {
-            return hoverDetail; // Don't show layout for return type of functions
-        }
-
-        const type = hoverDetail.kind === 'sym'
-            ? symRelatedType(hoverDetail.sym)
-            : hoverDetail.type;
-
-        if (type) {
-            hoverDetail.layout = typeLayout(type);
+    addLayout(hoverDetail: HoverDetail): HoverDetail {
+        if (hoverDetail.kind === 'sym') {
+            for (const sym of hoverDetail.syms) {
+                if (sym.kind !== SymKind.Func) {
+                    hoverDetail.layout = typeLayout(symRelatedType(sym));
+                }
+            }
+        } else {
+            hoverDetail.layout = typeLayout(hoverDetail.type);
         }
 
         return hoverDetail;
@@ -78,12 +76,12 @@ export class HoverProvider implements vscode.HoverProvider {
 };
 
 type HoverDetail =
-    | { kind: 'sym'; sym: Sym; node: SyntaxNode; layout?: TypeLayout }
+    | { kind: 'sym'; syms: Sym[]; node: SyntaxNode; layout?: TypeLayout }
     | { kind: 'type'; type: Type; node: SyntaxNode; layout?: TypeLayout };
 
 function toHover(hoverDetail: HoverDetail): vscode.Hover {
     let text = hoverDetail.kind === 'sym'
-        ? prettySym(hoverDetail.sym)
+        ? hoverDetail.syms.map(prettySym).join('\n')
         : prettyType(hoverDetail.type);
 
     if (hoverDetail.layout) {

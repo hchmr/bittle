@@ -41,7 +41,7 @@ export class SemanticsService {
         }(innerScope));
     }
 
-    resolveSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
+    resolveSymbol(path: string, nameNode: SyntaxNode): Sym[] {
         if (isFieldName(nameNode)) {
             return this.resolveFieldName(path, nameNode);
         } else {
@@ -49,26 +49,23 @@ export class SemanticsService {
         }
     }
 
-    private resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSym | undefined {
-        const module = this.elaborateFile(path);
-        const qname = module.nodeSymMap.get(nameNode);
-        if (!qname) {
-            return;
-        }
-        const sym = module.symbols.get(qname)!;
-        if (sym.kind !== SymKind.StructField) {
-            return;
-        }
-        return sym;
+    resolveUnambiguousSymbol(path: string, nameNode: SyntaxNode): Sym | undefined {
+        const symbols = this.resolveSymbol(path, nameNode);
+        return symbols.length === 1 ? symbols[0] : undefined;
     }
 
-    public resolveName(path: string, nameNode: SyntaxNode): Sym | undefined {
+    private resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSym[] {
         const module = this.elaborateFile(path);
-        const qname = module.nodeSymMap.get(nameNode);
-        if (!qname) {
-            return;
-        }
-        return module.symbols.get(qname)!;
+        const qnames = module.nodeSymMap.get(nameNode) ?? [];
+        return qnames
+            .map(qname => module.symbols.get(qname)!)
+            .filter(sym => sym.kind === SymKind.StructField);
+    }
+
+    public resolveName(path: string, nameNode: SyntaxNode): Sym[] {
+        const module = this.elaborateFile(path);
+        const qnames = module.nodeSymMap.get(nameNode) ?? [];
+        return qnames.map(qname => module.symbols.get(qname)!);
     }
 
     public getSymbol(path: string, qualifiedName: string): Sym | undefined {

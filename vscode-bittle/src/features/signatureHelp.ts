@@ -70,7 +70,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         const argNodes = callNode.childForFieldName('args')!.children;
         const argIndex = countPrecedingCommas(argNodes, position);
 
-        const calleeSym = this.semanticsService.resolveSymbol(filePath, calleeNameNode);
+        const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleeNameNode);
         if (!calleeSym || (calleeSym.kind !== SymKind.Func && calleeSym.kind !== SymKind.Struct)) {
             return;
         }
@@ -98,7 +98,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return;
         }
 
-        const structSym = this.semanticsService.resolveSymbol(filePath, structNameNode);
+        const structSym = this.semanticsService.resolveUnambiguousSymbol(filePath, structNameNode);
         if (!structSym || structSym.kind !== SymKind.Struct) {
             return;
         }
@@ -107,9 +107,7 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         const fieldInitNodes = fieldListNodes.filter((node) => node.type === NodeTypes.FieldInit);
         const fieldIndex = countPrecedingCommas(fieldListNodes, position);
         const fieldInitNode = fieldInitNodes[fieldIndex];
-        const fieldName
-            = fieldInitNode?.childForFieldName('name')?.text
-            ?? nextUninitializedFieldName(structSym, fieldListNodes);
+        const fieldName = getFieldName(fieldInitNode) ?? nextUninitializedFieldName(structSym, fieldListNodes);
         if (!fieldName) {
             return;
         }
@@ -120,9 +118,23 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             fieldName,
         );
 
+        function getFieldName(fieldInitNode: SyntaxNode): string | undefined {
+            const nameNode = fieldInitNode.childForFieldName('name');
+            if (nameNode) {
+                return nameNode.text;
+            }
+
+            const valueNode = fieldInitNode.childForFieldName('value');
+            if (valueNode && valueNode.type === ExprNodeTypes.NameExpr) {
+                return valueNode.text;
+            }
+
+            return undefined;
+        }
+
         function nextUninitializedFieldName(structSym: StructSym, fieldInitNodes: SyntaxNode[]): string | undefined {
             const usedNames = stream(fieldInitNodes)
-                .filterMap((node) => node.childForFieldName('name')?.text)
+                .filterMap(getFieldName)
                 .toSet();
             return structSym.fields
                 .map(x => x.name)
