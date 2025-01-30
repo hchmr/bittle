@@ -78,7 +78,6 @@ To build from source, you will need a system running Arm64 Linux with the follow
 **Missing Features:**
 
 - Limited static analysis (e.g., no definite return analysis)
-- The maximum size of a stack frame is hard-coded
 - Number of arguments to a function is limited to 8
 
 **Planned Enhancements:**
