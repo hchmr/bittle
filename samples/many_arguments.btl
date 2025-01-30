@@ -1,0 +1,11 @@
+func printf(fmt: *Char, ...): Int32;
+
+func sum16(a: Int32, b: Int32, c: Int32, d: Int32, e: Int32, f: Int32, g: Int32, h: Int32, i: Int32, j: Int32, k: Int32, l: Int32, m: Int32, n: Int32, o: Int32, p: Int32): Int32 {
+    return a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p;
+}
+
+func main(): Int32 {
+    var sum = sum16(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+    printf("sum16(%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d) = %d\n", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, sum);
+    return sum == 136 ? 0 : 1;
+}

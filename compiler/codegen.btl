@@ -506,7 +506,7 @@ func asm_print_operand(fun: *AsmFunc, operand: *AsmOperand) {
         }
     } else if (operand.kind == AsmOperand_SpOffset) {
         var operand = operand as *AsmSpOffsetOperand;
-        printf("#%d", fun.frame_size - operand.fp_offset);
+        printf("#%d", fun.frame_size + operand.fp_offset);
     } else if (operand.kind == AsmOperand_Raw) {
         var operand = operand as *AsmRawOperand;
         printf("%s", operand.op);
@@ -633,6 +633,9 @@ struct CodegenCtx {
     scratch_size: Int,
     max_scratch: Int,
 
+    // argument passing space
+    max_arg_size: Int,
+
     // labels
     n_labels: Int,
     ret_label: Int,
@@ -666,13 +669,13 @@ func write_push(ctx: *CodegenCtx, reg: Reg) {
     ctx.max_scratch = int_max(ctx.max_scratch, ctx.scratch_size);
 
     // str {reg}, [sp, #{??}]
-    var fp_offset = ctx.slots_size + ctx.scratch_size;
+    var fp_offset = -(ctx.slots_size + ctx.scratch_size);
     asm_write_str_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
 }
 
 func write_pop(ctx: *CodegenCtx, reg: Reg) {
     // ldr {reg}, [sp, #{??}]
-    var fp_offset = ctx.slots_size + ctx.scratch_size;
+    var fp_offset = -(ctx.slots_size + ctx.scratch_size);
     asm_write_ldrs_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
 
     ctx.scratch_size -= 8;
@@ -1105,38 +1108,87 @@ func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
     }
 }
 
-func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
-    var sym = e.callee;
-    var param_count = list_len((sym as *FuncSym).params);
-    var args = e.args;
-    var arg_count = list_len(args);
-    var type = e.type;
+struct ArgCallConv {
+    is_reg: Bool,
+// if is_reg:
+    reg: Reg,
+// else:
+    offset: Int,
+}
 
+struct CallConv {
+    n_args: Int,
+    arg_mappings: *ArgCallConv,
+    stack_space: Int,
+}
+
+func call_conv_drop(cc: *CallConv) {
+    free(cc.arg_mappings);
+}
+
+// Idea: should this be added to HirCallExpr? The calling convention might be needed before codegen.
+func get_call_conv(n_args: Int, out: *CallConv) {
+    var mappings: *ArgCallConv = calloc(n_args, sizeof(ArgCallConv));
+
+    var ngrn = 0;
+    var nsaa = 0;
+    for (var i = 0; i < n_args; i += 1) {
+        if (ngrn < 8) {
+            mappings[i] = ArgCallConv { is_reg: true, reg: ngrn as Reg, offset: -1 };
+            ngrn += 1;
+        } else {
+            mappings[i] = ArgCallConv { is_reg: false, reg: -1 as Reg, offset: nsaa };
+            nsaa += 8;
+        }
+    }
+
+    *out = CallConv {
+        n_args: n_args,
+        arg_mappings: mappings,
+        stack_space: nsaa * 8,
+    };
+}
+
+func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     var comment: *Char = calloc(100, sizeof(Char));
-    snprintf(comment, 100, "// prepare call to %s", sym.name);
+    snprintf(comment, 100, "// prepare call to %s", e.callee.name);
     asm_write_raw(ctx.builder, comment);
 
     spill_before_call(ctx);
 
-    var i = 0;
-    while (i < arg_count) {
-        var arg = list_get(args, i);
-        // x{i} <- ...
-        asm_lower_expr(ctx, arg, i as Reg);
-        i += 1;
+    var cc: CallConv;
+    get_call_conv(list_len(e.args), &cc);
+    ctx.max_arg_size = int_max(ctx.max_arg_size, cc.stack_space);
+
+    for (var i = 0; i < cc.n_args; i += 1) {
+        var arg = list_get(e.args, i);
+        var arg_mapping = cc.arg_mappings[i];
+        if (arg_mapping.is_reg) {
+            // x{i} <- ...
+            asm_lower_expr(ctx, arg, arg_mapping.reg);
+        } else {
+            var x1 = next_reg_except_1(ctx, SP);
+            // {x1} <- ...
+            asm_lower_expr(ctx, arg, x1);
+            // str {x1}, [sp, #{offset}]
+            asm_write_str_ri(ctx.builder, width: 8, x1, SP, arg_mapping.offset);
+            free_reg(ctx, x1);
+        }
     }
 
-    // bl {name}
-    asm_write_bl(ctx.builder, sym.name);
+    call_conv_drop(&cc);
 
-    if (type.kind != Type_Void && type.kind != Type_Never) {
-        write_sign_extend(ctx, type, xd, Reg_X0);
+    // bl {name}
+    asm_write_bl(ctx.builder, e.callee.name);
+
+    if (e.type.kind != Type_Void && e.type.kind != Type_Never) {
+        write_sign_extend(ctx, e.type, xd, Reg_X0);
     }
 
     unspill_after_call(ctx);
 
     comment = calloc(100, sizeof(Char));
-    snprintf(comment, 100, "// call to %s done", sym.name);
+    snprintf(comment, 100, "// call to %s done", e.callee.name);
     asm_write_raw(ctx.builder, comment);
 }
 
@@ -1230,14 +1282,22 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
 }
 
 func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
-    var params = sym.params;
-    var locals = sym.locals;
+    var cc: CallConv;
+    get_call_conv(list_len(sym.params), &cc);
 
-    var i = 0;
-    for (var i = 0; i < list_len(params); i += 1) {
-        var param: *FuncParam = list_get(params, i);
-        var local: *LocalSym = list_get(locals, i);
-        write_slot_store(ctx, param.type, local.slot_index, i as Reg);
+    // Copy arguments to stack slots
+    for (var i = 0; i < cc.n_args; i += 1) {
+        var param: *FuncParam = list_get(sym.params, i);
+        var local: *LocalSym = list_get(sym.locals, i);
+        var arg_mapping = cc.arg_mappings[i];
+        if (arg_mapping.is_reg) {
+            write_slot_store(ctx, param.type, local.slot_index, arg_mapping.reg);
+        } else {
+            // ldr x0, [fp, #{offset + 16}] ; 16 bytes for FP and LR
+            asm_write_ldrs_ri(ctx.builder, width: 8, Reg_X0, FP, arg_mapping.offset + 16);
+            // str x0, [fp, -#{offset}]
+            write_slot_store(ctx, param.type, local.slot_index, Reg_X0);
+        }
     }
 
     asm_lower_expr(ctx, hir_body, Reg_X0);
@@ -1270,6 +1330,10 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         slots[temp.slot_index] = Slot { offset };
         slots_size = offset + type_size(temp.type);
     }
+    // Many frame calculations become easier if the size of the slots area is a multiple of 8.
+    // E.g. LDR/STR by immediate offset which require the offset to be a multiple of the size of the data.
+    slots_size = align_up(slots_size, 8);
+
     ctx.n_slots = n_slots;
     ctx.slots = slots;
     ctx.slots_size = slots_size;
@@ -1288,7 +1352,7 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         is_reg_used[i] = ctx.regs[i].n_writes > 0;
     }
 
-    var frame_size = align_up(ctx.slots_size + ctx.max_scratch, 16);
+    var frame_size = align_up(ctx.slots_size + ctx.max_scratch + ctx.max_arg_size, 16);
     var asm_fun: *AsmFunc = calloc(1, sizeof(AsmFunc));
     *asm_fun = AsmFunc {
         name: sym.name,

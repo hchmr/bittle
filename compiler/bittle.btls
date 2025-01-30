@@ -63,8 +63,6 @@ func parse_string(s: *Char): *StringBuffer;
 //==============================================================================
 //== type.btl
 
-const MAX_PARAMS = 8;
-
 struct Sym;
 struct StructSym;
 struct EnumSym;
@@ -699,7 +697,7 @@ struct HirBinaryOpExpr: HirExpr {
 }
 
 struct HirCallExpr: HirExpr {
-    callee: *Sym,
+    callee: *FuncSym,
     args: *List, // List<HirExpr>
 }
 

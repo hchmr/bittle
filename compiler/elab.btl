@@ -506,9 +506,6 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     var param_count = list_len(sym.params);
     var arg_count = list_len(args);
 
-    if (arg_count > MAX_PARAMS) {
-        die_at(&expr.pos, "Too many arguments");
-    }
     if (arg_count < param_count) {
         error_at(&expr.pos);
         fprintf(stderr, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
@@ -1105,10 +1102,6 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     var name = decl.name;
 
     var param_decls = decl.params;
-
-    if (list_len(param_decls) > MAX_PARAMS) {
-        die_at(&decl.pos, "Too many parameters");
-    }
 
     var params = list_new();
     for (var i = 0; i < list_len(param_decls); i += 1) {

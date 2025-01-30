@@ -129,5 +129,6 @@ function isShorthandFieldInit(nameNode: SyntaxNode) {
     }
     const fieldInitNode = nameExprNode.parent;
 
-    return fieldInitNode.childForFieldName('value') === nameExprNode;
+    return fieldInitNode.childForFieldName('name') === null
+        && fieldInitNode.childForFieldName('value') === nameExprNode;
 }
