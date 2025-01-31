@@ -50,7 +50,7 @@ func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
     var result: *HirSeqExpr = calloc(1, sizeof(HirSeqExpr));
     *result = HirSeqExpr {
         kind: HirExpr_Seq,
-        type: first.type,
+        type: second.type,
         pos: first.pos,
         first,
         second,
@@ -342,13 +342,40 @@ func lower_array_expr(ctx: *Context, expr: *ArrayExpr): *HirExpr {
     die_at(&expr.pos, "Array literal outside of an assignment statement");
 }
 
+// All arguments are passed by value, but non-scalar rvalues
+// are converted to lvalues here make code generation easier.
+func lower_arg(ctx: *Context, expr: *Expr): *HirExpr {
+    if (is_scalar(expr.type)) {
+        return lower_expr(ctx, expr);
+    } else if (is_lvalue(expr) && !is_pass_by_ptr(expr.type)) {
+        // Already an lvalue. Can be safely passed directly since it's not passed by pointer which risks mutation.
+        return lower_expr(ctx, expr);
+    } else {
+        /*
+            Desugar
+                e
+            to
+                temp t1: typeof(e);
+                *(t1 = e; &t1)
+            -> An lvalue instead of an rvalue
+        */
+        var temp_var = mk_temp_var(ctx, expr.type);
+        var temp = hir_mk_temp_expr(temp_var, &expr.pos);
+        var temp_init = lower_assign_expr(ctx, temp, expr, &expr.pos);
+        var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
+        var sequence = hir_mk_seq_expr(temp_init, addr_temp);
+        var deref = hir_mk_deref_expr(sequence, &expr.pos);
+        return deref;
+    }
+}
+
 func lower_call_expr(ctx: *Context, expr: *CallExpr): *HirExpr {
     var ast_args = expr.args;
 
     var hir_args = list_new();
     for (var i = 0; i < list_len(ast_args); i += 1) {
         var ast_arg: *CallArg = list_get(ast_args, i);
-        var hir_arg = lower_expr(ctx, ast_arg.expr);
+        var hir_arg = lower_arg(ctx, ast_arg.expr);
         list_push(hir_args, hir_arg);
     }
     return hir_mk_call_expr(expr.resolved_callee, hir_args, &expr.pos);
@@ -572,7 +599,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         var temp = hir_mk_temp_expr(temp_var, pos);
         var temp_init = hir_mk_assign_expr(temp, addr_dst);
 
-        var body = mk_skip_stmt(pos);
+        var body: *HirExpr = temp_init;
 
         var n_initializers = list_len(initializers);
         for (var i = 0; i < n_initializers; i += 1) {
@@ -586,7 +613,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
             body = hir_mk_seq_expr(body, assignment);
         }
 
-        return hir_mk_seq_expr(temp_init, body);
+        return body;
     } else if (ast_src.kind == Expr_Array) {
         /*
             Desugar
@@ -612,7 +639,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         var temp = hir_mk_temp_expr(temp_var, pos);
         var temp_init = hir_mk_assign_expr(temp, addr_zero_index);
 
-        var body = mk_skip_stmt(pos);
+        var body: *HirExpr = temp_init;
 
         for (var i = 0; i < array_size; i += 1) {
             var ast_elem: *Expr = list_get(elems, i);
@@ -626,7 +653,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         assert(addr_zero_index.type, "lower_assign_expr: addr_zero_index should have a type");
         assert(addr_zero_index.expr.type, "lower_assign_expr: addr_zero_index should have a type");
 
-        return hir_mk_seq_expr(temp_init, body);
+        return body;
     } else {
         var src = lower_expr(ctx, ast_src);
         return hir_mk_assign_expr(dst, src);

@@ -173,6 +173,15 @@ func is_scalar(type: *Type): Bool {
         || type.kind == Type_Enum;
 }
 
+func is_composite(type: *Type): Bool {
+    return type.kind == Type_Arr
+        || type.kind == Type_Struct;
+}
+
+func is_pass_by_ptr(type: *Type): Bool {
+    return is_composite(type) && type_size(type) > 16;
+}
+
 func is_sized(type: *Type): Bool {
     return type_size(type) != -1;
 }

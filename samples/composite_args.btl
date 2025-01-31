@@ -1,0 +1,56 @@
+extern func exit(code: Int32): Void;
+
+extern func printf(fmt: *Char, ...): Int32;
+
+func assert_eq(a: Int, b: Int) {
+    if (a != b) {
+        printf("assertion failed: %d == %d\n", a, b);
+        exit(1);
+    }
+}
+
+struct Point2d {
+    x: Int,
+    y: Int,
+}
+
+struct Point3d {
+    x: Int,
+    y: Int,
+    z: Int,
+}
+
+// 16 bytes, will be passed in registers
+func sum_2d(p: Point2d): Int {
+    return p.x + p.y;
+}
+
+// 24 bytes, will be passed on the stack
+func sum_3d(p: Point3d): Int {
+    return p.x + p.y + p.z;
+}
+
+// 32 bytes, will be passed on the stack
+func sum_10(xs: [Int; 10]): Int {
+    var sum = 0;
+    for (var i = 0; i < 10; i += 1) {
+        sum += xs[i];
+    }
+    return sum;
+}
+
+func main(): Int32 {
+    var p2d = Point2d { x: 1024, y: 4096 };
+    var p3d = Point3d { x: 1024, y: 4096, z: 8192 };
+    var ints = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    var sum2d = sum_2d(p: p2d);
+    var sum3d = sum_3d(p: p3d);
+    var sum10 = sum_10(xs: ints);
+
+    assert_eq(sum2d, 1024 + 4096);
+    assert_eq(sum3d, 1024 + 4096 + 8192);
+    assert_eq(sum10, 55);
+
+    return 0;
+}

@@ -1,0 +1,110 @@
+include "bittle.btls";
+
+func call_layout_drop(self: *CallLayout) {
+    free(self.arg_locs);
+}
+
+func mapped_to_regs(out: *ArgLocation, reg: Int, n_regs: Int) {
+    *out = ArgLocation {
+        is_reg: true,
+        reg: reg,
+        n_regs: n_regs,
+        offset: -1,
+    };
+}
+
+func mapped_to_stack(out: *ArgLocation, offset: Int) {
+    *out = ArgLocation {
+        is_reg: false,
+        reg: -1,
+        n_regs: -1,
+        offset: offset,
+    };
+}
+
+// Simplified implementation of aapcs64 2024Q3.
+func get_call_layout(n_args: Int, arg_types: **Type, out: *CallLayout) {
+    var arg_locs: *ArgLocation = calloc(n_args, sizeof(ArgLocation));
+
+    var ngrn = 0;
+    var nsaa = 0;
+    for (var i = 0; i < n_args; i += 1) {
+        var type = arg_types[i];
+        var arg_size = type_size(type);
+        var arg_align = type_align(type);
+
+        // Stage B – Pre-padding and extension of arguments
+
+        if (is_pass_by_ptr(type)) {
+            type = mk_ptr_type(type);
+            arg_size = 8;
+            arg_align = 8;
+        } else if (is_composite(type)) {
+            arg_size = align_up(arg_size, 8);
+        }
+
+        // Stage C – Assignment of arguments to registers and stack
+
+        // C.9
+        if (is_scalar(type) && arg_size <= 8 && ngrn < 8) {
+            mapped_to_regs(&arg_locs[i], reg: ngrn, n_regs: 1);
+            ngrn += 1;
+            continue;
+        }
+        // C.10:
+        if (arg_align == 16) {
+            ngrn = align_up(ngrn, 2);
+        }
+        // C.11:
+        if (is_composite(type) && arg_size / 8 <= (8 - ngrn)) {
+            var n_regs = arg_size / 8;
+            mapped_to_regs(&arg_locs[i], reg: ngrn, n_regs: n_regs);
+            ngrn += n_regs;
+            continue;
+        }
+        // C.13
+        ngrn = 8;
+        // C.14
+        nsaa = align_up(nsaa, arg_align);
+        // C.15
+        if (is_composite(type)) {
+            mapped_to_stack(&arg_locs[i], offset: nsaa);
+            nsaa += arg_size;
+            continue;
+        }
+        // C.16
+        if (arg_size < 8) {
+            arg_size = 8;
+        }
+        mapped_to_stack(&arg_locs[i], offset: nsaa);
+        nsaa += arg_size;
+    }
+
+    *out = CallLayout {
+        n_args: n_args,
+        arg_locs,
+        stack_space: nsaa * 8,
+    };
+}
+
+func get_call_layout_for_call(e: *HirCallExpr, out: *CallLayout) {
+    var n_args = list_len(e.args);
+    var arg_types: **Type = calloc(n_args, sizeof(*Type));
+    for (var i = 0; i < n_args; i += 1) {
+        var arg: *HirCallExpr = list_get(e.args, i);
+        arg_types[i] = arg.type;
+    }
+    get_call_layout(n_args, arg_types, out);
+    free(arg_types);
+}
+
+func get_call_layout_for_func(f: *FuncSym, out: *CallLayout) {
+    var n_params = list_len(f.params);
+    var param_types: **Type = calloc(n_params, sizeof(*Type));
+    for (var i = 0; i < n_params; i += 1) {
+        var param: *FuncParam = list_get(f.params, i);
+        param_types[i] = param.type;
+    }
+    get_call_layout(n_params, param_types, out);
+    free(param_types);
+}

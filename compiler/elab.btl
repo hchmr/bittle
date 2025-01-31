@@ -217,7 +217,7 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
     var slot_index = list_len(ctx.current_func.locals);
 
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
-    *sym = LocalSym { kind: Sym_Local, name, type, slot_index: slot_index };
+    *sym = LocalSym { kind: Sym_Local, name, type, slot_index: slot_index, is_indirect: false };
     add_sym(ctx, sym);
 
     list_push(ctx.current_func.locals, sym);
@@ -528,8 +528,8 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     for (; i < arg_count; i += 1) {
         var arg: *CallArg = list_get(args, i);
         elab_expr_infer(ctx, arg.expr, type_hint: null);
-        if (!is_scalar(arg.expr.type)) {
-            die_at(&expr.pos, "Variadic argument must be scalar.");
+        if (!is_sized(arg.expr.type)) {
+            die_at(&expr.pos, "Cannot pass an unsized type as a variadic argument");
         }
     }
 
@@ -1089,8 +1089,8 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
     var name = param_decl.name;
     var type = eval_type(ctx, param_decl.type);
 
-    if (!is_scalar(type)) {
-        die_at(&param_decl.pos, "Parameter must be of scalar type.");
+    if (!is_sized(type)) {
+        die_at(&param_decl.pos, "Parameter has unsized type");
     }
 
     var result: *FuncParam = calloc(1, sizeof(FuncParam));
@@ -1113,6 +1113,10 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     var return_type = decl.return_type
         ? eval_type(ctx, decl.return_type)
         : mk_void_type();
+
+    if (return_type.kind != Type_Void && return_type.kind != Type_Never && !is_scalar(return_type)) {
+        die_at(&decl.pos, "Function return type must be scalar");
+    }
 
     var is_variadic = decl.is_variadic;
 

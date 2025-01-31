@@ -795,16 +795,33 @@ func unspill_after_call(ctx: *CodegenCtx) {
     }
 }
 
-func write_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
-    var width = type_size(type);
-    var offset = ctx.slots[slot_index].offset + type_size(type);
-    asm_write_str_ri(ctx.builder, width: width, reg, FP, -offset);
+func get_slot_offset(ctx: *CodegenCtx, type: *Type, slot_index: Int): Int {
+    return -(ctx.slots[slot_index].offset + type_size(type));
 }
 
+// str {reg}, [fp, #{fp_offset} + #{slot_offset}]
+func write_slot_store_partial(ctx: *CodegenCtx, type: *Type, slot_index: Int, slot_offset: Int, reg: Reg) {
+    var width = type_size(type);
+    var fp_offset = get_slot_offset(ctx, type, slot_index);
+    asm_write_str_ri(ctx.builder, width: width, reg, FP, fp_offset + slot_offset);
+}
+
+// str {reg}, [fp, #{fp_offset}]
+func write_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
+    write_slot_store_partial(ctx, type, slot_index, 0, reg);
+}
+
+// add {reg} fp, #{fp_offset}
 func write_slot_addr(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
     var width = type_size(type);
-    var offset = ctx.slots[slot_index].offset + type_size(type);
-    asm_write_add_ri(ctx.builder, width: width, reg, FP, -offset);
+    var fp_offset = get_slot_offset(ctx, type, slot_index);
+    asm_write_add_ri(ctx.builder, width: width, reg, FP, fp_offset);
+}
+
+func write_slot_read(ctx: *CodegenCtx, type: *Type, slot_index: Int, xd: Reg) {
+    var width = type_size(type);
+    var fp_offset = get_slot_offset(ctx, type, slot_index);
+    asm_write_ldrs_r_frame_indexed(ctx.builder, width: width, xd, fp_offset);
 }
 
 func write_sign_extend(ctx: *CodegenCtx, source: *Type, xd: Reg, x1: Reg) {
@@ -859,11 +876,19 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *LocalSym;
 
-        var comment: *Char = calloc(100, sizeof(Char));
-        snprintf(comment, 100, "// local '%s' @ %d", sym.name, sym.slot_index);
+        if (sym.is_indirect) {
+            var comment: *Char = calloc(100, sizeof(Char));
+            snprintf(comment, 100, "// local '%s' (indirect) @ %d", sym.name, sym.slot_index);
 
-        write_slot_addr(ctx, sym.type, sym.slot_index, xd);
-        asm_comment_prev(ctx.builder, comment);
+            write_slot_read(ctx, sym.type, sym.slot_index, xd);
+            asm_comment_prev(ctx.builder, comment);
+        } else {
+            var comment: *Char = calloc(100, sizeof(Char));
+            snprintf(comment, 100, "// local '%s' @ %d", sym.name, sym.slot_index);
+
+            write_slot_addr(ctx, sym.type, sym.slot_index, xd);
+            asm_comment_prev(ctx.builder, comment);
+        }
     } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
         var e = e as *HirVarExpr;
         var sym = e.sym as *GlobalSym;
@@ -1108,47 +1133,6 @@ func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
     }
 }
 
-struct ArgCallConv {
-    is_reg: Bool,
-// if is_reg:
-    reg: Reg,
-// else:
-    offset: Int,
-}
-
-struct CallConv {
-    n_args: Int,
-    arg_mappings: *ArgCallConv,
-    stack_space: Int,
-}
-
-func call_conv_drop(cc: *CallConv) {
-    free(cc.arg_mappings);
-}
-
-// Idea: should this be added to HirCallExpr? The calling convention might be needed before codegen.
-func get_call_conv(n_args: Int, out: *CallConv) {
-    var mappings: *ArgCallConv = calloc(n_args, sizeof(ArgCallConv));
-
-    var ngrn = 0;
-    var nsaa = 0;
-    for (var i = 0; i < n_args; i += 1) {
-        if (ngrn < 8) {
-            mappings[i] = ArgCallConv { is_reg: true, reg: ngrn as Reg, offset: -1 };
-            ngrn += 1;
-        } else {
-            mappings[i] = ArgCallConv { is_reg: false, reg: -1 as Reg, offset: nsaa };
-            nsaa += 8;
-        }
-    }
-
-    *out = CallConv {
-        n_args: n_args,
-        arg_mappings: mappings,
-        stack_space: nsaa * 8,
-    };
-}
-
 func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     var comment: *Char = calloc(100, sizeof(Char));
     snprintf(comment, 100, "// prepare call to %s", e.callee.name);
@@ -1156,27 +1140,62 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
 
     spill_before_call(ctx);
 
-    var cc: CallConv;
-    get_call_conv(list_len(e.args), &cc);
-    ctx.max_arg_size = int_max(ctx.max_arg_size, cc.stack_space);
+    var layout: CallLayout;
+    get_call_layout_for_call(e, &layout);
 
-    for (var i = 0; i < cc.n_args; i += 1) {
-        var arg = list_get(e.args, i);
-        var arg_mapping = cc.arg_mappings[i];
-        if (arg_mapping.is_reg) {
+    for (var i = 0; i < layout.n_args; i += 1) {
+        var arg: *HirExpr = list_get(e.args, i);
+        var arg_loc = &layout.arg_locs[i];
+        if (arg_loc.is_reg && is_scalar(arg.type)) {
+            // Pass scalar in register.
             // x{i} <- ...
-            asm_lower_expr(ctx, arg, arg_mapping.reg);
-        } else {
-            var x1 = next_reg_except_1(ctx, SP);
+            asm_lower_expr(ctx, arg, arg_loc.reg as Reg);
+        } else if (arg_loc.is_reg && is_pass_by_ptr(arg.type) && hir_is_lvalue(arg)) {
+            // Pass composite by pointer in register.
+            // x{i} <- &...
+            asm_lower_expr_addr(ctx, arg, arg_loc.reg as Reg);
+        } else if (arg_loc.is_reg && hir_is_lvalue(arg)) {
+            // Pass 8 or 16 byte aggregate in consecutive registers.
+            //
+            // x{lo} <- &...
+            // ldr x{lo+n} [x{lo}, #8 * n]
+            // ...
+            // ldr x{lo+0} [x{lo}, #8 * 0]
+            var lo = arg_loc.reg;
+            var n = arg_loc.n_regs;
+            asm_lower_expr_addr(ctx, arg, lo as Reg);
+            for (var j = n - 1; j >= 0; j -= 1) {
+                asm_write_ldrs_ri(ctx.builder, width: 8, (lo + j) as Reg, lo as Reg, 8 * j);
+            }
+        } else if (!arg_loc.is_reg && is_scalar(arg.type)) {
+            // Pass scalar on stack.
             // {x1} <- ...
-            asm_lower_expr(ctx, arg, x1);
             // str {x1}, [sp, #{offset}]
-            asm_write_str_ri(ctx.builder, width: 8, x1, SP, arg_mapping.offset);
+            var x1 = next_reg_except_1(ctx, SP);
+            asm_lower_expr(ctx, arg, x1);
+            asm_write_str_ri(ctx.builder, width: 8, x1, SP, arg_loc.offset);
             free_reg(ctx, x1);
+        } else if (!arg_loc.is_reg && hir_is_lvalue(arg)) {
+            // Pass aggregate on stack.
+            //
+            // x1 <- &...
+            // add x0, sp, #{offset}
+            // mov x2, #{size}
+            // bl memcpy
+            spill_before_call(ctx);
+            asm_lower_expr_addr(ctx, arg, Reg_X1);
+            asm_write_add_ri(ctx.builder, width: 8, Reg_X0, SP, arg_loc.offset);
+            asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(arg.type));
+            asm_write_bl(ctx.builder, "memcpy");
+            unspill_after_call(ctx);
+        } else {
+            unreachable("asm_lower_call_expr");
         }
     }
 
-    call_conv_drop(&cc);
+    ctx.max_arg_size = int_max(ctx.max_arg_size, layout.stack_space);
+
+    call_layout_drop(&layout);
 
     // bl {name}
     asm_write_bl(ctx.builder, e.callee.name);
@@ -1282,21 +1301,50 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
 }
 
 func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
-    var cc: CallConv;
-    get_call_conv(list_len(sym.params), &cc);
+    var layout: CallLayout;
+    get_call_layout_for_func(sym, &layout);
 
     // Copy arguments to stack slots
-    for (var i = 0; i < cc.n_args; i += 1) {
+    for (var i = 0; i < layout.n_args; i += 1) {
         var param: *FuncParam = list_get(sym.params, i);
         var local: *LocalSym = list_get(sym.locals, i);
-        var arg_mapping = cc.arg_mappings[i];
-        if (arg_mapping.is_reg) {
-            write_slot_store(ctx, param.type, local.slot_index, arg_mapping.reg);
-        } else {
-            // ldr x0, [fp, #{offset + 16}] ; 16 bytes for FP and LR
-            asm_write_ldrs_ri(ctx.builder, width: 8, Reg_X0, FP, arg_mapping.offset + 16);
-            // str x0, [fp, -#{offset}]
+        var arg_loc = &layout.arg_locs[i];
+        if (arg_loc.is_reg) {
+            for (var j = 0; j < arg_loc.n_regs; j += 1) {
+                var reg = (arg_loc.reg + j) as Reg;
+                write_slot_store_partial(ctx, param.type, local.slot_index, 8 * j, reg);
+            }
+            local.is_indirect = is_pass_by_ptr(param.type);
+        } else if (type_size(param.type) <= 8) {
+            // ldr x0, [fp, #{offset + 16}] ; 16 bytes for fp and LR
+            asm_write_ldrs_ri(ctx.builder, width: 8, Reg_X0, FP, arg_loc.offset + 16);
+            // str x0, [fp, #{??}]
             write_slot_store(ctx, param.type, local.slot_index, Reg_X0);
+        } else {
+            // Passed on stack. Must be copied to local slot. Handled separately below
+            // to make sure calling memcpy doesn't clobber the remaining unread arguments.
+        }
+    }
+
+    for (var i = 0; i < layout.n_args; i += 1) {
+        var param: *FuncParam = list_get(sym.params, i);
+        var local: *LocalSym = list_get(sym.locals, i);
+        var arg_loc = &layout.arg_locs[i];
+
+        if (arg_loc.is_reg) {
+            // Already handled
+        } else if (type_size(param.type) <= 8) {
+            // Already handled
+        } else {
+            // add x0, fp, #{??}
+            // add x1, fp, #{offset + 16} ; 16 bytes for FP and LR
+            // mov x2, #{size}
+            // bl memcpy
+
+            write_slot_addr(ctx, param.type, local.slot_index, Reg_X0);
+            asm_write_add_ri(ctx.builder, width: 8, Reg_X1, FP, arg_loc.offset + 16);
+            asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(param.type));
+            asm_write_bl(ctx.builder, "memcpy");
         }
     }
 
@@ -1304,6 +1352,8 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
 
     // L.ret:
     asm_write_label(ctx.builder, ctx.ret_label, "ret");
+
+    call_layout_drop(&layout);
 }
 
 func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {

@@ -128,6 +128,8 @@ func type_convertible(src: *Type, dst: *Type): Bool;
 func type_size(type: *Type): Int;
 func type_align(type: *Type): Int;
 func is_scalar(type: *Type): Bool;
+func is_composite(type: *Type): Bool;
+func is_pass_by_ptr(type: *Type): Bool;
 func is_sized(type: *Type): Bool;
 
 func pretty_type(file: *File, type: *Type): Void;
@@ -197,6 +199,7 @@ struct FuncSym: Sym {
 struct LocalSym: Sym {
     type: *Type,
     slot_index: Int,
+    is_indirect: Bool,
 }
 
 func sym_is_defined(sym: *Sym): Bool;
@@ -751,6 +754,29 @@ func elab(ast: *Ast): *List; // *List<*Sym>
 //== hir_lower.btl
 
 func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr;
+
+//==============================================================================
+//== call_layout.btl
+
+struct ArgLocation {
+    is_reg: Bool,
+// if is_reg:
+    reg: Int,
+    n_regs: Int,
+// else:
+    offset: Int,
+}
+
+struct CallLayout {
+    n_args: Int,
+    arg_locs: *ArgLocation,
+    stack_space: Int,
+}
+
+func call_layout_drop(cc: *CallLayout);
+func get_call_layout(n_args: Int, arg_types: **Type, out: *CallLayout);
+func get_call_layout_for_call(e: *HirCallExpr, out: *CallLayout);
+func get_call_layout_for_func(e: *FuncSym, out: *CallLayout);
 
 //==============================================================================
 //== codegen.btl
