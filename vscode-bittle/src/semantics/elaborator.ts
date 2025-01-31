@@ -793,8 +793,8 @@ export class Elaborator {
         const typeNode = paramNode.type;
 
         const type = this.typeEval(typeNode);
-        if (isNonScalarType(type)) {
-            this.reportError(paramNode, `Function parameter must be of scalar type.`);
+        if (this.isUnsizedType(type)) {
+            this.reportError(paramNode, `Parameter must have a known size.`);
         }
 
         return this.defineFuncParamSym(paramNode, nameNode, funcName, paramIndex, type);
@@ -1274,8 +1274,8 @@ export class Elaborator {
                     if (argLabelNode) {
                         this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
                     }
-                    if (argValueNode && isNonScalarType(argType)) {
-                        this.reportError(node, `Variadic argument must be scalar type.`);
+                    if (argValueNode && this.isUnsizedType(argType)) {
+                        this.reportError(argValueNode, `Variadic argument must have a known size.`);
                     }
                 }
             }
@@ -1559,10 +1559,6 @@ function isLvalue(node: ExprNode | Nullish): boolean {
     } else {
         return false;
     }
-}
-
-function isNonScalarType(type: Type): boolean {
-    return type.kind !== TypeKind.Err && !isScalarType(type);
 }
 
 function isInvalidReturnType(type: Type): boolean {
