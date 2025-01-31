@@ -1,5 +1,30 @@
 include "bittle.btls";
 
+/// Note: [Frame layout]
+/// ~~~~~~~~~~~~~~~~~~~~
+/// The code generator organizes the stack frame as follows:
+/// ```
+/// +-------------------+
+/// |                   |
+/// | spills            |
+/// |                   |
+/// +-------------------+ <- FP
+/// | saved x8          |
+/// +-------------------+
+/// |                   |
+/// | slots             |
+/// |                   |
+/// +-------------------+
+/// |                   |
+/// | scratch           |
+/// |                   |
+/// +-------------------+
+/// |                   |
+/// | outgoing args     |
+/// |                   |
+/// +-------------------+ <- SP
+/// ```
+
 //==============================================================================
 //== Helper Functions
 
@@ -623,6 +648,7 @@ struct CodegenCtx {
     // execution context
     current_func: *FuncSym,
     current_loop: LoopCtx,
+    current_call_layout: CallLayout,
 
     // slot space
     slots_size: Int,
@@ -630,6 +656,7 @@ struct CodegenCtx {
     slots: *Slot,
 
     // scratch space
+    scratch_offset: Int, // FP relative
     scratch_size: Int,
     max_scratch: Int,
 
@@ -669,13 +696,13 @@ func write_push(ctx: *CodegenCtx, reg: Reg) {
     ctx.max_scratch = int_max(ctx.max_scratch, ctx.scratch_size);
 
     // str {reg}, [sp, #{??}]
-    var fp_offset = -(ctx.slots_size + ctx.scratch_size);
+    var fp_offset = ctx.scratch_offset - ctx.scratch_size;
     asm_write_str_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
 }
 
 func write_pop(ctx: *CodegenCtx, reg: Reg) {
     // ldr {reg}, [sp, #{??}]
-    var fp_offset = -(ctx.slots_size + ctx.scratch_size);
+    var fp_offset = ctx.scratch_offset - ctx.scratch_size;
     asm_write_ldrs_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
 
     ctx.scratch_size -= 8;
@@ -777,6 +804,10 @@ func next_reg_except_2(ctx: *CodegenCtx, x1: Reg, x2: Reg): Reg {
 
 func next_reg_except_1(ctx: *CodegenCtx, x1: Reg): Reg {
     return next_reg_except_2(ctx, x1, x2: x1);
+}
+
+func next_reg(ctx: *CodegenCtx): Reg {
+    return next_reg_except_2(ctx, x1: SP, x2: SP);
 }
 
 func spill_before_call(ctx: *CodegenCtx) {
@@ -1062,20 +1093,54 @@ func asm_lower_jump_expr(ctx: *CodegenCtx, e: *HirJumpExpr, xd: Reg) {
 }
 
 func asm_lower_return_expr(ctx: *CodegenCtx, e: *HirReturnExpr, xd: Reg) {
-    var subexpr = e.expr;
-    if (subexpr) {
-        reserve_reg(ctx, Reg_X0);
+    if (e.expr) {
+        var ret_loc = &ctx.current_call_layout.ret_loc;
 
-        // x0 <- ...
-        asm_lower_expr(ctx, subexpr, Reg_X0);
-        // b .L.ret
-        asm_write_b(ctx.builder, ctx.ret_label, "ret");
+        if (ret_loc.is_indirect) {
+            assert(hir_is_lvalue(e.expr), "asm_lower_return_expr: composite return should be an lvalue.");
+            // x1 <- &...
+            // ldr x0, [fp, #-8] // restore indirect result location
+            // mov x2, #{type size}
+            // bl memcpy
 
-        free_reg(ctx, Reg_X0);
-    } else {
-        // b .L.ret
-        asm_write_b(ctx.builder, ctx.ret_label, "ret");
+            spill_before_call(ctx);
+
+            asm_lower_expr_addr(ctx, e.expr, Reg_X1);
+            asm_write_ldrs_ri(ctx.builder, width: 8, Reg_X0, FP, -8);
+            asm_comment_prev(ctx.builder, "// restore indirect result location");
+            asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(e.expr.type));
+            asm_write_bl(ctx.builder, "memcpy");
+
+            unspill_after_call(ctx);
+        } else if (ret_loc.is_reg) {
+            if (is_scalar(e.expr.type)) {
+                // x0 <- ...
+
+                reserve_reg(ctx, Reg_X0);
+                asm_lower_expr(ctx, e.expr, Reg_X0);
+                free_reg(ctx, Reg_X0);
+            } else {
+                assert(hir_is_lvalue(e.expr), "asm_lower_return_expr: composite return should be an lvalue.");
+                // x0 <- &...
+                // ldr xn, [x0, #{n * 8}]
+                // ...
+                // ldr x0, [x0, #{0 * 8}]
+
+                reserve_reg(ctx, Reg_X0);
+                asm_lower_expr_addr(ctx, e.expr, Reg_X0);
+                for (var i = ret_loc.n_regs - 1; i >= 0; i -= 1) {
+                    var reg = (Reg_X0 as Int + i) as Reg;
+                    asm_write_ldrs_ri(ctx.builder, width: 8, reg, Reg_X0, offset: i * 8);
+                }
+                free_reg(ctx, Reg_X0);
+            }
+        } else {
+            unreachable("asm_lower_return_expr: invalid return location.");
+        }
     }
+
+    // b .L.ret
+    asm_write_b(ctx.builder, ctx.ret_label, "ret");
 }
 
 func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
@@ -1133,15 +1198,33 @@ func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
     }
 }
 
-func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
+func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composite_assign: Bool) {
+    var layout: CallLayout;
+    get_call_layout_for_call(e, &layout);
+
+    var is_reg_ret_scalar = layout.ret_loc.is_reg && is_scalar(e.type);
+    var is_reg_ret_composite = layout.ret_loc.is_reg && is_composite(e.type);
+    var is_indirect_ret = layout.ret_loc.is_indirect;
+
     var comment: *Char = calloc(100, sizeof(Char));
     snprintf(comment, 100, "// prepare call to %s", e.callee.name);
     asm_write_raw(ctx.builder, comment);
 
     spill_before_call(ctx);
 
-    var layout: CallLayout;
-    get_call_layout_for_call(e, &layout);
+    if (is_indirect_ret) {
+        assert(is_composite_assign, "asm_lower_call_expr: destination should be address.");
+
+        // Prepare the indirect return location
+        // mov x8 xd
+        asm_write_mov_r(ctx.builder, width: 8, Reg_X8, xd);
+        lock_reg(ctx, Reg_X8);
+    } else if (is_reg_ret_composite) {
+        assert(is_composite_assign, "asm_lower_call_expr: destination should be address.");
+
+        // Save destination for later
+        write_push(ctx, xd);
+    }
 
     for (var i = 0; i < layout.n_args; i += 1) {
         var arg: *HirExpr = list_get(e.args, i);
@@ -1167,7 +1250,7 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
             for (var j = n - 1; j >= 0; j -= 1) {
                 asm_write_ldrs_ri(ctx.builder, width: 8, (lo + j) as Reg, lo as Reg, 8 * j);
             }
-        } else if (!arg_loc.is_reg && is_scalar(arg.type)) {
+        } else if (arg_loc.is_stack && is_scalar(arg.type)) {
             // Pass scalar on stack.
             // {x1} <- ...
             // str {x1}, [sp, #{offset}]
@@ -1175,7 +1258,7 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
             asm_lower_expr(ctx, arg, x1);
             asm_write_str_ri(ctx.builder, width: 8, x1, SP, arg_loc.offset);
             free_reg(ctx, x1);
-        } else if (!arg_loc.is_reg && hir_is_lvalue(arg)) {
+        } else if (arg_loc.is_stack && hir_is_lvalue(arg)) {
             // Pass aggregate on stack.
             //
             // x1 <- &...
@@ -1193,15 +1276,32 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
         }
     }
 
-    ctx.max_arg_size = int_max(ctx.max_arg_size, layout.stack_space);
-
-    call_layout_drop(&layout);
-
     // bl {name}
     asm_write_bl(ctx.builder, e.callee.name);
 
-    if (e.type.kind != Type_Void && e.type.kind != Type_Never) {
+    var xm = layout.ret_loc.n_regs as Reg;
+
+    if (is_reg_ret_composite) {
+        // Restore destination
+        write_pop(ctx, xm);
+    }
+
+    if (is_reg_ret_scalar) {
         write_sign_extend(ctx, e.type, xd, Reg_X0);
+    } else if (is_reg_ret_composite) {
+        // xm <- &...
+        // str x0, [xm]
+        // ...
+        // str xn, [xm, #8 * n]
+        var n_regs = layout.ret_loc.n_regs;
+        for (var i = 0; i < n_regs; i += 1) {
+            var reg = (Reg_X0 as Int + i) as Reg;
+            asm_write_str_ri(ctx.builder, width: 8, reg, xm, 8 * i);
+        }
+    } else if (layout.ret_loc.is_reg) {
+        assert(false, "asm_lower_call_expr: Only scalar and composite types can be returned in registers.");
+    } else if (is_indirect_ret) {
+        // Nothing to do for the caller
     }
 
     unspill_after_call(ctx);
@@ -1209,6 +1309,10 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg) {
     comment = calloc(100, sizeof(Char));
     snprintf(comment, 100, "// call to %s done", e.callee.name);
     asm_write_raw(ctx.builder, comment);
+
+    ctx.max_arg_size = int_max(ctx.max_arg_size, layout.stack_space);
+
+    call_layout_drop(&layout);
 }
 
 func asm_lower_addr_expr(ctx: *CodegenCtx, e: *HirAddrExpr, xd: Reg) {
@@ -1232,7 +1336,11 @@ func asm_lower_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, xd: Reg) {
 
         free_reg(ctx, x2);
         free_reg(ctx, x1);
-    } else {
+    } else if (is_composite(dst.type) && src.kind == HirExpr_Call) {
+        asm_lower_expr_addr(ctx, dst, xd);
+        unlock_reg(ctx, xd);
+        asm_lower_call_expr(ctx, src as *HirCallExpr, xd, is_composite_assign: true);
+    } else if (is_composite(dst.type)) {
         spill_before_call(ctx);
 
         // x0, x1 <- ...
@@ -1244,6 +1352,8 @@ func asm_lower_assign_expr(ctx: *CodegenCtx, e: *HirAssignExpr, xd: Reg) {
         asm_write_bl(ctx.builder, "memcpy");
 
         unspill_after_call(ctx);
+    } else {
+        unreachable("asm_lower_assign_expr");
     }
 }
 
@@ -1285,7 +1395,7 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     } else if (e.kind == HirExpr_BinaryOp) {
         asm_lower_binary_op_expr(ctx, e as *HirBinaryOpExpr, xd);
     } else if (e.kind == HirExpr_Call) {
-        asm_lower_call_expr(ctx, e as *HirCallExpr, xd);
+        asm_lower_call_expr(ctx, e as *HirCallExpr, xd, is_composite_assign: false);
     } else if (e.kind == HirExpr_Addr) {
         asm_lower_addr_expr(ctx, e as *HirAddrExpr, xd);
     } else if (e.kind == HirExpr_Assign) {
@@ -1301,8 +1411,14 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
 }
 
 func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
-    var layout: CallLayout;
-    get_call_layout_for_func(sym, &layout);
+    var layout = &ctx.current_call_layout;
+
+    // Save indirect result location
+    if (layout.ret_loc.is_indirect) {
+        // str x8, [fp, #-8]
+        asm_write_str_ri(ctx.builder, width: 8, Reg_X8, FP, -8);
+        asm_comment_prev(ctx.builder, "// save indirect result location");
+    }
 
     // Copy arguments to stack slots
     for (var i = 0; i < layout.n_args; i += 1) {
@@ -1352,8 +1468,6 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
 
     // L.ret:
     asm_write_label(ctx.builder, ctx.ret_label, "ret");
-
-    call_layout_drop(&layout);
 }
 
 func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
@@ -1361,13 +1475,16 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     ctx.current_func = sym;
     ctx.ret_label = next_label(ctx);
+    get_call_layout_for_func(sym, &ctx.current_call_layout);
+
+    var saved_x8_size = ctx.current_call_layout.ret_loc.is_indirect ? 8 : 0;
 
     var n_locals = list_len(sym.locals);
     var n_temps = list_len(sym.temps);
     var n_slots = n_locals + n_temps;
     var slots: *Slot = calloc(n_slots, sizeof(Slot));
 
-    var slots_size = 0;
+    var slots_size = saved_x8_size;
     for (var i = 0; i < n_locals; i += 1) {
         var local: *LocalSym = list_get(sym.locals, i);
         var offset = align_up(slots_size, type_align(local.type));
@@ -1380,13 +1497,12 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         slots[temp.slot_index] = Slot { offset };
         slots_size = offset + type_size(temp.type);
     }
-    // Many frame calculations become easier if the size of the slots area is a multiple of 8.
-    // E.g. LDR/STR by immediate offset which require the offset to be a multiple of the size of the data.
-    slots_size = align_up(slots_size, 8);
 
     ctx.n_slots = n_slots;
     ctx.slots = slots;
     ctx.slots_size = slots_size;
+
+    ctx.scratch_offset = -align_up(saved_x8_size + ctx.slots_size, 8);
 
     ctx.builder = list_new();
 
@@ -1402,7 +1518,8 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         is_reg_used[i] = ctx.regs[i].n_writes > 0;
     }
 
-    var frame_size = align_up(ctx.slots_size + ctx.max_scratch + ctx.max_arg_size, 16);
+    var frame_size = align_up(-ctx.scratch_offset + ctx.max_scratch + ctx.max_arg_size, 16);
+
     var asm_fun: *AsmFunc = calloc(1, sizeof(AsmFunc));
     *asm_fun = AsmFunc {
         name: sym.name,
@@ -1411,6 +1528,8 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         is_reg_used: is_reg_used,
     };
     asm_print_func(asm_fun);
+
+    call_layout_drop(&ctx.current_call_layout);
 }
 
 func emit_global(ctx: *CodegenCtx, sym: *GlobalSym) {

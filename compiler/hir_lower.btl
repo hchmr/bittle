@@ -369,7 +369,7 @@ func lower_arg(ctx: *Context, expr: *Expr): *HirExpr {
     }
 }
 
-func lower_call_expr(ctx: *Context, expr: *CallExpr): *HirExpr {
+func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
     var ast_args = expr.args;
 
     var hir_args = list_new();
@@ -378,7 +378,19 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr): *HirExpr {
         var hir_arg = lower_arg(ctx, ast_arg.expr);
         list_push(hir_args, hir_arg);
     }
-    return hir_mk_call_expr(expr.resolved_callee, hir_args, &expr.pos);
+
+    var hir_expr = hir_mk_call_expr(expr.resolved_callee, hir_args, &expr.pos);
+
+    if (!dest && is_composite(expr.resolved_callee.return_type)) {
+        var temp_var = mk_temp_var(ctx, expr.type);
+        dest = hir_mk_temp_expr(temp_var, &expr.pos);
+    }
+
+    if (dest) {
+        return hir_mk_assign_expr(dest, hir_expr);
+    } else {
+        return hir_expr;
+    }
 }
 
 func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
@@ -552,7 +564,7 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
     } else if (expr.kind == Expr_Array) {
         return lower_array_expr(ctx, expr as *ArrayExpr);
     } else if (expr.kind == Expr_Call) {
-        return lower_call_expr(ctx, expr as *CallExpr);
+        return lower_call_expr(ctx, expr as *CallExpr, dest: null);
     } else if (expr.kind == Expr_Index) {
         return lower_index_expr(ctx, expr as *IndexExpr);
     } else if (expr.kind == Expr_Member) {
@@ -654,6 +666,8 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         assert(addr_zero_index.expr.type, "lower_assign_expr: addr_zero_index should have a type");
 
         return body;
+    } else if (ast_src.kind == Expr_Call) {
+        return lower_call_expr(ctx, ast_src as *CallExpr, dest: dst);
     } else {
         var src = lower_expr(ctx, ast_src);
         return hir_mk_assign_expr(dst, src);
@@ -733,9 +747,27 @@ func lower_for_stmt(ctx: *Context, stmt: *ForStmt): *HirExpr {
 func lower_return_stmt(ctx: *Context, stmt: *ReturnStmt): *HirExpr {
     var ast_expr = stmt.expr;
 
-    var expr = ast_expr ? lower_expr(ctx, ast_expr) : null;
-
-    return hir_mk_return_expr(expr, &stmt.pos);
+    // All non-scalar rvalued expressions are converted to lvalues here
+    // to make code generation easier.
+    if (!ast_expr) {
+        return hir_mk_return_expr(null, &stmt.pos);
+    } else if (is_scalar(ast_expr.type) || is_lvalue(ast_expr)) {
+        var expr = lower_expr(ctx, ast_expr);
+        return hir_mk_return_expr(expr, &stmt.pos);
+    } else {
+        /*
+            Desugar
+                return f()
+            to
+                temp t1: typeof(f());
+                t1 = f();
+                return t1
+        */
+        var temp_var = mk_temp_var(ctx, ast_expr.type);
+        var temp = hir_mk_temp_expr(temp_var, &stmt.pos);
+        var temp_init = lower_assign_expr(ctx, temp, ast_expr, &ast_expr.pos);
+        return hir_mk_seq_expr(temp_init, hir_mk_return_expr(temp, &stmt.pos));
+    }
 }
 
 func lower_break_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {

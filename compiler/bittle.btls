@@ -701,7 +701,7 @@ struct HirBinaryOpExpr: HirExpr {
 
 struct HirCallExpr: HirExpr {
     callee: *FuncSym,
-    args: *List, // List<HirExpr>
+    args: *List, // List<*HirExpr>
 }
 
 struct HirMemberExpr: HirExpr {
@@ -760,21 +760,30 @@ func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr;
 
 struct ArgLocation {
     is_reg: Bool,
+    is_stack: Bool,
 // if is_reg:
     reg: Int,
     n_regs: Int,
-// else:
+// if is_stack:
     offset: Int,
+}
+
+struct RetLocation {
+    is_reg: Bool,
+    is_indirect: Bool,
+// if is_reg:
+    n_regs: Int,
 }
 
 struct CallLayout {
     n_args: Int,
     arg_locs: *ArgLocation,
+    ret_loc: RetLocation,
     stack_space: Int,
 }
 
 func call_layout_drop(cc: *CallLayout);
-func get_call_layout(n_args: Int, arg_types: **Type, out: *CallLayout);
+func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *CallLayout);
 func get_call_layout_for_call(e: *HirCallExpr, out: *CallLayout);
 func get_call_layout_for_func(e: *FuncSym, out: *CallLayout);
 

@@ -1114,8 +1114,8 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
         ? eval_type(ctx, decl.return_type)
         : mk_void_type();
 
-    if (return_type.kind != Type_Void && return_type.kind != Type_Never && !is_scalar(return_type)) {
-        die_at(&decl.pos, "Function return type must be scalar");
+    if (return_type.kind != Type_Void && return_type.kind != Type_Never && !is_sized(return_type)) {
+        die_at(&decl.pos, "Function return type must have known size");
     }
 
     var is_variadic = decl.is_variadic;

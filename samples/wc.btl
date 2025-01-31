@@ -141,7 +141,7 @@ func print_usage(argv: **Char) {
     fprintf(stderr, "Usage: %s [-cLlm] [file ...]\n", argv[0]);
 }
 
-func arg_parse(argc: Int32, argv: **Char, args: *Args) {
+func arg_parse(argc: Int32, argv: **Char): Args {
     var options: Int32 = 0;
     var i = 1;
     for (; i < argc; i += 1) {
@@ -167,7 +167,7 @@ func arg_parse(argc: Int32, argv: **Char, args: *Args) {
     if (options == 0) {
         options = Opt_PrintLines | Opt_PrintWords | Opt_PrintBytes;
     }
-    *args = Args {
+    return Args {
         options: options,
         files: &argv[i],
         files_count: argc - i as Int32
@@ -175,8 +175,7 @@ func arg_parse(argc: Int32, argv: **Char, args: *Args) {
 }
 
 func main(argc: Int32, argv: **Char): Int32 {
-    var args: Args;
-    arg_parse(argc, argv, &args);
+    var args = arg_parse(argc, argv);
 
     var total: Stats;
     stats_init(&total);

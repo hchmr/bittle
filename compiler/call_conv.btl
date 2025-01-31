@@ -7,6 +7,7 @@ func call_layout_drop(self: *CallLayout) {
 func mapped_to_regs(out: *ArgLocation, reg: Int, n_regs: Int) {
     *out = ArgLocation {
         is_reg: true,
+        is_stack: false,
         reg: reg,
         n_regs: n_regs,
         offset: -1,
@@ -16,6 +17,7 @@ func mapped_to_regs(out: *ArgLocation, reg: Int, n_regs: Int) {
 func mapped_to_stack(out: *ArgLocation, offset: Int) {
     *out = ArgLocation {
         is_reg: false,
+        is_stack: true,
         reg: -1,
         n_regs: -1,
         offset: offset,
@@ -23,7 +25,7 @@ func mapped_to_stack(out: *ArgLocation, offset: Int) {
 }
 
 // Simplified implementation of aapcs64 2024Q3.
-func get_call_layout(n_args: Int, arg_types: **Type, out: *CallLayout) {
+func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *CallLayout) {
     var arg_locs: *ArgLocation = calloc(n_args, sizeof(ArgLocation));
 
     var ngrn = 0;
@@ -32,6 +34,8 @@ func get_call_layout(n_args: Int, arg_types: **Type, out: *CallLayout) {
         var type = arg_types[i];
         var arg_size = type_size(type);
         var arg_align = type_align(type);
+
+        assert(is_sized(type), "get_call_layout: argument type must have known size");
 
         // Stage B – Pre-padding and extension of arguments
 
@@ -80,9 +84,18 @@ func get_call_layout(n_args: Int, arg_types: **Type, out: *CallLayout) {
         nsaa += arg_size;
     }
 
+    var is_reg_ret = is_scalar(ret_type) || is_composite(ret_type) && type_size(ret_type) <= 16;
+    var n_ret_regs = is_reg_ret ? align_up(type_size(ret_type), 8) / 8 : 0;
+    var is_inderect_ret = is_composite(ret_type) && type_size(ret_type) > 16;
+
     *out = CallLayout {
         n_args: n_args,
         arg_locs,
+        ret_loc: RetLocation {
+            is_reg: is_reg_ret,
+            is_indirect: is_inderect_ret,
+            n_regs: n_ret_regs,
+        },
         stack_space: nsaa * 8,
     };
 }
@@ -94,7 +107,7 @@ func get_call_layout_for_call(e: *HirCallExpr, out: *CallLayout) {
         var arg: *HirCallExpr = list_get(e.args, i);
         arg_types[i] = arg.type;
     }
-    get_call_layout(n_args, arg_types, out);
+    get_call_layout(n_args, arg_types, e.type, out);
     free(arg_types);
 }
 
@@ -105,6 +118,6 @@ func get_call_layout_for_func(f: *FuncSym, out: *CallLayout) {
         var param: *FuncParam = list_get(f.params, i);
         param_types[i] = param.type;
     }
-    get_call_layout(n_params, param_types, out);
+    get_call_layout(n_params, param_types, f.return_type, out);
     free(param_types);
 }

@@ -39,14 +39,25 @@ func sum_10(xs: [Int; 10]): Int {
     return sum;
 }
 
+func mk_point2d(x: Int, y: Int): Point2d {
+    return Point2d { x: x, y: y };
+}
+
+func mk_point3d(x: Int, y: Int, z: Int): Point3d {
+    return Point3d { x: x, y: y, z: z };
+}
+
 func main(): Int32 {
-    var p2d = Point2d { x: 1024, y: 4096 };
-    var p3d = Point3d { x: 1024, y: 4096, z: 8192 };
+    var p2d = mk_point2d(x: 1024, y: 4096);
+    var p3d = mk_point3d(x: 1024, y: 4096, z: 8192);
     var ints = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     var sum2d = sum_2d(p: p2d);
     var sum3d = sum_3d(p: p3d);
     var sum10 = sum_10(xs: ints);
+
+    mk_point2d(x: 1, y: 2);
+    mk_point3d(x: 1, y: 2, z: 3);
 
     assert_eq(sum2d, 1024 + 4096);
     assert_eq(sum3d, 1024 + 4096 + 8192);
