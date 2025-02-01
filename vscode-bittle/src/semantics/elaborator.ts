@@ -1468,7 +1468,7 @@ export class Elaborator {
         if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
             return;
         }
-        if (!typeEq(actual, expected) && !typeImplicitlyConvertible(actual, expected)) {
+        if (!typeLooseEq(actual, expected) && !typeImplicitlyConvertible(actual, expected)) {
             this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
         }
     }
