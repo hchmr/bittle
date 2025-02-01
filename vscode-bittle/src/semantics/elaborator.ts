@@ -766,7 +766,7 @@ export class Elaborator {
         const returnType: Type = node.returnType ? this.typeEval(node.returnType) : mkVoidType();
 
         if (isInvalidReturnType(returnType)) {
-            this.reportError(node.returnType!, `Function return type must be void or of scalar type.`);
+            this.reportError(node.returnType!, `Function return type must have known size.`);
         }
 
         const sym = this.inOuterScope(() => {

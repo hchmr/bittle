@@ -298,10 +298,14 @@ export function isScalarType(type: Type): boolean {
         || type.kind === TypeKind.Enum;
 }
 
+export function isSizedType(type: Type): boolean {
+    return typeLayout(type) !== undefined;
+}
+
 export function isValidReturnType(type: Type): boolean {
     return type.kind === TypeKind.Void
         || type.kind === TypeKind.Never
-        || isScalarType(type);
+        || isSizedType(type);
 }
 
 export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
