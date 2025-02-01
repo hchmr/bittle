@@ -177,9 +177,11 @@ func asm_mk_mem_operand(n_args: Int): *AsmMemOperand {
 }
 
 func asm_mk_reg_mem_operand(reg: Reg, offset: Int): *AsmMemOperand {
-    var operand = asm_mk_mem_operand(2);
+    var operand = asm_mk_mem_operand(offset != 0 ? 2 : 1);
     operand.args[0] = asm_mk_reg_operand(8, reg, shift: 0);
-    operand.args[1] = asm_mk_int_operand(offset);
+    if (offset != 0) {
+        operand.args[1] = asm_mk_int_operand(offset);
+    }
     return operand;
 }
 
