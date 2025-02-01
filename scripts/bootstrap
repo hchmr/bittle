@@ -9,11 +9,15 @@ root_dir=$(realpath "$script_dir/..")
 bootstrap_dir="$root_dir/out/bootstrap"
 src_dir="$bootstrap_dir/src"
 build_dir="$bootstrap_dir/build"
+cache_dir="$bootstrap_dir/cache"
+latest_commit=$(git rev-parse --short HEAD)
+
+cache_enabled=true
 
 compiler_name=cogc
 prev_stage=-1
-prev_stage_ref=
-prev_compiler_path=
+prev_commit=
+prev_compiler=
 
 usage() {
     cat <<HERE
@@ -21,9 +25,16 @@ usage: $0 [options]
 
 options:
   -h,--help         Show this help
-  --next            Include latest commit from master
+  --head            Build the latest commit
+  --clean           Perform a clean build
+  --no-cache        Disable stage caching
   -o,--output FILE  Output file
 HERE
+}
+
+die() {
+    echo "Error: $1" >&2
+    exit 1
 }
 
 section() {
@@ -36,63 +47,166 @@ toupper() {
     echo "$1" | tr '[:lower:]' '[:upper:]'
 }
 
-checkout() {
-    local commit
-    if git rev-parse --quiet --verify "$1" >/dev/null; then
-        commit="$1"
+regex_escape() {
+    sed 's/[]\/$*.^|[]/\\&/g' <<<"$1"
+}
+
+setup_repository() {
+    section "Cloning repository"
+
+    if [ -d .git ]; then
+        echo "Repository already cloned"
+        git fetch
+        git reset --hard "$latest_commit"
+        return
     else
-        pattern="^$(sed 's/[$\.*[\^]/\\&/g' <<<"$1")$"
-        commit="$(git rev-list origin/master --grep "$pattern" --max-count=1)"
+        git clone "$root_dir" "$(pwd)"
+    fi
+}
+
+find_commit() {
+    local ref="$1"
+    local commit
+    # Check if the argument is a commit hash
+    if git rev-parse --quiet --verify "$ref" >/dev/null; then
+        commit="$ref"
+    else
+        pattern=$(regex_escape "$ref")
+        commit="$(git rev-list --grep "$pattern" --max-count=1 --abbrev-commit "$latest_commit")"
         if [[ -z "$commit" ]]; then
-            echo "Commit not found: $1"
-            exit 1
+            return 1
         fi
     fi
+    echo "$commit"
+}
 
-    echo "Checking out \"$(git log --format="%h %s" -n 1 "$commit")\""
+checkout() {
+    local commit="$1"
+    echo "Checking out $commit \"$(git log --format="%s" -n 1 "$commit")\""
     git checkout --quiet "$commit"
 }
 
-stage() {
-    local stage=$(($prev_stage + 1))
+ensure_checked_out() {
+    local commit="$1"
+    local actual_commit
+    actual_commit=$(git rev-parse HEAD)
+    if [ "$actual_commit" != "$commit" ]; then
+        checkout "$commit"
+    fi
+}
 
+print_stage_changes() {
+    local commit="$1"
+
+    if [ -z "$prev_commit" ]; then
+        return
+    fi
+
+    if [ "${prev_commit:0:7}" = "${commit:0:7}" ]; then
+        return
+    fi
+
+    local commits
+    commits=$(git rev-list --oneline --abbrev-commit --ancestry-path "$prev_commit..$commit" ./compiler/)
+
+    local n_commits
+    n_commits=$(wc -l <<<"$commits")
+
+    echo Changes from "$n_commits" commits:
+
+    local max_commits=20
+
+    head -n $max_commits <<<"$commits" | sed 's/^/  /'
+    if [ $((n_commits > max_commits)) = 1 ]; then
+        echo "  ($((n_commits - max_commits)) more)"
+    fi
+}
+
+stage() {
     local ref="$1"
 
+    local commit
+    commit=$(find_commit "$ref") || die "Commit not found: $ref"
+
+    local stage=$((prev_stage + 1))
+
     section "Building stage $stage"
+
+    print_stage_changes "$commit"
 
     local stage_dir="$build_dir/stage$stage/"
     mkdir -p "$stage_dir"
 
-    checkout "$ref"
+    local cached_compiler=""
+    if [ "$cache_enabled" = true ]; then
+        cached_compiler=$(realpath "$cache_dir/stage$stage-${prev_commit:=root}-$commit")
+    fi
 
-    local compiler_var=$(toupper "$compiler_name")
+    if [ -f "$cached_compiler" ]; then
+        echo "Found cached executable $cached_compiler"
+        cp "$cached_compiler" "$stage_dir/$compiler_name"
+    else
+        checkout "$commit"
 
-    make -C compiler "BUILD_DIR=$stage_dir" "$compiler_var=$prev_compiler_path"
+        echo "Compiling"
+        make -C compiler "BUILD_DIR=$stage_dir" "$(toupper "$compiler_name")=$prev_compiler"
+        echo "Compilation successful"
+
+        if [ "$cache_enabled" = true ]; then
+            echo "Caching executable $stage_dir/$compiler_name" to "$cached_compiler"
+            cp "$stage_dir/$compiler_name" "$cached_compiler"
+        fi
+    fi
 
     prev_stage="$stage"
-    prev_stage_ref="$ref"
-    prev_compiler_path=$(realpath "$stage_dir/$compiler_name")
+    prev_commit="$commit"
+    prev_compiler=$(realpath "$stage_dir/$compiler_name")
 }
 
 verify() {
+    local commit="$prev_commit"
+
     section "Compiling compiler with itself"
 
-    stage "$prev_stage_ref"
+    stage "$commit"
 
     section "Compiling compiler with compiler compiled with itself"
 
+    ensure_checked_out "$commit"
+
     mkdir -p "$build_dir/verify"
 
-    make -C compiler "BUILD_DIR=$build_dir/verify" "BITTLEC=$(realpath "$build_dir/stage$prev_stage/bittlec")"
+    local cached_compiler=
+    if [ "$cache_enabled" = true ]; then
+        cached_compiler=$(realpath "$cache_dir/verify-$commit-$commit-$commit")
+    fi
 
-    echo "Comparing executables $build_dir/stage$prev_stage/bittlec and $build_dir/verify/bittlec"
+    if [ -f "$cached_compiler" ]; then
+        echo "Found cached executable $cached_compiler"
+        cp "$cached_compiler" "$build_dir/verify/bittlec"
+    else
+        echo "Compiling"
+        make -C compiler "BUILD_DIR=$build_dir/verify" "BITTLEC=$(realpath "$prev_compiler")"
+        if [ "$cache_enabled" = true ]; then
+            echo "Caching executable $build_dir/verify/bittlec" to "$cached_compiler"
+            cp "$build_dir/verify/bittlec" "$cached_compiler"
+        fi
+    fi
 
-    objdump -dr -j .rodata -j .text "$build_dir/stage$prev_stage/bittlec" | tail -n +3 >"$build_dir/verify/bittlec.objdump"
+    echo "Comparing executables $prev_compiler and $build_dir/verify/bittlec"
+
+    objdump -dr -j .rodata -j .text "$prev_compiler" | tail -n +3 >"$build_dir/verify/bittlec.objdump"
     objdump -dr -j .rodata -j .text "$build_dir/verify/bittlec" | tail -n +3 >"$build_dir/verify/bittlec.verify.objdump"
-    diff "$build_dir/verify/bittlec.objdump" "$build_dir/verify/bittlec.verify.objdump" && echo "No difference" || echo "^^^ Difference found"
+
+    if ! diff "$build_dir/verify/bittlec.objdump" "$build_dir/verify/bittlec.verify.objdump" >/dev/null; then
+        echo "^^^ Difference found"
+        return 1
+    fi
+    echo "Compiler verified"
 }
 
-bootstrap_next=0
+clean_first=false
+bootstrap_head=false
 output_file=
 
 while test $# -gt 0; do
@@ -101,8 +215,14 @@ while test $# -gt 0; do
         usage
         exit 0
         ;;
-    --next)
-        bootstrap_next=1
+    --head)
+        bootstrap_head=true
+        ;;
+    --clean)
+        clean_first=true
+        ;;
+    --no-cache)
+        cache_enabled=false
         ;;
     -o | --output)
         shift
@@ -117,17 +237,22 @@ while test $# -gt 0; do
     shift
 done
 
-rm -rf "$bootstrap_dir"
-mkdir -p "$bootstrap_dir" "$src_dir" "$build_dir"
-cd "$src_dir"
-
 if [ -z "$output_file" ]; then
-    mkdir -p "$bootstrap_dir/bin"
     output_file="$bootstrap_dir/bin/bittlec"
 fi
+if [ "$clean_first" = true ]; then
+    rm -rf "$bootstrap_dir"
+fi
+if [ "$cache_enabled" = true ]; then
+    mkdir -p "$cache_dir"
+fi
+rm -rf "$build_dir"
+mkdir -p "$bootstrap_dir" "$src_dir" "$build_dir" "$(dirname "$output_file")"
+cd "$src_dir"
+
 output_file=$(realpath "$output_file")
 
-git clone --quiet "file://$root_dir" .
+setup_repository
 
 stage "Make compilation of bootstrap compiler stricter"
 
@@ -157,14 +282,14 @@ stage "fix(compiler): Fix very bad miscompilation of array indexing"
 
 stage "feat(compiler): Add struct field initialization shorthand"
 
-if [ "$bootstrap_next" = "1" ]; then
-    stage "master"
+if [ "$bootstrap_head" = true ]; then
+    stage "$latest_commit"
 fi
 
 verify
 
 section "Copying final executable to $output_file"
 
-cp "$build_dir/stage$prev_stage/$compiler_name" "$output_file"
+cp "$prev_compiler" "$output_file"
 
 section "Done"
