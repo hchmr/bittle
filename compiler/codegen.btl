@@ -1200,7 +1200,7 @@ func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
 
 func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composite_assign: Bool) {
     var layout: CallLayout;
-    get_call_layout_for_call(e, &layout);
+    layout = get_call_layout_for_call(e);
 
     var is_reg_ret_scalar = layout.ret_loc.is_reg && is_scalar(e.type);
     var is_reg_ret_composite = layout.ret_loc.is_reg && is_composite(e.type);
@@ -1475,7 +1475,7 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     ctx.current_func = sym;
     ctx.ret_label = next_label(ctx);
-    get_call_layout_for_func(sym, &ctx.current_call_layout);
+    ctx.current_call_layout = get_call_layout_for_func(sym);
 
     var saved_x8_size = ctx.current_call_layout.ret_loc.is_indirect ? 8 : 0;
 

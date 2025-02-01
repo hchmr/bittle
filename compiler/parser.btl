@@ -11,7 +11,7 @@ struct Parser {
 
 func advance(self: *Parser) {
     self.tok = self.lookahead;
-    lexer_next(self.lexer, &self.lookahead);
+    self.lookahead = lexer_next(self.lexer);
 }
 
 func peek(self: *Parser): *Tok {

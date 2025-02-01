@@ -735,7 +735,7 @@ func hir_is_lvalue(e: *HirExpr): Bool;
 struct Lexer;
 
 func lexer_new(file_name: *Char, input: *Char): *Lexer;
-func lexer_next(self: *Lexer, out: *Tok);
+func lexer_next(self: *Lexer): Tok;
 
 //==============================================================================
 //== parser.btl
@@ -782,10 +782,10 @@ struct CallLayout {
     stack_space: Int,
 }
 
-func call_layout_drop(cc: *CallLayout);
-func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *CallLayout);
-func get_call_layout_for_call(e: *HirCallExpr, out: *CallLayout);
-func get_call_layout_for_func(e: *FuncSym, out: *CallLayout);
+func call_layout_drop(self: *CallLayout);
+func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayout;
+func get_call_layout_for_call(e: *HirCallExpr): CallLayout;
+func get_call_layout_for_func(f: *FuncSym): CallLayout;
 
 //==============================================================================
 //== codegen.btl

@@ -4,8 +4,8 @@ func call_layout_drop(self: *CallLayout) {
     free(self.arg_locs);
 }
 
-func mapped_to_regs(out: *ArgLocation, reg: Int, n_regs: Int) {
-    *out = ArgLocation {
+func mapped_to_regs(reg: Int, n_regs: Int): ArgLocation {
+    return ArgLocation {
         is_reg: true,
         is_stack: false,
         reg: reg,
@@ -14,8 +14,8 @@ func mapped_to_regs(out: *ArgLocation, reg: Int, n_regs: Int) {
     };
 }
 
-func mapped_to_stack(out: *ArgLocation, offset: Int) {
-    *out = ArgLocation {
+func mapped_to_stack(offset: Int): ArgLocation {
+    return ArgLocation {
         is_reg: false,
         is_stack: true,
         reg: -1,
@@ -25,7 +25,7 @@ func mapped_to_stack(out: *ArgLocation, offset: Int) {
 }
 
 // Simplified implementation of aapcs64 2024Q3.
-func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *CallLayout) {
+func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayout {
     var arg_locs: *ArgLocation = calloc(n_args, sizeof(ArgLocation));
 
     var ngrn = 0;
@@ -51,7 +51,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *Call
 
         // C.9
         if (is_scalar(type) && arg_size <= 8 && ngrn < 8) {
-            mapped_to_regs(&arg_locs[i], reg: ngrn, n_regs: 1);
+            arg_locs[i] = mapped_to_regs(reg: ngrn, n_regs: 1);
             ngrn += 1;
             continue;
         }
@@ -62,7 +62,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *Call
         // C.11:
         if (is_composite(type) && arg_size / 8 <= (8 - ngrn)) {
             var n_regs = arg_size / 8;
-            mapped_to_regs(&arg_locs[i], reg: ngrn, n_regs: n_regs);
+            arg_locs[i] = mapped_to_regs(reg: ngrn, n_regs: n_regs);
             ngrn += n_regs;
             continue;
         }
@@ -72,7 +72,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *Call
         nsaa = align_up(nsaa, arg_align);
         // C.15
         if (is_composite(type)) {
-            mapped_to_stack(&arg_locs[i], offset: nsaa);
+            arg_locs[i] = mapped_to_stack(offset: nsaa);
             nsaa += arg_size;
             continue;
         }
@@ -80,7 +80,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *Call
         if (arg_size < 8) {
             arg_size = 8;
         }
-        mapped_to_stack(&arg_locs[i], offset: nsaa);
+        arg_locs[i] = mapped_to_stack(offset: nsaa);
         nsaa += arg_size;
     }
 
@@ -88,7 +88,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *Call
     var n_ret_regs = is_reg_ret ? align_up(type_size(ret_type), 8) / 8 : 0;
     var is_inderect_ret = is_composite(ret_type) && type_size(ret_type) > 16;
 
-    *out = CallLayout {
+    return CallLayout {
         n_args: n_args,
         arg_locs,
         ret_loc: RetLocation {
@@ -100,24 +100,26 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type, out: *Call
     };
 }
 
-func get_call_layout_for_call(e: *HirCallExpr, out: *CallLayout) {
+func get_call_layout_for_call(e: *HirCallExpr): CallLayout {
     var n_args = list_len(e.args);
     var arg_types: **Type = calloc(n_args, sizeof(*Type));
     for (var i = 0; i < n_args; i += 1) {
         var arg: *HirCallExpr = list_get(e.args, i);
         arg_types[i] = arg.type;
     }
-    get_call_layout(n_args, arg_types, e.type, out);
+    var layout = get_call_layout(n_args, arg_types, e.type);
     free(arg_types);
+    return layout;
 }
 
-func get_call_layout_for_func(f: *FuncSym, out: *CallLayout) {
+func get_call_layout_for_func(f: *FuncSym): CallLayout {
     var n_params = list_len(f.params);
     var param_types: **Type = calloc(n_params, sizeof(*Type));
     for (var i = 0; i < n_params; i += 1) {
         var param: *FuncParam = list_get(f.params, i);
         param_types[i] = param.type;
     }
-    get_call_layout(n_params, param_types, f.return_type, out);
+    var layout = get_call_layout(n_params, param_types, f.return_type);
     free(param_types);
+    return layout;
 }

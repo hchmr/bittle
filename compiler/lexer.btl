@@ -246,7 +246,7 @@ func scan_char(self: *Lexer) {
     finish_token(self, Tok_Char, lexeme);
 }
 
-func lexer_next(self: *Lexer, token: *Tok) {
+func lexer_next(self: *Lexer): Tok {
     while (true) {
         begin_token(self);
         if (at_end(self)) {
@@ -400,11 +400,10 @@ func lexer_next(self: *Lexer, token: *Tok) {
             exit(1);
         }
 
-        *token = Tok {
+        return Tok {
             kind: self.tok_kind,
             pos: self.tok_pos,
             lexeme: self.tok_lexeme,
         };
-        return;
     }
 }
