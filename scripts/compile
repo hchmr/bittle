@@ -2,6 +2,11 @@
 
 set -e
 
+script_dir=$(dirname "$0")
+cd "$script_dir/.."
+
+build_dir=$(realpath out/compile)
+
 usage() {
   cat <<HERE
 usage: $0 [options] FILE
@@ -13,9 +18,6 @@ options:
   -c         Only run compile and assemble steps
 HERE
 }
-
-script_dir=$(dirname "$0")
-cd "$script_dir/.."
 
 while test $# -gt 0; do
   case "$1" in
@@ -51,22 +53,22 @@ if [ -z "$input_file" ]; then
 fi
 
 exe_file="${output_file:-a.out}"
-
 out_dir=$(dirname "$exe_file")
-
 asm_file="$out_dir/$(basename "$input_file" .btl).s"
 obj_file="$out_dir/$(basename "$input_file" .btl).o"
+
+mkdir -p "$build_dir"
+mkdir -p "$out_dir"
 
 # Compile compiler
 
 echo "Compiling compiler"
-mkdir -p out
-make -C compiler BUILD_DIR=../out
+make -C compiler "BUILD_DIR=$build_dir"
 
 # Compile
 
 echo "Compiling $input_file to $asm_file"
-out/bittlec "$input_file" >"$asm_file"
+"$build_dir/bittlec" "$input_file" >"$asm_file"
 
 if [ -n "$compile_only" ]; then
   exit 0
