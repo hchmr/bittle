@@ -282,6 +282,8 @@ stage "fix(compiler): Fix very bad miscompilation of array indexing"
 
 stage "feat(compiler): Add struct field initialization shorthand"
 
+stage "fix(compiler): Fix miscompilation when taking address of temporary"
+
 if [ "$bootstrap_head" = true ]; then
     stage "$latest_commit"
 fi
