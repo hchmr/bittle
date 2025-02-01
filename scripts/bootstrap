@@ -51,6 +51,42 @@ regex_escape() {
     sed 's/[]\/$*.^|[]/\\&/g' <<<"$1"
 }
 
+render_lines() {
+    local width="$1" logfile="$2" spaces
+    lines="$(tail -n 5 "$logfile")"
+    spaces=$(printf "%${width}s" "")
+    sed "s/$/$spaces/" <<<"$lines" | cut "-c1-$width"
+}
+
+monitor_command() {
+    local logfile pid width
+
+    echo "$*"
+
+    logfile=$(mktemp "$build_dir/log.XXXXXX")
+    "$@" >"$logfile" 2>&1 &
+    pid=$!
+
+    width=$(tput cols)
+    height=0
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 0.025
+        lines=$(render_lines "$width" "$logfile")
+        printf "\033[%dA$lines\n" "$height"
+        height=$(wc -l <<<"$lines")
+    done
+
+    printf "\033[%dA" "$((height + 1))"
+    printf "\033[J"
+
+    if ! wait "$pid"; then
+        cat "$logfile"
+        return
+    fi
+
+    rm "$logfile"
+}
+
 setup_repository() {
     section "Cloning repository"
 
@@ -149,7 +185,7 @@ stage() {
         checkout "$commit"
 
         echo "Compiling"
-        make -C compiler "BUILD_DIR=$stage_dir" "$(toupper "$compiler_name")=$prev_compiler"
+        monitor_command make -C compiler "BUILD_DIR=$stage_dir" "$(toupper "$compiler_name")=$prev_compiler"
         echo "Compilation successful"
 
         if [ "$cache_enabled" = true ]; then
@@ -186,7 +222,7 @@ verify() {
         cp "$cached_compiler" "$build_dir/verify/bittlec"
     else
         echo "Compiling"
-        make -C compiler "BUILD_DIR=$build_dir/verify" "BITTLEC=$(realpath "$prev_compiler")"
+        monitor_command make -C compiler "BUILD_DIR=$build_dir/verify" "BITTLEC=$(realpath "$prev_compiler")"
         if [ "$cache_enabled" = true ]; then
             echo "Caching executable $build_dir/verify/bittlec" to "$cached_compiler"
             cp "$build_dir/verify/bittlec" "$cached_compiler"
