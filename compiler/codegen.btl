@@ -1520,14 +1520,12 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     var frame_size = align_up(-ctx.scratch_offset + ctx.max_scratch + ctx.max_arg_size, 16);
 
-    var asm_fun: *AsmFunc = calloc(1, sizeof(AsmFunc));
-    *asm_fun = AsmFunc {
+    asm_print_func(&AsmFunc {
         name: sym.name,
         instrs: ctx.builder,
         frame_size: frame_size,
         is_reg_used: is_reg_used,
-    };
-    asm_print_func(asm_fun);
+    });
 
     call_layout_drop(&ctx.current_call_layout);
 }
