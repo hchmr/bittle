@@ -7,3 +7,171 @@ func hir_is_lvalue(e: *HirExpr): Bool {
         || e.kind == HirExpr_Index
         || e.kind == HirExpr_Deref;
 }
+
+var hir_indent: Int;
+
+func print_spaces(n: Int) {
+    for (var i = 0; i < n; i += 1) {
+        fprintf(stderr, "  ");
+    }
+}
+
+func begin_block(name: *Char) {
+    print_spaces(hir_indent);
+    fprintf(stderr, "%s {\n", name);
+    hir_indent += 1;
+}
+
+func end_block() {
+    print_spaces(hir_indent - 1);
+    hir_indent -= 1;
+    fprintf(stderr, "}\n");
+}
+
+func begin_child(name: *Char) {
+    print_spaces(hir_indent);
+    if (name != null) {
+        fprintf(stderr, "%s:\n", name);
+    }
+    hir_indent += 1;
+}
+
+func end_child() {
+    hir_indent -= 1;
+}
+
+func begin_inline_child(name: *Char) {
+    print_spaces(hir_indent);
+    if (name != null) {
+        fprintf(stderr, "%s: ", name);
+    }
+}
+
+func hir_dump_type(t: *Type) {
+    print_spaces(hir_indent);
+    pretty_type(stderr, t);
+}
+
+func hir_dump_child(name: *Char, e: *HirExpr) {
+    begin_child(name);
+
+    if (e.kind == HirExpr_Skip) {
+        begin_block("Skip");
+        end_block();
+    } else if (e.kind == HirExpr_Seq) {
+        var e = e as *HirSeqExpr;
+        begin_block("Seq");
+        hir_dump_child("first", e.first);
+        hir_dump_child("second", e.second);
+        end_block();
+    } else if (e.kind == HirExpr_Int) {
+        var e = e as *HirIntExpr;
+        begin_inline_child("int");
+        fprintf(stderr, "%d\n", e.value);
+    } else if (e.kind == HirExpr_Str) {
+        var e = e as *HirStrExpr;
+        begin_inline_child("str");
+        fprintf(stderr, "\"%s\"\n", e.value);
+    } else if (e.kind == HirExpr_Var) {
+        var e = e as *HirVarExpr;
+        begin_inline_child("var");
+        fprintf(stderr, "%s\n", e.sym.name);
+    } else if (e.kind == HirExpr_Temp) {
+        var e = e as *HirTempExpr;
+        begin_inline_child("temp");
+        fprintf(stderr, "%d\n", e.temp.slot_index);
+    } else if (e.kind == HirExpr_Cond) {
+        var e = e as *HirCondExpr;
+        begin_block("Cond");
+        hir_dump_child("cond", e.cond);
+        hir_dump_child("then_expr", e.then_expr);
+        hir_dump_child("else_expr", e.else_expr);
+        end_block();
+    } else if (e.kind == HirExpr_Loop) {
+        var e = e as *HirLoopExpr;
+        begin_block("Loop");
+        hir_dump_child("body", e.body);
+        hir_dump_child("step", e.step);
+        end_block();
+    } else if (e.kind == HirExpr_Jump) {
+        var e = e as *HirJumpExpr;
+        begin_block(e.is_break ? "break" : "continue");
+        end_block();
+    } else if (e.kind == HirExpr_Return) {
+        var e = e as *HirReturnExpr;
+        begin_block("Return");
+        if (e.expr != null) {
+            hir_dump_child("expr", e.expr);
+        }
+        end_block();
+    } else if (e.kind == HirExpr_BinaryOp) {
+        var e = e as *HirBinaryOpExpr;
+        begin_block("Binop");
+        hir_dump_child("left", e.left);
+        begin_inline_child("op");
+        fprintf(stderr, "%d\n", e.op);
+        hir_dump_child("right", e.right);
+        end_block();
+    } else if (e.kind == HirExpr_Call) {
+        var e = e as *HirCallExpr;
+        begin_block("Call");
+        begin_inline_child("name");
+        fprintf(stderr, "\"%s\"\n", e.callee.name);
+        begin_child("args");
+        var n_args = list_len(e.args);
+        for (var i = 0; i < n_args; i += 1) {
+            var arg: *HirExpr = list_get(e.args, i);
+            hir_dump_child(name: null, arg);
+        }
+        end_child();
+        end_block();
+    } else if (e.kind == HirExpr_Member) {
+        var e = e as *HirMemberExpr;
+        begin_block("Member");
+        hir_dump_child("left", e.left);
+        begin_inline_child("field");
+        fprintf(stderr, "%d\n", e.field_index);
+        end_block();
+    } else if (e.kind == HirExpr_Index) {
+        var e = e as *HirIndexExpr;
+        begin_block("Index");
+        hir_dump_child("indexee", e.indexee);
+        hir_dump_child("index", e.index);
+        end_block();
+    } else if (e.kind == HirExpr_Deref) {
+        var e = e as *HirDerefExpr;
+        begin_block("Deref");
+        hir_dump_child("expr", e.expr);
+        end_block();
+    } else if (e.kind == HirExpr_Addr) {
+        var e = e as *HirAddrExpr;
+        begin_block("Addr");
+        hir_dump_child("expr", e.expr);
+        end_block();
+    } else if (e.kind == HirExpr_Assign) {
+        var e = e as *HirAssignExpr;
+        begin_block("Assign");
+        hir_dump_child("dst", e.dst);
+        hir_dump_child("src", e.src);
+        end_block();
+    } else if (e.kind == HirExpr_Cast) {
+        var e = e as *HirCastExpr;
+        begin_block("Cast");
+        hir_dump_child("expr", e.expr);
+        begin_child("type");
+        hir_dump_type(e.type);
+        end_child();
+        end_block();
+    } else if (e.kind == HirExpr_Unreachable) {
+        begin_block("Unreachable");
+        end_block();
+    } else {
+        unreachable("hir_dump_");
+    }
+    end_child();
+}
+
+func hir_dump(e: *HirExpr): Void {
+    fprintf(stderr, "%s:%d:%d:\n", e.pos.file, e.pos.row, e.pos.col);
+    hir_dump_child(name: null, e);
+}
