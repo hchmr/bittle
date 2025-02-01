@@ -425,19 +425,22 @@ func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
     var op = expr.op;
     var ast_right = expr.right;
 
-    var right = lower_expr(ctx, ast_right);
-
     var result: *HirExpr;
     if (op == Tok_Minus) {
+        var right = lower_expr(ctx, ast_right);
         result = hir_mk_neg_expr(right);
     } else if (op == Tok_Tilde) {
+        var right = lower_expr(ctx, ast_right);
         result = hir_mk_bit_not_expr(right);
     } else if (op == Tok_Bang) {
+        var right = lower_expr(ctx, ast_right);
         result = hir_mk_not_expr(right);
     } else if (op == Tok_Star) {
+        var right = lower_expr(ctx, ast_right);
         result = hir_mk_deref_expr(right, &expr.pos);
     } else if (op == Tok_Amp) {
-        if (hir_is_lvalue(right)) {
+        if (is_lvalue(ast_right)) {
+            var right = lower_expr(ctx, ast_right);
             result = hir_mk_addr_expr(right, &expr.pos);
         } else {
             /*
@@ -448,9 +451,9 @@ func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
                     t1 = f();
                     &t1
             */
-            var temp_var = mk_temp_var(ctx, right.type);
+            var temp_var = mk_temp_var(ctx, ast_right.type);
             var temp = hir_mk_temp_expr(temp_var, &expr.pos);
-            var temp_init = hir_mk_assign_expr(temp, right);
+            var temp_init = lower_assign_expr(ctx, temp, ast_right, &ast_right.pos);
             var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
             result = hir_mk_seq_expr(temp_init, addr_temp);
         }
