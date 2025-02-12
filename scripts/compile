@@ -1,23 +1,39 @@
 #!/bin/bash
 
-set -e
-
-script_dir=$(dirname "$0")
-cd "$script_dir/.."
-
-build_dir=$(realpath out/compile)
+set -eu
 
 usage() {
   cat <<HERE
-usage: $0 [options] FILE
+Usage: $0 [options] <file>
 
-options:
-  -h,--help  Show this help
-  -o FILE    Output file
-  -S         Only run compile step
-  -c         Only run compile and assemble steps
+Compiles a Bittle file.
+
+Options:
+  -h, --help           Show this help
+  -o, --output <file>  Output file to generate
+  -S                   Stop after compilation; do not assemble
+  -c                   Stop after compilation and assembly; do not link
 HERE
 }
+
+short_usage() {
+  cat <<HERE
+Usage: $0 [options] <file>
+
+For full usage, run: $0 --help
+HERE
+}
+
+arg_error() {
+  echo "Error: $1" >&2
+  short_usage >&2
+  exit 1
+}
+
+input_file=
+output_file=
+stop_after_compile=false
+stop_after_assemble=false
 
 while test $# -gt 0; do
   case "$1" in
@@ -25,21 +41,19 @@ while test $# -gt 0; do
     usage
     exit 0
     ;;
-  -o)
+  -o | --output)
     shift
     output_file="$1"
     ;;
   -S)
-    compile_only=1
+    stop_after_compile=true
     ;;
   -c)
-    compile_and_assemble_only=1
+    stop_after_assemble=true
     ;;
   *)
     if [ -n "$input_file" ]; then
-      echo "Unexpected argument: $1"
-      usage
-      exit 1
+      arg_error "Unexpected argument: $1"
     fi
     input_file="$1"
     ;;
@@ -48,36 +62,42 @@ while test $# -gt 0; do
 done
 
 if [ -z "$input_file" ]; then
-  echo "No input file specified"
+  arg_error "No input file specified"
+fi
+
+if ! command -v bittlec >/dev/null 2>&1; then
+  echo "Error: No Bittle compiler found in PATH" >&2
   exit 1
 fi
 
-exe_file="${output_file:-a.out}"
-out_dir=$(dirname "$exe_file")
+out_dir=.
+if [ -n "$output_file" ]; then
+  out_dir=$(dirname "$output_file")
+fi
+
 asm_file="$out_dir/$(basename "$input_file" .btl).s"
 obj_file="$out_dir/$(basename "$input_file" .btl).o"
-
-mkdir -p "$build_dir"
-mkdir -p "$out_dir"
-
-# Compile compiler
-
-echo "Compiling compiler"
-make -C compiler "BUILD_DIR=$build_dir"
+exe_file="${output_file:-$out_dir/a.out}"
 
 # Compile
 
+if [ "$stop_after_compile" = true ] && [ -n "$output_file" ]; then
+  asm_file="$output_file"
+fi
 echo "Compiling $input_file to $asm_file"
-"$build_dir/bittlec" "$input_file" >"$asm_file"
+bittlec "$input_file" >"$asm_file"
 
-if [ -n "$compile_only" ]; then
+if [ "$stop_after_compile" = true ]; then
   exit 0
 fi
 
+if [ "$stop_after_assemble" = true ] && [ -n "$output_file" ]; then
+  obj_file="$output_file"
+fi
 echo "Assembling $asm_file to $obj_file"
 gcc -g -c -o "$obj_file" "$asm_file"
 
-if [ -n "$compile_and_assemble_only" ]; then
+if [ "$stop_after_assemble" = true ]; then
   exit 0
 fi
 

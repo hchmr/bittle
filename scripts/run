@@ -1,28 +1,54 @@
 #!/bin/bash
 
-set -e
+set -eu
 
 usage() {
-cat <<HERE
-usage: $0 [options] FILE
+  cat <<HERE
+Usage: $0 [options] <file> [--] [<args>...]
 
-options:
-  -h,--help  Show this help
-  -o FILE    Output file
-  --         End of options
+Compiles and runs a Bittle file.
+
+Options:
+  -h, --help           Show this help.
+  -o, --output <file>  Output file to generate.
+  <file>               Source file to run.
+  --                   End of options.
+
+<args>...              Arguments to pass to the program.
+
+Examples:
+  $0 /src/main.btl
+  $0 /src/wc.btl -o /bin/wc
+  $0 /src/wc.btl -- documents/*.txt
 HERE
 }
 
+short_usage() {
+  cat <<HERE
+Usage: $0 [options] <source-file> [--] [<args>...]
+
+For full usage, run: $0 --help
+HERE
+}
+
+arg_error() {
+  echo "Error: $1" >&2
+  short_usage >&2
+  exit 1
+}
+
 script_dir=$(dirname "$0")
-cd "$script_dir/.."
+
+input_file=
+output_file=
 
 while test $# -gt 0 ; do
   case "$1" in
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
-    -o)
+    -o | --output)
       shift
       output_file="$1"
       ;;
@@ -32,9 +58,7 @@ while test $# -gt 0 ; do
       ;;
     *)
       if [ -n "$input_file" ] ; then
-        echo "Unexpected argument: $1"
-        usage
-        exit 1
+        arg_error "Unexpected argument: $1"
       fi
       input_file="$1"
       ;;
@@ -43,13 +67,16 @@ while test $# -gt 0 ; do
 done
 
 if [ -z "$input_file" ] ; then
-  echo "No input file specified"
-  exit 1
+  arg_error "No input file specified"
 fi
 
-exe_file="${output_file:-a.out}"
+if [ -z "$output_file" ]; then
+  build_name=$(basename "$input_file" .btl)
+  output_dir=$(mktemp -d -t "bittle-run-XXXXX")
+  output_file="$output_dir/$build_name"
+fi
 
-scripts/compile -o "$exe_file" "$input_file"
+"$script_dir/compile" -o "$output_file" "$input_file" 1>&2
 
-echo "Running $exe_file"
-./"$exe_file" "$@"
+echo "Running $output_file" 1>&2
+"$output_file" "$@"
