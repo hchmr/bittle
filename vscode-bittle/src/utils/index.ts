@@ -1,37 +1,16 @@
-import * as vscode from 'vscode';
-import { Point, PointRange } from '../syntax';
-
-//=============================================================================
-//== Position conversion
-
-export function fromVscPosition(position: vscode.Position): Point {
-    return { row: position.line, column: position.character };
-}
-
-export function toVscPosition(point: Point): vscode.Position {
-    return new vscode.Position(point.row, point.column);
-}
-
-export function fromVscRange(range: vscode.Range): PointRange {
-    return {
-        startPosition: fromVscPosition(range.start),
-        endPosition: fromVscPosition(range.end),
-    };
-}
-
-export function toVscRange(start: Point, end: Point): vscode.Range;
-export function toVscRange(range: PointRange): vscode.Range;
-export function toVscRange(...args: [Point, Point] | [PointRange]): vscode.Range {
-    const [start, end] = args.length === 1
-        ? [args[0].startPosition, args[0].endPosition]
-        : args;
-    return new vscode.Range(toVscPosition(start), toVscPosition(end));
-}
-
-//=============================================================================
-//== Other utilities
-
 export type Nullish = null | undefined;
+
+export function identity<T>(value: T): T {
+    return value;
+}
+
+export function isEnumValue<T extends Record<string, unknown>>(enumObj: T, value: unknown): value is T[keyof T] {
+    return Object.values(enumObj).includes(value);
+}
+
+export function unreachable(value: never): never {
+    throw new Error(`Unreachable code reached: ${value}`);
+}
 
 export function isBittleFile(name: string) {
     return name.endsWith('.btl') || name.endsWith('.btls');

@@ -1,10 +1,10 @@
 // @ts-check
 
 import js from '@eslint/js';
-import ts from 'typescript-eslint';
-import globals from 'globals';
-import 'eslint-plugin-only-warn';
 import stylistic from '@stylistic/eslint-plugin';
+import 'eslint-plugin-only-warn';
+import globals from 'globals';
+import ts from 'typescript-eslint';
 
 export default ts.config(
     {
@@ -20,8 +20,8 @@ export default ts.config(
         },
     },
     js.configs.recommended,
-    ...ts.configs.recommended,
-    //@ts-expect-error "Argument of type 'Config<RulesRecord>' is not assignable to parameter of type 'ConfigWithExtends'."
+    ts.configs.strict,
+    ts.configs.stylistic,
     stylistic.configs.customize({
         indent: 4,
         flat: true,
@@ -35,12 +35,18 @@ export default ts.config(
     {
         rules: {
             'no-unused-vars': 'off',
-            // FIXME: Update to "checkLoops": "allExceptWhileTrue" when upgrading to ESLint 9
-            'no-constant-condition': ['warn', { checkLoops: false }],
+            'no-constant-condition': ['warn', { checkLoops: 'allExceptWhileTrue' }],
             '@typescript-eslint/no-unused-vars': 'off',
-
+            '@typescript-eslint/consistent-type-definitions': 'off',
+            '@typescript-eslint/no-inferrable-types': ['warn', { ignoreParameters: true, ignoreProperties: true }],
+            '@typescript-eslint/consistent-generic-constructors': 'off',
+            '@typescript-eslint/consistent-type-assertions': ['warn', { assertionStyle: 'as', objectLiteralTypeAssertions: 'never' }],
+            // Consider enabling this rule in the future
+            '@typescript-eslint/no-non-null-assertion': 'off',
             '@stylistic/spaced-comment': 'off',
             '@stylistic/arrow-parens': 'off',
+            '@stylistic/no-mixed-operators': 'off',
+            '@stylistic/operator-linebreak': ['warn', 'before', { 'overrides': { '=': 'after' } }],
         },
     },
 );

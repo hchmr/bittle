@@ -12,7 +12,7 @@ export interface SyntaxNode {
 
     readonly tree: Tree;
     readonly parent: SyntaxNode | null;
-    readonly children: Array<SyntaxNode>;
+    readonly children: SyntaxNode[];
     readonly childCount: number;
     readonly firstChild: SyntaxNode | null;
     readonly lastChild: SyntaxNode | null;
@@ -25,17 +25,15 @@ export interface SyntaxNode {
     child(index: number): SyntaxNode | null;
     childForFieldName(fieldName: string): SyntaxNode | null;
     fieldNameForChild(childIndex: number): string | null;
-    childrenForFieldName(fieldName: string): Array<SyntaxNode>;
+    childrenForFieldName(fieldName: string): SyntaxNode[];
 
-    descendantForPosition(position: Point): SyntaxNode;
-    descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
+    descendantForPosition(startPosition: Point, endPosition?: Point): SyntaxNode;
 
-    descendantsForPosition(position: Point): Array<SyntaxNode>;
-    descendantsForPosition(startPosition: Point, endPosition: Point): Array<SyntaxNode>;
+    descendantsForPosition(startPosition: Point, endPosition?: Point): SyntaxNode[];
 
-    closestDescendantsForPosition(position: Point): Array<SyntaxNode>;
+    closestDescendantsForPosition(position: Point): SyntaxNode[];
 
-    closest(types: string | Array<string>): SyntaxNode | null;
+    closest(types: string | string[]): SyntaxNode | null;
 }
 
 export interface Tree {

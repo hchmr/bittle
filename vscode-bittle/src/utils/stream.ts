@@ -7,7 +7,7 @@ export interface Stream<T> extends Iterable<T> {
     groupBy<K>(f: (x: T) => K): Stream<[K, T[]]>;
     groupBy<K, V>(f: (x: T) => K, g: (x: T) => V): Stream<[K, V[]]>;
     distinct(): Stream<T>;
-    distinctBy<U>(f: (x: T) => U): Stream<T>;
+    distinctBy(f: (x: T) => unknown): Stream<T>;
     filterMap<U>(f: (x: T) => U | undefined): Stream<U>;
     zip<U>(other: Iterable<U>): Stream<[T, U]>;
     zipLongest<U>(other: Iterable<U>): Stream<[T, U] | [undefined, U] | [T, undefined]>;
@@ -89,9 +89,9 @@ class StreamImpl<T> implements Stream<T> {
         return this.distinctBy(x => x);
     }
 
-    distinctBy<U>(f: (x: T) => U): Stream<T> {
+    distinctBy(f: (x: T) => unknown): Stream<T> {
         return new StreamImpl((function* (source) {
-            const set = new Set<U>();
+            const set = new Set<unknown>();
             for (const x of source) {
                 const key = f(x);
                 if (!set.has(key)) {

@@ -1,9 +1,11 @@
 import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
 import { ElaborationDiag, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
+import { Scope } from '../semantics/scope';
 import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
 import { mkErrorType, Type } from '../semantics/type';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
+import { Nullish } from '../utils';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { Stream, stream } from '../utils/stream';
 import { IncludeResolver } from './IncludeResolver';
@@ -32,12 +34,12 @@ export class SemanticsService {
         if (!innerScope) {
             return stream([]);
         }
-        return stream(function* go(scope): Iterable<Sym> {
+        return stream(function* go(scope: Scope | Nullish): Iterable<Sym> {
             if (!scope) {
                 return;
             }
             yield * stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
-            yield * go(scope.parent!);
+            yield * go(scope.parent);
         }(innerScope));
     }
 

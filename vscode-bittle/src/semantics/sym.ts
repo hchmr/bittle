@@ -1,4 +1,5 @@
 import { SyntaxNode } from '../syntax';
+import { unreachable } from '../utils';
 import { mkEnumType, mkStructType, prettyType, Type } from './type';
 
 export enum SymKind {
@@ -105,12 +106,11 @@ export function symRelatedType(sym: Sym): Type {
     } else if (sym.kind === SymKind.Local) {
         return sym.type;
     } else if (sym.kind === SymKind.Const) {
-        return sym.type!;
+        return sym.type;
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {
-        const never: never = sym;
-        throw new Error(`Unexpected symbol kind: ${never}`);
+        unreachable(sym);
     }
 }
 
@@ -129,12 +129,11 @@ export function prettySym(sym: Sym): string {
     } else if (sym.kind === SymKind.Local) {
         return `var ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Const) {
-        return `const ${sym.name}: ${prettyType(symRelatedType(sym)!)} = ${sym.value}`;
+        return `const ${sym.name}: ${prettyType(symRelatedType(sym))} = ${sym.value}`;
     } else if (sym.kind === SymKind.FuncParam) {
         return `(parameter) ${sym.name}: ${prettyType(sym.type)}`;
     } else {
-        const unreachable: never = sym;
-        return unreachable;
+        unreachable(sym);
     }
 }
 

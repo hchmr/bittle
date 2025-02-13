@@ -7,7 +7,7 @@ import { Tree } from './tree.js';
 function parse(text: string): [Tree, Error[]] {
     const errors: Error[] = [];
 
-    const errorSink = <ErrorSink>{
+    const errorSink: ErrorSink = {
         add(error: Error) {
             errors.push(error);
         },

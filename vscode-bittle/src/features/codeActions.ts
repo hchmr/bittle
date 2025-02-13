@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { isRangeEmpty, SyntaxNode, Tree } from '../syntax';
-import { fromVscRange, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
+import { fromVscRange, toVscRange } from '../utils/vscode';
 
 export class CodeActionsProvider implements vscode.CodeActionProvider {
     constructor(private parsingService: ParsingService) { }

@@ -23,7 +23,7 @@ export abstract class AstNode implements PointRange {
         return stream(children)
             .filter(child => child instanceof TokenNodeImpl)
             .filter(token => (kinds as string[]).includes(token.type))
-            .map(token => (token as TokenNodeImpl<T>))
+            .map(token => token as TokenNode<T>)
             .toArray();
     }
 

@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import { ElaborationDiag } from '../semantics/elaborator';
 import { SemanticsService } from '../services/semanticsService';
-import { toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
+import { toVscRange } from '../utils/vscode';
 
 export class ElaborationDiagnosticProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Bittle');

@@ -3,11 +3,11 @@ import { ParsingService } from '../services/parsingService';
 import { VirtualFileSystem } from '../services/vfs';
 import { SyntaxNode } from '../syntax';
 import { NodeTypes } from '../syntax/nodeTypes';
-import { toVscRange } from '../utils';
 import { fuzzySearch as searchFuzzy } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
+import { toVscRange } from '../utils/vscode';
 
 export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, vscode.WorkspaceSymbolProvider {
     constructor(

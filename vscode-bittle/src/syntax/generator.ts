@@ -1,3 +1,4 @@
+import { unreachable } from '../utils';
 import { AstDef, Field } from './generator/model';
 
 function renderString(s: string): string {
@@ -18,8 +19,7 @@ function renderFieldType(field: Field): string {
             return `${field.nodeType}Node | undefined`;
         }
     } else {
-        const unreachable: never = field;
-        throw new Error(`Unknown field type kind: ${unreachable}`);
+        unreachable(field);
     }
 }
 
@@ -101,8 +101,7 @@ export function emitAstDef(astDef: AstDef) {
                 println(`        return this.getAstNodeOfType<${field.nodeType}Node>(${fenderLabelArg(field.label)}, ${renderNodeGetArgs(field.nodeType)});`);
             }
         } else {
-            const unreachable: never = field;
-            throw new Error(`Unknown field type kind: ${unreachable}`);
+            unreachable(field);
         }
         println(`    }`);
     }

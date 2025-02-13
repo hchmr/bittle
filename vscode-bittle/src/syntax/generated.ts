@@ -780,4 +780,3 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         default: throw new Error('Unknown node type: ' + syntax.type);
     }
 }
-

@@ -1,3 +1,4 @@
+import { unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { EnumSym, StructSym } from './sym';
 
@@ -210,8 +211,7 @@ export function typeLayout(type: Type): TypeLayout | undefined {
             return undefined;
         }
         default: {
-            const unreachable: never = type;
-            throw new Error(`Unexpected type: ${unreachable}`);
+            unreachable(type);
         }
     }
 
@@ -264,7 +264,9 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
 }
 
 export function unifyTypes(t1: Type, t2: Type): Type {
-    return tryUnifyTypes(t1, t2, () => { });
+    return tryUnifyTypes(t1, t2, () => {
+        // Ignore errors
+    });
 }
 
 export function typeEq(t1: Type, t2: Type): boolean {
@@ -317,7 +319,7 @@ export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
         return isScalarType(src);
     } else if (dst.kind === TypeKind.Int) {
         return (src.kind === TypeKind.Int && src.size! <= dst.size!)
-            || (src.kind === TypeKind.Enum && src.sym.size! <= dst.size!);
+            || (src.kind === TypeKind.Enum && src.sym.size <= dst.size!);
     } else if (dst.kind === TypeKind.Ptr) {
         return src.kind === TypeKind.Ptr && pointeeTypeLe(src.pointeeType, dst.pointeeType);
     } else {

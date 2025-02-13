@@ -8,11 +8,12 @@ import { SemanticsService } from '../services/semanticsService';
 import { rangeContains, rangeContainsPoint, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, isArgNode, NodeTypes, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
-import { fromVscPosition, toVscRange } from '../utils';
+import { unreachable } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
+import { fromVscPosition, toVscRange } from '../utils/vscode';
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(
@@ -33,18 +34,18 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         const position = fromVscPosition(vscPosition);
         const closest = tree.rootNode.closestDescendantsForPosition(position);
 
-        const node
-            = closest.find(node => rangeContainsPoint(node, position))
+        const node =
+            closest.find(node => rangeContainsPoint(node, position))
             ?? closest[0];
         if (!node) {
             return;
         }
 
         return this.autoCompleteFieldAccess(filePath, node)
-            || this.autoCompleteFieldInit(filePath, node)
-            || this.autoCompleteArgumentLabel(filePath, node)
-            || this.autoCompleteDefinition(filePath, node)
-            || this.autoCompleteDefault(filePath, node);
+            ?? this.autoCompleteFieldInit(filePath, node)
+            ?? this.autoCompleteArgumentLabel(filePath, node)
+            ?? this.autoCompleteDefinition(filePath, node)
+            ?? this.autoCompleteDefault(filePath, node);
     }
 
     private autoCompleteFieldAccess(
@@ -179,8 +180,8 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         const argIndex = countPrecedingCommas(argNodes, node.endPosition);
 
         const potentialArgNode = argNodes.filter(n => n.type === '(' || n.type === ',')[argIndex]?.nextSibling;
-        const labelNode
-            = potentialArgNode && isArgNode(potentialArgNode)
+        const labelNode =
+            potentialArgNode && isArgNode(potentialArgNode)
                 ? potentialArgNode.childForFieldName('label')
                 : null;
         if (labelNode && !rangeContains(labelNode, node)) {
@@ -239,13 +240,13 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         filePath: string,
         node: SyntaxNode,
     ): vscode.CompletionItem[] | undefined {
-        const candidates: Array<CompletionCandidate>
-            = this.semanticsService.getSymbolsAtNode(filePath, node)
+        const candidates: CompletionCandidate[] =
+            this.semanticsService.getSymbolsAtNode(filePath, node)
                 .filter(sym => sym.origins.some(origin => origin.nameNode !== node))
                 .concat(generateBuiltins())
                 .toArray();
 
-        let results: Array<CompletionCandidate>;
+        let results: CompletionCandidate[];
         if (node.type === 'identifier') {
             results = fuzzySearch(node.text, candidates, { key: 'name' });
         } else {
@@ -266,7 +267,7 @@ function* generateBuiltins(): Iterable<CompletionCandidate> {
     yield * builtinTypes
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Struct }));
     yield * keywords
-        .filter(name => !(<readonly string[]>builtinValues).includes(name))
+        .filter(name => !(builtinValues as readonly string[]).includes(name))
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Keyword }));
 }
 
@@ -332,8 +333,7 @@ function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
         case SymKind.Const:
             return vscode.CompletionItemKind.Constant;
         default: {
-            const unreachable: never = kind;
-            return unreachable;
+            unreachable(kind);
         }
     }
 }

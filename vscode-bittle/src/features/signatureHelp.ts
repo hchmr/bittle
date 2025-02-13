@@ -4,10 +4,11 @@ import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { Point, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, NodeTypes } from '../syntax/nodeTypes';
-import { fromVscPosition, Nullish } from '../utils';
+import { Nullish } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas, nodeEndsAt, nodeStartsAt } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
+import { fromVscPosition } from '../utils/vscode';
 
 export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
     constructor(

@@ -6,8 +6,8 @@ export class IncludeResolver {
     constructor(private vfs: VirtualFileSystem) { }
 
     resolveInclude(filePath: string, arg: string | SyntaxNode): string | undefined {
-        const pathValue
-            = typeof arg === 'string'
+        const pathValue =
+            typeof arg === 'string'
                 ? arg
                 : tryParseString(arg.text);
         if (!pathValue) {
@@ -26,7 +26,7 @@ function tryParseString(text: string): string | undefined {
         return;
     }
     try {
-        return JSON.parse(text);
+        return JSON.parse(text) as string;
     } catch {
         return;
     }

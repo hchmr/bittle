@@ -1,4 +1,5 @@
 import { SyntaxNode } from '../syntax';
+import { isEnumValue } from '../utils';
 import { AstNodeTypes } from './generated';
 import { TokenKind, tokenKinds } from './token';
 
@@ -72,10 +73,10 @@ export const CompositeNodeTypes = {
     'Error': 'Error',
 } as const;
 
-export const TokenNodeTypes: Record<TokenKind, TokenKind>
-    = <Record<TokenKind, TokenKind>>Object.freeze(
+export const TokenNodeTypes: Record<TokenKind, TokenKind> =
+    Object.freeze(
         Object.fromEntries(tokenKinds.map(kind => [kind, kind])),
-    );
+    ) as Record<TokenKind, TokenKind>;
 
 export const NodeTypes = Object.freeze({
     ...CompositeNodeTypes,
@@ -83,19 +84,19 @@ export const NodeTypes = Object.freeze({
 });
 
 export function isTopLevelNode(node: SyntaxNode): boolean {
-    return Object.values(<Record<string, string>>TopLevelNodeTypes).includes(node.type);
+    return isEnumValue(TopLevelNodeTypes, node.type);
 }
 
 export function isTypeNode(node: SyntaxNode): boolean {
-    return Object.values(<Record<string, string>>TypeNodeTypes).includes(node.type);
+    return isEnumValue(TypeNodeTypes, node.type);
 }
 
 export function isStmtNode(node: SyntaxNode): boolean {
-    return Object.values(<Record<string, string>>StmtNodeTypes).includes(node.type);
+    return isEnumValue(StmtNodeTypes, node.type);
 }
 
 export function isExprNode(node: SyntaxNode): boolean {
-    return Object.values(<Record<string, string>>ExprNodeTypes).includes(node.type);
+    return isEnumValue(ExprNodeTypes, node.type);
 }
 
 export function isArgNode(node: SyntaxNode): boolean {

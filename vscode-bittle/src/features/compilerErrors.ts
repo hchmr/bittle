@@ -17,8 +17,13 @@ export function createCompilerErrorProvider(compilerService: CompilerService): C
 }
 
 class DummyErrorProvider implements CompilerErrorProvider {
-    dispose() { }
-    async updateDiagnostics() { }
+    dispose() {
+        // Nothing to do
+    }
+
+    async updateDiagnostics() {
+        // Nothing to do
+    }
 }
 
 class CompilerErrorProviderImpl implements CompilerErrorProvider {

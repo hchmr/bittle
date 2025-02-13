@@ -12,8 +12,8 @@ export type TerminalRule = { kind: 'Terminal'; name: string };
 
 export type NonterminalRule = { kind: 'Nonterminal'; name: string };
 
-export type Rule
-    = ChoiceRule
+export type Rule =
+    | ChoiceRule
     | SequenceRule
     | RepeatRule
     | OptionalRule

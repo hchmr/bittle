@@ -7,7 +7,7 @@ import {
     ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode,
     LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructExprNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
 } from '../syntax/generated';
-import { Nullish } from '../utils';
+import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { Scope } from './scope';
 import {
@@ -22,8 +22,8 @@ export type ErrorLocation = {
     range: PointRange;
 };
 
-export type Severity
-    = 'error'
+export type Severity =
+    | 'error'
     | 'warning'
     | 'info'
     | 'hint';
@@ -362,17 +362,6 @@ export class Elaborator {
             };
         }
 
-        if (!nameNode) {
-            return {
-                kind: SymKind.Global,
-                name: '',
-                qualifiedName: '',
-                origins: [],
-                isDefined: false,
-                type,
-            };
-        }
-
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
             if (existing.kind !== SymKind.Global) {
@@ -519,8 +508,7 @@ export class Elaborator {
             } else if (typeNode instanceof NeverTypeNode) {
                 return mkNeverType();
             } else {
-                const unreachable: never = typeNode;
-                throw new Error(`Unexpected node type: ${unreachable}`);
+                unreachable(typeNode);
             }
         });
     }
@@ -625,8 +613,7 @@ export class Elaborator {
         } else if (node instanceof EnumDeclNode) {
             this.elabEnum(node);
         } else {
-            const unreachable: never = node;
-            throw new Error(`Unexpected node type: ${unreachable}`);
+            unreachable(node);
         }
     }
 
@@ -649,7 +636,7 @@ export class Elaborator {
     }
 
     private elabStruct(node: StructDeclNode) {
-        const nameNode = node?.name;
+        const nameNode = node.name;
         const baseTypeNode = node.base;
         const bodyNode = node.body;
 
@@ -691,15 +678,15 @@ export class Elaborator {
             return;
         }
         if (baseType.kind !== TypeKind.Struct) {
-            this.reportError(baseTypeNode!, `Base type must be a struct.`);
+            this.reportError(baseTypeNode, `Base type must be a struct.`);
             return;
         }
         if (baseType.sym.qualifiedName === structSym.qualifiedName) {
-            this.reportError(baseTypeNode!, `Struct cannot inherit from itself.`);
+            this.reportError(baseTypeNode, `Struct cannot inherit from itself.`);
             return;
         }
         if (this.isUnsizedType(baseType)) {
-            this.reportError(baseTypeNode!, `Base type has incomplete type.`);
+            this.reportError(baseTypeNode, `Base type has incomplete type.`);
             return;
         }
         const baseSym = this.symbols.get(baseType.sym.qualifiedName);
@@ -723,7 +710,7 @@ export class Elaborator {
             return;
 
         const fieldSym = this.defineStructFieldSym(fieldNode, nameNode, fieldType, structSym);
-        structSym.fields!.push(fieldSym);
+        structSym.fields.push(fieldSym);
     }
 
     private elabEnum(node: EnumDeclNode) {
@@ -732,7 +719,7 @@ export class Elaborator {
         const type = enumSym ? mkEnumType(enumSym) : mkIntType(32);
 
         if (node.body) {
-            let nextValue: number = 0;
+            let nextValue = 0;
             for (const memberNode of node.body.enumMemberNodes) {
                 nextValue = this.elabEnumMember(memberNode, type, nextValue);
             }
@@ -749,7 +736,7 @@ export class Elaborator {
     }
 
     private elabFunc(node: FuncDeclNode) {
-        const nameNode = node?.name;
+        const nameNode = node.name;
         const paramNodes = node.params?.funcParamNodes ?? [];
         const bodyNode = node.body;
 
@@ -817,7 +804,7 @@ export class Elaborator {
     }
 
     private elabConst(node: ConstDeclNode) {
-        const nameNode = node?.name;
+        const nameNode = node.name;
         const valueNode = node.value;
 
         const name = nameNode?.text ?? '';
@@ -851,8 +838,7 @@ export class Elaborator {
         } else if (node instanceof ExprStmtNode) {
             this.elabExprStmt(node);
         } else {
-            const unreachable: never = node;
-            throw new Error(`Unexpected node type: ${unreachable}`);
+            unreachable(node);
         }
     }
 
@@ -874,7 +860,7 @@ export class Elaborator {
     }
 
     private elabLocalDecl(node: LocalDeclNode) {
-        const nameNode = node?.name;
+        const nameNode = node.name;
         const typeNode = node.type;
         const initNode = node.value;
 
@@ -1009,8 +995,7 @@ export class Elaborator {
             } else if (node instanceof StructExprNode) {
                 return this.elabStructExpr(node);
             } else {
-                const unreachable: never = node;
-                throw new Error(`Unexpected node type: ${unreachable} `);
+                unreachable(node);
             }
         });
     }
@@ -1041,8 +1026,7 @@ export class Elaborator {
                 this.reportError(nameNode, `Expected a variable or a constant.`);
                 return mkErrorType();
             default: {
-                const unreachable: never = sym;
-                throw new Error(`Unreachable: ${unreachable} `);
+                unreachable(sym);
             }
         }
     }
@@ -1070,8 +1054,7 @@ export class Elaborator {
         } else if (literal instanceof NullLiteralNode) {
             return mkPointerType(mkVoidType());
         } else {
-            const unreachable: never = literal;
-            throw new Error(`Unexpected literal type: ${unreachable} `);
+            unreachable(literal);
         }
     }
 
@@ -1111,7 +1094,7 @@ export class Elaborator {
             {
                 const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
                 const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
-                if (operandType?.kind !== TypeKind.Ptr) {
+                if (operandType.kind !== TypeKind.Ptr) {
                     if (operandNode && operandType.kind !== TypeKind.Err) {
                         this.reportError(operandNode, `Expected pointer type.`);
                     }
@@ -1537,7 +1520,7 @@ function parseChar(text: string): number {
         return parseInt(text.slice(3, 5), 16);
     } else if (/^'\\.'$/.test(text)) {
         const c = text[2];
-        return JSON.parse(`"\\${c}"`).charCodeAt(0);
+        return (JSON.parse(`"\\${c}"`) as string).charCodeAt(0);
     } else {
         return text.charCodeAt(1);
     }

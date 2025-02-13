@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { Error } from '../syntax';
-import { toVscPosition } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
+import { toVscPosition } from '../utils/vscode';
 
 export class SyntaxErrorProvider implements vscode.Disposable {
     private diagnosticsCollection = vscode.languages.createDiagnosticCollection('Bittle');

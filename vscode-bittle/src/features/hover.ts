@@ -5,8 +5,8 @@ import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
-import { toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
+import { toVscRange } from '../utils/vscode';
 
 export class HoverProvider implements vscode.HoverProvider {
     constructor(

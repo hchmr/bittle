@@ -13,7 +13,7 @@ export interface VirtualFileSystem {
     /** Checks if a file exists */
     exists(path: string): boolean;
     /** List all files in the virtual file system */
-    listFiles(): Array<string>;
+    listFiles(): string[];
 }
 
 export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposable {
@@ -58,7 +58,9 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
     }
 
     public dispose() {
-        this.disposables.forEach(d => d.dispose());
+        this.disposables.forEach(d => {
+            d.dispose();
+        });
     }
 
     private invalidateContents(path: string) {
@@ -79,7 +81,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
         return this.cache.compute(`vfs:exists:${path}`, () => this.existsUncached(path));
     }
 
-    public listFiles(): Array<string> {
+    public listFiles(): string[] {
         return this.cache.compute(`vfs:list`, () => Array.from(this.listFilesUncached()));
     }
 
@@ -108,8 +110,8 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
         );
     };
 
-    private listFilesUncached(): Array<string> {
-        const files: Array<string> = [];
+    private listFilesUncached(): string[] {
+        const files: string[] = [];
 
         files.push(
             ...vscode.workspace.textDocuments

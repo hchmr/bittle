@@ -11,14 +11,14 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
     private _startIndex: number;
     private _tree: Tree;
     private _parent: SyntaxNodeImpl | null = null;
-    private _children: Array<{ field?: string; node: SyntaxNodeImpl }> = [];
+    private _children: { field?: string; node: SyntaxNodeImpl }[] = [];
 
     constructor(
         type: string,
         startPosition: Point,
         startIndex: number,
         tree: Tree,
-        children?: Array<{ field?: string; node: SyntaxNodeImpl }>,
+        children?: { field?: string; node: SyntaxNodeImpl }[],
     ) {
         this._type = type;
         this._startPosition = startPosition;
@@ -72,7 +72,7 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         return this._parent;
     }
 
-    get children(): Array<SyntaxNode> {
+    get children(): SyntaxNode[] {
         return this._children.map(child => child.node);
     }
 
@@ -136,12 +136,10 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         return this._children[childIndex]?.field ?? null;
     }
 
-    childrenForFieldName(fieldName: string): Array<SyntaxNode> {
+    childrenForFieldName(fieldName: string): SyntaxNode[] {
         return this._children.filter(child => child.field === fieldName).map(child => child.node);
     }
 
-    descendantForPosition(position: Point): SyntaxNode;
-    descendantForPosition(startPosition: Point, endPosition: Point): SyntaxNode;
     descendantForPosition(startPosition: Point, endPosition?: Point): SyntaxNode {
         const searchRange: PointRange = { startPosition, endPosition: endPosition ?? startPosition };
         return (function search(node: SyntaxNodeImpl): SyntaxNode {
@@ -152,9 +150,7 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         })(this);
     }
 
-    descendantsForPosition(position: Point): Array<SyntaxNode>;
-    descendantsForPosition(startPosition: Point, endPosition: Point): Array<SyntaxNode>;
-    descendantsForPosition(startPosition: Point, endPosition?: Point): Array<SyntaxNode> {
+    descendantsForPosition(startPosition: Point, endPosition?: Point): SyntaxNode[] {
         const searchRange: PointRange = { startPosition, endPosition: endPosition ?? startPosition };
         return Array.from(
             (function search(node: SyntaxNodeImpl): Iterable<SyntaxNode> {
@@ -166,7 +162,7 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         );
     }
 
-    closestDescendantsForPosition(position: Point): Array<SyntaxNode> {
+    closestDescendantsForPosition(position: Point): SyntaxNode[] {
         if (!this.childCount) {
             return [this];
         }
@@ -193,27 +189,17 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         }
     }
 
-    closest(types: string | Array<string>): SyntaxNode | null {
+    closest(types: string | string[]): SyntaxNode | null {
         if (typeof types === 'string') {
             types = [types];
         }
         return types.includes(this.type)
             ? this
-            : this.parent?.closest(types)
-            ?? null;
+            : this.parent?.closest(types) ?? null;
     }
 }
 
 export class CompositeNodeImpl extends SyntaxNodeImpl {
-    constructor(
-        type: string,
-        startPosition: Point,
-        startIndex: number,
-        tree: Tree,
-        children?: Array<{ field?: string; node: SyntaxNodeImpl }>,
-    ) {
-        super(type, startPosition, startIndex, tree, children);
-    }
 }
 
 export class TokenNodeImpl<Kind extends TokenKind> extends SyntaxNodeImpl {

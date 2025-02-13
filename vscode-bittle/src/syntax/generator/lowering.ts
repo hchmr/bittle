@@ -1,3 +1,4 @@
+import { unreachable } from '../../utils';
 import { stream } from '../../utils/stream';
 import { Grammar, NonterminalRule, Rule, TerminalRule } from '../grammar/core';
 import { grammarRulesChildRulesRec } from '../grammar/utils';
@@ -95,8 +96,7 @@ export function lowerRule(
     } else if (rule.kind === 'Nonterminal') {
         fields.addNode(rule.name, 'Optional');
     } else {
-        const _: never = rule;
-        throw new Error(`Unknown rule kind: ${_}`);
+        unreachable(rule);
     }
 }
 

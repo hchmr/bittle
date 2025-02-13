@@ -41,7 +41,7 @@ export class ParsingServiceImpl implements ParsingService {
     private runParserUncached(path: string): ParseResult {
         const text = this.vfs.readFile(path);
 
-        const errors: Array<Error> = [];
+        const errors: Error[] = [];
         const errorSink = {
             add: (error: Error) => errors.push(error),
         };

@@ -1,3 +1,4 @@
+import { unreachable } from '../../utils';
 import { Grammar, Rule } from './core';
 
 export function* childRules(rule: Rule): Generator<Rule> {
@@ -18,8 +19,7 @@ export function* childRules(rule: Rule): Generator<Rule> {
     } else if (rule.kind === 'Terminal' || rule.kind === 'Nonterminal') {
         // Do nothing
     } else {
-        const _: never = rule;
-        throw new Error(`Unknown rule kind: ${_}`);
+        unreachable(rule);
     }
 }
 

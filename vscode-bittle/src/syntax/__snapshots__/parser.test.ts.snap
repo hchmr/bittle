@@ -19,159 +19,160 @@ exports[`parser:bad 1`] = `
   {
     "message": "Unexpected start of statement: '<eof>'.",
     "position": {
-      "column": 27,
-      "row": 4,
+      "column": 0,
+      "row": 5,
     },
   },
 ]
 `;
 
 exports[`prettySyntaxTree:bad 1`] = `
-"root@2:1
-  func_decl@2:1
+"Root@2:1
+  FuncDecl@2:1
     "func"@2:1
     "add"@2:6
-    "("@2:9
-    param_decl@2:10
-      "a"@2:10
-      ":"@2:11
-      name_type@2:13
-        "Int"@2:13
-    ","@2:16
-    param_decl@2:18
-      "b"@2:18
-      ":"@2:19
-      name_type@2:21
-        "Int"@2:21
-    ")"@2:24
+    FuncParamList@2:9
+      "("@2:9
+      FuncParam@2:10
+        "a"@2:10
+        ":"@2:11
+        NameType@2:13
+          "Int"@2:13
+      ","@2:16
+      FuncParam@2:18
+        "b"@2:18
+        ":"@2:19
+        NameType@2:21
+          "Int"@2:21
+      ")"@2:24
     ":"@2:25
-    name_type@2:27
+    NameType@2:27
       "Int"@2:27
-    block_stmt@2:31
+    BlockStmt@2:31
       "{"@2:31
-      MISSING "}"@4:1
-  func_decl@4:1
+  FuncDecl@4:1
     "func"@4:1
     "maine"@4:6
-    "("@4:11
-    MISSING ","@4:13
-    MISSING ")"@4:13
-    block_stmt@4:13
+    FuncParamList@4:11
+      "("@4:11
+    BlockStmt@4:13
       "{"@4:13
-      expr_stmt@5:5
-        call_expr@5:5
-          name_expr@5:5
+      ExprStmt@5:5
+        CallExpr@5:5
+          NameExpr@5:5
             "print"@5:5
-          "("@5:10
-          literal_expr@5:11
-            string_literal@5:11
-              "\\"Helo wolrdn\\\\n\\""@5:11
-          ")"@5:26
+          CallArgList@5:10
+            "("@5:10
+            CallArg@5:11
+              LiteralExpr@5:11
+                StringLiteral@5:11
+                  "\\"Helo wolrdn\\\\n\\""@5:11
+            ")"@5:26
         ";"@5:27
-      error@5:28
-        ""@5:28
-      MISSING "}"@5:28
-  ""@5:28
+      Error@6:1
+        ""@6:1
+  ""@6:1
 "
 `;
 
 exports[`prettySyntaxTree:good 1`] = `
-"root@2:1
-  struct_decl@2:1
+"Root@2:1
+  StructDecl@2:1
     "struct"@2:1
     "Point"@2:8
-    struct_body@2:14
+    StructBody@2:14
       "{"@2:14
-      struct_member@3:5
+      StructMember@3:5
         "x"@3:5
         ":"@3:6
-        name_type@3:8
+        NameType@3:8
           "Int"@3:8
       ","@3:11
-      struct_member@4:5
+      StructMember@4:5
         "y"@4:5
         ":"@4:6
-        name_type@4:8
+        NameType@4:8
           "Int"@4:8
       ","@4:11
       "}"@5:1
-  func_decl@6:1
+  FuncDecl@6:1
     "func"@6:1
     "sqr_dst"@6:6
-    "("@6:13
-    param_decl@6:14
-      "p1"@6:14
-      ":"@6:16
-      pointer_type@6:18
-        "*"@6:18
-        name_type@6:19
-          "Point"@6:19
-    ","@6:24
-    param_decl@6:26
-      "p2"@6:26
-      ":"@6:28
-      pointer_type@6:30
-        "*"@6:30
-        name_type@6:31
-          "Point"@6:31
-    ")"@6:36
+    FuncParamList@6:13
+      "("@6:13
+      FuncParam@6:14
+        "p1"@6:14
+        ":"@6:16
+        PointerType@6:18
+          "*"@6:18
+          NameType@6:19
+            "Point"@6:19
+      ","@6:24
+      FuncParam@6:26
+        "p2"@6:26
+        ":"@6:28
+        PointerType@6:30
+          "*"@6:30
+          NameType@6:31
+            "Point"@6:31
+      ")"@6:36
     ":"@6:37
-    name_type@6:39
+    NameType@6:39
       "Int"@6:39
-    block_stmt@6:43
+    BlockStmt@6:43
       "{"@6:43
-      local_decl@7:5
+      LocalDecl@7:5
         "var"@7:5
         "dx"@7:9
         "="@7:12
-        binary_expr@7:14
-          field_expr@7:14
-            name_expr@7:14
+        BinaryExpr@7:14
+          FieldExpr@7:14
+            NameExpr@7:14
               "p2"@7:14
             "."@7:16
             "x"@7:17
           "-"@7:19
-          field_expr@7:21
-            name_expr@7:21
+          FieldExpr@7:21
+            NameExpr@7:21
               "p1"@7:21
             "."@7:23
             "x"@7:24
         ";"@7:25
-      local_decl@8:5
+      LocalDecl@8:5
         "var"@8:5
         "dy"@8:9
         "="@8:12
-        binary_expr@8:14
-          field_expr@8:14
-            name_expr@8:14
+        BinaryExpr@8:14
+          FieldExpr@8:14
+            NameExpr@8:14
               "p2"@8:14
             "."@8:16
             "y"@8:17
           "-"@8:19
-          field_expr@8:21
-            name_expr@8:21
+          FieldExpr@8:21
+            NameExpr@8:21
               "p1"@8:21
             "."@8:23
             "y"@8:24
         ";"@8:25
-      return_stmt@9:5
+      ReturnStmt@9:5
         "return"@9:5
-        binary_expr@9:12
-          binary_expr@9:12
-            name_expr@9:12
+        BinaryExpr@9:12
+          BinaryExpr@9:12
+            NameExpr@9:12
               "dx"@9:12
             "*"@9:15
-            name_expr@9:17
+            NameExpr@9:17
               "dx"@9:17
           "+"@9:20
-          binary_expr@9:22
-            name_expr@9:22
+          BinaryExpr@9:22
+            NameExpr@9:22
               "dy"@9:22
             "*"@9:25
-            name_expr@9:27
+            NameExpr@9:27
               "dy"@9:27
         ";"@9:29
       "}"@10:1
-  ""@10:2
+  ""@11:1
 "
 `;

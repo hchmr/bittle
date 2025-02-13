@@ -2,7 +2,7 @@ import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
 import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StructExprNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
-import { Nullish } from '../utils';
+import { Nullish, unreachable } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
 import { mkVoidType, Type, TypeKind } from './type';
 
@@ -86,8 +86,7 @@ class ControlFlowAnalyzer {
         } else if (node instanceof ExprStmtNode) {
             return this.analyzeExprStmt(node, state);
         } else {
-            const unreachable: never = node;
-            throw new Error(`Unexpected node type: ${unreachable}`);
+            unreachable(node);
         }
     }
 
@@ -121,10 +120,14 @@ class ControlFlowAnalyzer {
 
         state = this.analyzeExpr(condNode, state);
         if (isTriviallyTrue(condNode)) {
-            elseNode && this.reportUnreachableCode(elseNode);
+            if (elseNode) {
+                this.reportUnreachableCode(elseNode);
+            }
             return this.analyzeStmt(thenNode, state);
         } else if (isTriviallyFalse(condNode)) {
-            thenNode && this.reportUnreachableCode(thenNode);
+            if (thenNode) {
+                this.reportUnreachableCode(thenNode);
+            }
             return this.analyzeStmt(elseNode, state);
         } else {
             const thenState = this.analyzeStmt(thenNode, state);
@@ -143,7 +146,9 @@ class ControlFlowAnalyzer {
         this.currentLoop = node;
 
         if (isTriviallyFalse(condNode)) {
-            bodyNode && this.reportUnreachableCode(bodyNode);
+            if (bodyNode) {
+                this.reportUnreachableCode(bodyNode);
+            }
         } else if (isTriviallyTrue(condNode)) {
             state = this.analyzeStmt(bodyNode, state);
         } else {
@@ -228,8 +233,7 @@ class ControlFlowAnalyzer {
         } else if (node instanceof StructExprNode) {
             return this.analyzeStructExpr(node, state);
         } else {
-            const unreachable: never = node;
-            throw new Error(`Unexpected node type: ${unreachable}`);
+            unreachable(node);
         }
     }
 
@@ -271,10 +275,14 @@ class ControlFlowAnalyzer {
 
         state = this.analyzeExpr(node.cond, state);
         if (isTriviallyTrue(condNode)) {
-            elseNode && this.reportUnreachableCode(elseNode);
+            if (elseNode) {
+                this.reportUnreachableCode(elseNode);
+            }
             return this.analyzeExpr(thenNode, state);
         } else if (isTriviallyFalse(condNode)) {
-            thenNode && this.reportUnreachableCode(thenNode);
+            if (thenNode) {
+                this.reportUnreachableCode(thenNode);
+            }
             return this.analyzeExpr(elseNode, state);
         } else {
             const thenState = this.analyzeExpr(thenNode, state);

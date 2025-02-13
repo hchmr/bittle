@@ -6,10 +6,10 @@ import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { SyntaxNode } from '../syntax';
 import { NodeTypes } from '../syntax/nodeTypes';
-import { fromVscPosition, toVscRange } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { getIdentifierAtPosition } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
+import { fromVscPosition, toVscRange } from '../utils/vscode';
 
 export class ReferenceProvider implements vscode.ReferenceProvider, vscode.RenameProvider {
     constructor(
@@ -72,7 +72,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
 
         const symbols = this.semanticsService.resolveSymbol(path, nameNode);
 
-        const references: Array<SymReference> = [];
+        const references: SymReference[] = [];
 
         for (const symbol of symbols) {
             // add definitions

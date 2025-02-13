@@ -14,8 +14,6 @@ export const log = {
     outputChannel: vscode.window.createOutputChannel('Bittle'),
     log: (...args: unknown[]) => {
         console.log(...args);
-        if (log.outputChannel) {
-            log.outputChannel.appendLine([...args].map(renderArg).join(' '));
-        }
+        log.outputChannel.appendLine([...args].map(renderArg).join(' '));
     },
 };

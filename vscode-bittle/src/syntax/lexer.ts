@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { unreachable } from '../utils/index.js';
 import { CharCursor } from './charCursor.js';
 import { ErrorSink } from './errorSink.js';
 import { Point } from './position';
@@ -314,8 +315,7 @@ function buildLookupTable<Self>(
             } else if (filter instanceof Set) {
                 test = (char: string) => filter.has(char);
             } else {
-                const never: never = filter;
-                throw new Error(`Invalid filter: ${never}`);
+                unreachable(filter);
             }
 
             if (test(char)) {

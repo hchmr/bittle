@@ -6,7 +6,7 @@
     "publisher": "anon",
     "scripts": {
         "vscode:prepublish": "npm run build",
-        "source-gen": "ts-node ./src/prebuild.ts",
+        "source-gen": "tsx ./src/prebuild.ts",
         "source-gen:watch": "chokidar --initial 'src/**/*.ts' '!src/syntax/generated.ts' -c 'npm run source-gen'",
         "tsc:build": "tsc -p ./",
         "tsc:watch": "tsc -watch -p ./",
@@ -46,20 +46,21 @@
         ]
     },
     "devDependencies": {
-        "@eslint/js": "^9.8.0",
-        "@stylistic/eslint-plugin": "^2.3.0",
+        "@eslint/js": "^9.20.0",
+        "@stylistic/eslint-plugin": "^3.1.0",
         "@types/eslint__js": "^8.42.3",
-        "@types/node": "^20.14.10",
-        "@types/vscode": "^1.91.0",
+        "@types/node": "^22.13.2",
+        "@types/vscode": "^1.97.0",
         "chokidar-cli": "^3.0.0",
-        "concurrently": "^8.2.2",
-        "eslint": "^8.57.0",
+        "concurrently": "^9.1.2",
+        "eslint": "^9.20.1",
         "eslint-plugin-only-warn": "^1.1.0",
-        "fuzzysort": "3.0.2",
-        "globals": "^15.8.0",
+        "fuzzysort": "^3.1.0",
+        "globals": "^15.15.0",
         "minimatch": "^10.0.1",
-        "typescript": "^5.5.3",
-        "typescript-eslint": "^7.17.0",
-        "vitest": "^2.0.4"
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.3",
+        "typescript-eslint": "^8.24.0",
+        "vitest": "^3.0.5"
     }
 }

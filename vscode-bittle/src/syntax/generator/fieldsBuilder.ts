@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { unreachable } from '../../utils';
 import { stream } from '../../utils/stream';
 import { Cardinality, Field } from './model';
 import { nodeNameToFieldName, pluralize, tokenNameToFieldName } from './naming';
@@ -15,8 +16,7 @@ export function generateFieldName(kind: 'T' | 'N', cardinality: Cardinality, typ
         } else if (kind === 'N') {
             return nodeNameToFieldName(types[0]);
         } else {
-            const _: never = kind;
-            throw new Error(`Unknown field type kind: ${_}`);
+            unreachable(kind);
         }
     }
 
@@ -108,15 +108,15 @@ export class FieldsBuilder {
             .toSet();
 
         const fields = stream(this.fields)
-            .filter(f => f.label || stream(f.types).some(t => !explicitlyNamedTypes.has(t)))
+            .filter(f => f.label ?? stream(f.types).some(t => !explicitlyNamedTypes.has(t)))
             .map(({ kind, name, label, cardinality, types }) => {
                 cardinality ??= 'Optional';
-                name = label || generateFieldName(kind, cardinality, [...types]);
+                name = label ?? generateFieldName(kind, cardinality, [...types]);
                 if (kind === 'T') {
                     assert(cardinality === 'Optional');
                     return { kind, name, label, tokenTypes: [...types] };
                 } else {
-                    return { kind, name, label, nodeType: [...types][0], cardinality: cardinality! };
+                    return { kind, name, label, nodeType: [...types][0], cardinality: cardinality };
                 }
             })
             .toArray();

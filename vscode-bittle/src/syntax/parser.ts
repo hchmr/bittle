@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { identity } from '../utils/index.js';
 import { ErrorSink } from './errorSink.js';
 import { CompositeNodeType, CompositeNodeTypes, NodeTypes } from './nodeTypes.js';
 import { Point, pointEq } from './position';
@@ -79,13 +80,12 @@ abstract class NodeBuilder {
     }
 
     beginNode(nodeType: CompositeNodeType) {
-        this.currentNodes.push(<IncompleteCompositeNode>{
-            isPlaceholder: false,
+        this.currentNodes.push(identity<IncompleteCompositeNode>({
             kind: nodeType,
             children: [],
             startPosition: this.pos,
             startIndex: this.index,
-        });
+        }));
     }
 
     beginNodeAt(nodeType: CompositeNodeType, checkpoint: Checkpoint | undefined) {
@@ -97,13 +97,12 @@ abstract class NodeBuilder {
         assert(checkpoint.parent === this.currentNode);
 
         const groupedNodes = this.currentNode.children.splice(checkpoint.index, this.currentNode.children.length - checkpoint.index);
-        this.currentNodes.push(<IncompleteCompositeNode>{
-            isPlaceholder: false,
+        this.currentNodes.push(identity<IncompleteCompositeNode>({
             kind: nodeType,
             children: groupedNodes,
             startPosition: checkpoint.startPosition,
             startIndex: checkpoint.startIndex,
-        });
+        }));
     }
 
     finishNode(nodeType: CompositeNodeType) {
