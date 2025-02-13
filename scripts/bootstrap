@@ -4,43 +4,17 @@ set -e
 set -u
 set -o pipefail
 
-script_dir=$(dirname "$(realpath "$0")")
-root_dir=$(realpath "$script_dir/..")
-bootstrap_dir="$root_dir/out/bootstrap"
-src_dir="$bootstrap_dir/src"
-build_dir="$bootstrap_dir/build"
-cache_dir="$bootstrap_dir/cache"
-latest_commit=$(git rev-parse --short HEAD)
-
-cache_enabled=true
-
-compiler_name=cogc
-prev_stage=-1
-prev_commit=
-prev_compiler=
-
-usage() {
-    cat <<HERE
-usage: $0 [options]
-
-options:
-  -h,--help         Show this help
-  --head            Build the latest commit
-  --clean           Perform a clean build
-  --no-cache        Disable stage caching
-  -o,--output FILE  Output file
-HERE
-}
+#
+# Helper functions
+#
 
 die() {
-    echo "Error: $1" >&2
+    printf "\e[31mError:\e[0m %s\n" "$*" >&2
     exit 1
 }
 
 section() {
-    echo
-    echo "==> $1"
-    echo
+    printf "\n\e[36m==>\e[0m %s\n\n" "$1"
 }
 
 toupper() {
@@ -52,39 +26,128 @@ regex_escape() {
 }
 
 render_lines() {
-    local width="$1" logfile="$2" spaces
-    lines="$(tail -n 5 "$logfile")"
-    spaces=$(printf "%${width}s" "")
-    sed "s/$/$spaces/" <<<"$lines" | cut "-c1-$width"
+    local width="$1" logfile="$2"
+    local lots_of_spaces
+    lots_of_spaces=$(printf "%${width}s" "")
+    tail -n 5 "$logfile" | sed "s/$/$lots_of_spaces/" | cut "-c1-$width"
+}
+
+is_running() {
+    kill -s 0 "$1" 2>/dev/null
 }
 
 monitor_command() {
-    local logfile pid width
-
     echo "$*"
 
-    logfile=$(mktemp "$build_dir/log.XXXXXX")
+    local logfile
+    logfile=$(mktemp -t bittle-bootstrap-command.XXXXXX)
     "$@" >"$logfile" 2>&1 &
+    local pid
     pid=$!
 
-    width=$(tput cols)
-    height=0
-    while kill -0 "$pid" 2>/dev/null; do
+    local prev_line_count=0
+    while is_running "$pid"; do
+        local term_width
+        term_width=$(tput cols)
         sleep 0.025
-        lines=$(render_lines "$width" "$logfile")
-        printf "\033[%dA$lines\n" "$height"
-        height=$(wc -l <<<"$lines")
+        local lines
+        lines=$(render_lines "$term_width" "$logfile")
+        tput cuu "$prev_line_count"
+        printf "\e[90m%s\e[0m\n" "$lines"
+        prev_line_count=$(wc -l <<<"$lines")
     done
 
-    printf "\033[%dA" "$((height + 1))"
-    printf "\033[J"
+    tput cuu "$((prev_line_count + 1))"
+    tput ed
 
     if ! wait "$pid"; then
         cat "$logfile"
-        return
+        return 1
     fi
 
     rm "$logfile"
+}
+
+# Constants
+script_dir=$(dirname "$(realpath "$0")")
+root_dir=$(realpath "$script_dir/..")
+bootstrap_dir="$root_dir/out/bootstrap"
+src_dir="$bootstrap_dir/src"
+build_dir="$bootstrap_dir/build"
+cache_dir="$bootstrap_dir/cache"
+head_commit=$(git rev-parse --short HEAD)
+
+# Initial state
+compiler_name=cogc
+prev_stage=-1
+prev_commit=
+prev_compiler=
+
+# Default options
+cache_enabled=true
+clean_first=false
+extra_stage=false
+create_output_dir=false
+output_file=
+
+usage() {
+    cat <<HERE
+Usage: $0 [options]
+
+Bootstraps the Bittle compiler from Git history.
+
+Options:
+  -h, --help           Show this help
+  --head               Add the latest commit as a stage
+  --clean              Perform a clean build
+  --no-cache           Disable stage caching
+  -o, --output <file>  Output file
+HERE
+}
+
+short_usage() {
+    cat <<HERE
+Usage: $0 [options]
+
+For full usage, run: $0 --help
+HERE
+}
+
+argparse() {
+    while test $# -gt 0; do
+        case "$1" in
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        --head)
+            extra_stage=true
+            ;;
+        --clean)
+            clean_first=true
+            ;;
+        --no-cache)
+            cache_enabled=false
+            ;;
+        -o | --output)
+            shift
+            output_file="$1"
+            ;;
+        *)
+            echo "Unexpected argument: $1" >&2
+            short_usage >&2
+            exit 1
+            ;;
+        esac
+        shift
+    done
+
+    if [ -n "$output_file" ]; then
+        output_file=$(realpath "$output_file")
+    else
+        output_file="$bootstrap_dir/bin/bittlec"
+        create_output_dir=true
+    fi
 }
 
 setup_repository() {
@@ -93,8 +156,7 @@ setup_repository() {
     if [ -d .git ]; then
         echo "Repository already cloned"
         git fetch
-        git reset --hard "$latest_commit"
-        return
+        git reset --hard "$head_commit"
     else
         git clone "$root_dir" "$(pwd)"
     fi
@@ -102,33 +164,14 @@ setup_repository() {
 
 find_commit() {
     local ref="$1"
-    local commit
-    # Check if the argument is a commit hash
-    if git rev-parse --quiet --verify "$ref" >/dev/null; then
-        commit="$ref"
-    else
-        pattern=$(regex_escape "$ref")
-        commit="$(git rev-list --grep "$pattern" --max-count=1 --abbrev-commit "$latest_commit")"
-        if [[ -z "$commit" ]]; then
-            return 1
-        fi
-    fi
-    echo "$commit"
+    git rev-parse --quiet --short "$ref" ||
+        git rev-list --grep "$(regex_escape "$ref")" --max-count=1 --abbrev-commit "$head_commit" | grep .
 }
 
 checkout() {
     local commit="$1"
     echo "Checking out $commit \"$(git log --format="%s" -n 1 "$commit")\""
     git checkout --quiet "$commit"
-}
-
-ensure_checked_out() {
-    local commit="$1"
-    local actual_commit
-    actual_commit=$(git rev-parse HEAD)
-    if [ "$actual_commit" != "$commit" ]; then
-        checkout "$commit"
-    fi
 }
 
 print_stage_changes() {
@@ -148,13 +191,39 @@ print_stage_changes() {
     local n_commits
     n_commits=$(wc -l <<<"$commits")
 
-    echo Changes from "$n_commits" commits:
-
     local max_commits=20
 
+    echo Changes from "$n_commits" commits:
     head -n $max_commits <<<"$commits" | sed 's/^/  /'
     if [ $((n_commits > max_commits)) = 1 ]; then
         echo "  ($((n_commits - max_commits)) more)"
+    fi
+}
+
+compile() {
+    local commit="$1" stage_dir="$2" cache_key="$3"
+
+    mkdir -p "$stage_dir"
+
+    local cached_compiler=""
+    if [ "$cache_enabled" = true ]; then
+        cached_compiler=$(realpath "$cache_dir/$cache_key")
+    fi
+
+    if [ -f "$cached_compiler" ]; then
+        echo "Using cached executable $cached_compiler"
+        cp "$cached_compiler" "$stage_dir/$compiler_name"
+        return
+    fi
+
+    checkout "$commit"
+
+    echo "Compiling"
+    monitor_command make -C compiler "BUILD_DIR=$stage_dir" "$(toupper "$compiler_name")=$prev_compiler"
+    echo "Compilation successful"
+
+    if [ "$cache_enabled" = true ]; then
+        cp "$stage_dir/$compiler_name" "$cached_compiler"
     fi
 }
 
@@ -170,29 +239,9 @@ stage() {
 
     print_stage_changes "$commit"
 
-    local stage_dir="$build_dir/stage$stage/"
-    mkdir -p "$stage_dir"
+    local stage_dir="$build_dir/stage$stage"
 
-    local cached_compiler=""
-    if [ "$cache_enabled" = true ]; then
-        cached_compiler=$(realpath "$cache_dir/stage$stage-${prev_commit:=root}-$commit")
-    fi
-
-    if [ -f "$cached_compiler" ]; then
-        echo "Found cached executable $cached_compiler"
-        cp "$cached_compiler" "$stage_dir/$compiler_name"
-    else
-        checkout "$commit"
-
-        echo "Compiling"
-        monitor_command make -C compiler "BUILD_DIR=$stage_dir" "$(toupper "$compiler_name")=$prev_compiler"
-        echo "Compilation successful"
-
-        if [ "$cache_enabled" = true ]; then
-            echo "Caching executable $stage_dir/$compiler_name" to "$cached_compiler"
-            cp "$stage_dir/$compiler_name" "$cached_compiler"
-        fi
-    fi
+    compile "$commit" "$stage_dir" "stage$stage-${prev_commit:=root}-$commit"
 
     prev_stage="$stage"
     prev_commit="$commit"
@@ -208,85 +257,51 @@ verify() {
 
     section "Compiling compiler with compiler compiled with itself"
 
-    ensure_checked_out "$commit"
+    compile "$commit" "$build_dir/verify" "verify-$commit-$commit-$commit"
 
-    mkdir -p "$build_dir/verify"
+    local curr_compiler="$build_dir/verify/$compiler_name"
 
-    local cached_compiler=
-    if [ "$cache_enabled" = true ]; then
-        cached_compiler=$(realpath "$cache_dir/verify-$commit-$commit-$commit")
-    fi
+    echo "Comparing executables $prev_compiler and $curr_compiler"
 
-    if [ -f "$cached_compiler" ]; then
-        echo "Found cached executable $cached_compiler"
-        cp "$cached_compiler" "$build_dir/verify/bittlec"
+    decompile() {
+        # The first few lines of objdump output are boilerplate which contains the file name
+        objdump -dr -j .text -j .rodata -j .data -j .bss "$1" | tail -n +3
+    }
+
+    decompile "$prev_compiler" >"$build_dir/verify/$compiler_name-once.objdump"
+    decompile "$curr_compiler" >"$build_dir/verify/$compiler_name-twice.objdump"
+
+    if ! diff "$build_dir/verify/$compiler_name-once.objdump" "$build_dir/verify/$compiler_name-twice.objdump" >/dev/null; then
+        die "Difference found"
     else
-        echo "Compiling"
-        monitor_command make -C compiler "BUILD_DIR=$build_dir/verify" "BITTLEC=$(realpath "$prev_compiler")"
-        if [ "$cache_enabled" = true ]; then
-            echo "Caching executable $build_dir/verify/bittlec" to "$cached_compiler"
-            cp "$build_dir/verify/bittlec" "$cached_compiler"
-        fi
+        echo "No difference found"
     fi
-
-    echo "Comparing executables $prev_compiler and $build_dir/verify/bittlec"
-
-    objdump -dr -j .rodata -j .text "$prev_compiler" | tail -n +3 >"$build_dir/verify/bittlec.objdump"
-    objdump -dr -j .rodata -j .text "$build_dir/verify/bittlec" | tail -n +3 >"$build_dir/verify/bittlec.verify.objdump"
-
-    if ! diff "$build_dir/verify/bittlec.objdump" "$build_dir/verify/bittlec.verify.objdump" >/dev/null; then
-        echo "^^^ Difference found"
-        return 1
-    fi
-    echo "Compiler verified"
 }
 
-clean_first=false
-bootstrap_head=false
-output_file=
+finish() {
+    section "Copying final executable to $output_file"
 
-while test $# -gt 0; do
-    case "$1" in
-    -h | --help)
-        usage
-        exit 0
-        ;;
-    --head)
-        bootstrap_head=true
-        ;;
-    --clean)
-        clean_first=true
-        ;;
-    --no-cache)
-        cache_enabled=false
-        ;;
-    -o | --output)
-        shift
-        output_file="$1"
-        ;;
-    *)
-        echo "Unexpected argument: $1"
-        usage
-        exit 1
-        ;;
-    esac
-    shift
-done
+    cp "$prev_compiler" "$output_file"
 
-if [ -z "$output_file" ]; then
-    output_file="$bootstrap_dir/bin/bittlec"
-fi
+    section "Done"
+}
+
+argparse "$@"
+
+rm -rf "$build_dir"
 if [ "$clean_first" = true ]; then
     rm -rf "$bootstrap_dir"
+fi
+
+mkdir -p "$bootstrap_dir" "$src_dir" "$build_dir"
+if [ "$create_output_dir" = true ]; then
+    mkdir -p "$(dirname "$output_file")"
 fi
 if [ "$cache_enabled" = true ]; then
     mkdir -p "$cache_dir"
 fi
-rm -rf "$build_dir"
-mkdir -p "$bootstrap_dir" "$src_dir" "$build_dir" "$(dirname "$output_file")"
-cd "$src_dir"
 
-output_file=$(realpath "$output_file")
+cd "$src_dir"
 
 setup_repository
 
@@ -320,14 +335,10 @@ stage "feat(compiler): Add struct field initialization shorthand"
 
 stage "fix(compiler): Fix miscompilation when taking address of temporary"
 
-if [ "$bootstrap_head" = true ]; then
-    stage "$latest_commit"
+if [ "$extra_stage" = true ]; then
+    stage "$head_commit"
 fi
 
 verify
 
-section "Copying final executable to $output_file"
-
-cp "$prev_compiler" "$output_file"
-
-section "Done"
+finish
