@@ -1,5 +1,7 @@
 # Bittle
 
+[![CI](https://github.com/hchmr/bittle/actions/workflows/ci.yml/badge.svg)](https://github.com/hchmr/bittle/actions/workflows/ci.yml)
+
 Bittle is a minimalist programming language inspired by C, designed for simplicity and expressiveness. It's a hobby project that serves as a playground for exploring programming language design and implementation. The goal is to create a language that's as simple as C but more fun, while also providing a platform to learn about compiler techniques and language tooling.
 
 ## Feature overview
