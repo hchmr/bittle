@@ -4,9 +4,6 @@ __pycache__/
 /bin/
 .vscode/
 .idea/
-.devcontainer/
-docker-compose.yml
-Dockerfile
 node_modules/
 /vscode-bittle/dist/
 /bittle-parser/dist/

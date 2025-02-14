@@ -1,0 +1,7 @@
+{
+    "name": "Bittle Compiler Development",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "remoteUser": "anon"
+}
