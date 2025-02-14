@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: '*'
+
+jobs:
+  compiler:
+    name: CI for compiler
+
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Fetch all history
+
+    - name: Bootstrap
+      run: ./scripts/bootstrap
+
+  vscode:
+    name: CI for VS Code extension
+
+    runs-on: ubuntu-24.04-arm
+
+    defaults:
+      run:
+        working-directory: vscode-bittle
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        sparse-checkout: vscode-bittle
+        sparse-checkout-cone-mode: false
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 'latest'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build
+      run: npm run build
+
+    - name: Test
+      run: npm test
+
+    - name: Lint
+      run: npm run lint
+      continue-on-error: true

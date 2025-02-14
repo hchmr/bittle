@@ -4,7 +4,6 @@ __pycache__/
 /bin/
 .vscode/
 .idea/
-.github/
 .devcontainer/
 docker-compose.yml
 Dockerfile

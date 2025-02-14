@@ -37,6 +37,11 @@ is_running() {
 }
 
 monitor_command() {
+    if [ ! -t 1 ]; then
+        "$@"
+        return
+    fi
+
     echo "$*"
 
     local logfile
