@@ -12,6 +12,10 @@ include "bittle.btls";
 /// | saved x8          |
 /// +-------------------+
 /// |                   |
+/// | saved varargs     |
+/// |                   |
+/// +-------------------+
+/// |                   |
 /// | slots             |
 /// |                   |
 /// +-------------------+
@@ -285,7 +289,7 @@ func asm_write_mov_r(builder: *List, width: Int, xd: Reg, x1: Reg) {
 
 func asm_write_mov_i(builder: *List, width: Int, xd: Reg, value: Int) {
     if (value == 0) {
-        var instr = asm_write_instr(builder, "movz", n_args: 2);
+        var instr = asm_write_instr(builder, "mov", n_args: 2);
         instr.args[0] = asm_mk_reg_operand(width, xd, shift: 0);
         instr.args[1] = asm_mk_int_operand(0);
         return;
@@ -301,7 +305,7 @@ func asm_write_mov_i(builder: *List, width: Int, xd: Reg, value: Int) {
             var op = n_gen == 0 ? "movz" : "movk";
 
             var instr = asm_write_instr(builder, op, n_args: 2);
-            instr.args[0] = asm_mk_reg_operand(width, xd, shift: 0);
+            instr.args[0] = asm_mk_reg_operand(8, xd, shift: 0);
             instr.args[1] = asm_mk_int_operand(lo16);
             (instr.args[1] as *AsmIntOperand).shift = i * 16;
 
@@ -675,6 +679,10 @@ struct CodegenCtx {
     current_func: *FuncSym,
     current_loop: LoopCtx,
     current_call_layout: CallLayout,
+
+    // varargs area
+    saved_varargs_gr_top_fp_offset: Int,
+    saved_varargs_gr_size: Int,
 
     // slot area
     n_slots: Int,
@@ -1446,6 +1454,17 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         asm_comment_prev(ctx.builder, "// save indirect result location");
     }
 
+    // Save varargs
+    if (sym.is_variadic) {
+        var gr_base = ctx.saved_varargs_gr_top_fp_offset - ctx.saved_varargs_gr_size;
+        for (var i = layout.next_gpr; i < 8; i += 1) {
+            var src_reg = i as Reg;
+            var fp_offset = gr_base + 8 * (i - layout.next_gpr);
+            // str x{i}, [fp, #{fp_offset}]
+            asm_write_str_ri(ctx.builder, width: 8, src_reg, FP, fp_offset);
+        }
+    }
+
     // Copy arguments to stack slots
     for (var i = 0; i < layout.n_args; i += 1) {
         var param: *FuncParam = list_get(sym.params, i);
@@ -1467,6 +1486,56 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
             // to make sure calling memcpy doesn't clobber the remaining unread arguments.
         }
     }
+
+    // Create va_list if needed
+    if (sym.rest_param_name) {
+        var local: *LocalSym = list_get(sym.locals, layout.n_args);
+        var slot_id = local.slot_id;
+        var fp_offset = get_fp_offset_for_slot(ctx, mk_rest_param_type(), slot_id);
+
+        // va_list layout:
+        //
+        // struct va_list {
+        //     stack: *Void,
+        //     gr_top: *Void,
+        //     vr_top: *Void,
+        //     gr_offs: Int32,
+        //     vr_offs: Int32,
+        // }
+
+        asm_write_raw(ctx.builder, "// initialize va_list");
+
+        // x0 <- &local
+        write_slot_addr(ctx, mk_rest_param_type(), slot_id, Reg_X0);
+        // ; va_list.stack
+        // add x1, FP, #{spills_size}
+        // str x1, [x0, #0]
+        asm_write_add_r_fp_from_frame_start(ctx.builder, width: 8, Reg_X1, 0);
+        asm_write_str_ri(ctx.builder, width: 8, Reg_X1, Reg_X0, 0);
+        // ; va_list.gr_top
+        // add x1, FP, #{saved_varargs_gr_top_fp_offset}
+        // str x1, [x0, #8]
+        asm_write_add_ri(ctx.builder, width: 8, Reg_X1, FP, ctx.saved_varargs_gr_top_fp_offset);
+        asm_write_str_ri(ctx.builder, width: 8, Reg_X1, Reg_X0, 8);
+        // ; va_list.vr_top
+        // add x1, FP, #{saved_varargs_gr_top_fp_offset - saved_varargs_gr_size}
+        // str x1, [x0, #16]
+        asm_write_add_ri(ctx.builder, width: 8, Reg_X1, FP, ctx.saved_varargs_gr_top_fp_offset - ctx.saved_varargs_gr_size);
+        asm_write_str_ri(ctx.builder, width: 8, Reg_X1, Reg_X0, 16);
+        // ; va_list.gr_offs
+        // mov x1, #{-saved_gp_varargs_size}
+        // str x1, [x0, #24]
+        asm_write_mov_i(ctx.builder, width: 4, Reg_X1, -ctx.saved_varargs_gr_size);
+        asm_write_str_ri(ctx.builder, width: 4, Reg_X1, Reg_X0, 24);
+        // ; va_list.vr_offs
+        // mov x1, #0
+        // str x1, [x0, #28]
+        asm_write_mov_i(ctx.builder, width: 4, Reg_X1, 0);
+        asm_write_str_ri(ctx.builder, width: 4, Reg_X1, Reg_X0, 28);
+
+        asm_write_raw(ctx.builder, "// va_list initialized");
+    }
+
 
     for (var i = 0; i < layout.n_args; i += 1) {
         var param: *FuncParam = list_get(sym.params, i);
@@ -1533,6 +1602,13 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     if (ctx.current_call_layout.ret_loc.is_indirect) {
         next_fp_offset -= 8;
+    }
+
+    if (sym.is_variadic && ctx.current_call_layout.next_gpr < 8) {
+        ctx.saved_varargs_gr_top_fp_offset = next_fp_offset;
+        var n_unallocated_gprs = 8 - ctx.current_call_layout.next_gpr;
+        next_fp_offset -= 8 * n_unallocated_gprs;
+        ctx.saved_varargs_gr_size = 8 * n_unallocated_gprs;
     }
 
     var slots_size = layout_slots(ctx, next_fp_offset);

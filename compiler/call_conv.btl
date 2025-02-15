@@ -97,6 +97,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayou
             n_regs: n_ret_regs,
         },
         stack_space: nsaa * 8,
+        next_gpr: ngrn,
     };
 }
 

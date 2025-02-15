@@ -136,10 +136,12 @@ func declare_func(
     pos: *Pos,
     name: *Char,
     params: *List,
+    rest_param: *RestParamDecl,
     return_type: *Type,
-    is_variadic: Bool,
     is_definition: Bool
 ): *FuncSym {
+    var is_variadic = rest_param != null;
+
     var sym = try_get_existing(ctx, name);
     if (sym) {
         if (sym.kind != Sym_Func) {
@@ -166,6 +168,7 @@ func declare_func(
             params: params,
             return_type: return_type,
             is_variadic: is_variadic,
+            rest_param_name: rest_param ? rest_param.name : null,
             is_defined: is_definition,
             locals: list_new(),
             temps: list_new(),
@@ -324,6 +327,8 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
         return mk_array_type(elem, size);
     } else if (type_expr.kind == TypeExpr_Never) {
         return mk_never_type();
+    } else if (type_expr.kind == TypeExpr_RestParam) {
+        return mk_rest_param_type();
     } else {
         unreachable("eval_type");
     }
@@ -1119,17 +1124,22 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
         die_at(&decl.pos, "Function return type must have known size");
     }
 
-    var is_variadic = decl.is_variadic;
+    var is_variadic = decl.rest_param != null;
 
     var is_definition = decl.body != null;
 
-    var sym = declare_func(ctx, &decl.pos, name, params, return_type, is_variadic, is_definition);
+    var sym = declare_func(ctx, &decl.pos, name, params, decl.rest_param, return_type, is_definition);
 
     if (decl.body) {
         enter_scope(ctx);
         ctx.current_func = sym;
 
         define_params(ctx, param_decls, params);
+
+        if (decl.rest_param) {
+            define_local(ctx, &decl.rest_param.pos, decl.rest_param.name, mk_rest_param_type());
+        }
+
         elab_stmt(ctx, decl.body);
 
         ctx.current_func = null;

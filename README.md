@@ -63,7 +63,6 @@ To build from source, you will need a system running Arm64 Linux with the follow
 **Missing Features:**
 
 - No floating-point support
-- No support for forwarding variadic arguments
 - No support for control flow labels
 
 **Planned Enhancements:**

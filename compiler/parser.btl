@@ -139,6 +139,18 @@ func p_never_type(self: *Parser): *TypeExpr {
     return result;
 }
 
+func p_rest_param_type(self: *Parser): *TypeExpr {
+    var pos = self.tok.pos;
+    expect(self, Tok_DotDotDot);
+
+    var result: *TypeExpr = calloc(1, sizeof(TypeExpr));
+    *result = TypeExpr {
+        kind: TypeExpr_RestParam,
+        pos,
+    };
+    return result;
+}
+
 func p_type(self: *Parser): *TypeExpr {
     if (at(self, Tok_Ident)) {
         return p_named_type(self);
@@ -150,6 +162,8 @@ func p_type(self: *Parser): *TypeExpr {
         return p_arr_type(self);
     } else if (at(self, Tok_Bang)) {
         return p_never_type(self);
+    } else if (at(self, Tok_DotDotDot)) {
+        return p_rest_param_type(self);
     } else {
         die_at(&self.tok.pos, "Unexpected start of type.");
     }
@@ -879,6 +893,22 @@ func p_param(self: *Parser): *FuncParamDecl {
     return result;
 }
 
+func p_rest_param(self: *Parser): *RestParamDecl {
+    var pos = self.tok.pos;
+    expect(self, Tok_DotDotDot);
+    var name: *Char = null;
+    if (at(self, Tok_Ident)) {
+        name = p_ident(self);
+    }
+
+    var result: *RestParamDecl = calloc(1, sizeof(RestParamDecl));
+    *result = RestParamDecl {
+        pos,
+        name,
+    };
+    return result;
+}
+
 func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Func);
@@ -892,9 +922,9 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
             expect(self, Tok_Comma);
         }
     }
-    var is_variadic = false;
-    if (eat(self, Tok_DotDotDot)) {
-        is_variadic = true;
+    var rest_param: *RestParamDecl = null;
+    if (at(self, Tok_DotDotDot)) {
+        rest_param = p_rest_param(self);
     }
     expect(self, Tok_RParen);
     var return_type: *TypeExpr = null;
@@ -915,7 +945,7 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
         is_extern,
         name,
         params,
-        is_variadic,
+        rest_param,
         return_type,
         body,
     };
