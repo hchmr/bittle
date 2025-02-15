@@ -14,11 +14,12 @@ func swap(a: *Int, b: *Int) {
     *b = tmp;
 }
 
-func main() {
+func main(): Int32 {
     var a = 42;
     var b = 1337;
     swap(&a, &b);
     assert(a == 1337, "a should be 1337");
     assert(b == 42, "b should be 42");
     printf("Ok\n");
+    return 0;
 }

@@ -31,10 +31,11 @@ func area(shape: *Shape): Int {
     }
 }
 
-func main() {
+func main(): Int32 {
     var rect = Rectangle { kind: Shape_Rectangle, width: 10, height: 20 };
     var circle = Circle { kind: Shape_Circle, radius: 7 };
 
     printf("Rectangle area: %d\n", area(&rect));
     printf("Circle area: %d\n", area(&circle));
+    return 0;
 }

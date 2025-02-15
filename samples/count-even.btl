@@ -1,6 +1,6 @@
 extern func printf(fmt: *Char, ...);
 
-func main() {
+func main(): Int32 {
     var i = 0;
     var count = 0;
     while (true) {
@@ -13,4 +13,5 @@ func main() {
         count += 1;
     }
     printf("%d even numbers <= 10\n", count);
+    return 0;
 }

@@ -1,6 +1,6 @@
 extern func printf(fmt: *Char, ...): Int;
 
-func main(): Int {
+func main(): Int32 {
     for (var i = 1; i <= 100; i += 1) {
         if (i % 3 == 0 && i % 5 == 0) {
             printf("FizzBuzz\n");

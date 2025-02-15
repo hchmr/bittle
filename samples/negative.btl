@@ -1,6 +1,7 @@
 extern func printf(fmt: *Char, ...): Int32;
 
-func main() {
+func main(): Int32 {
     var x: Int32 = -1;
     printf("x = %d\n", x);
+    return 0;
 }
