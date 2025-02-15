@@ -385,7 +385,7 @@ func asm_write_sxt(builder: *List, dst_size: Int, src_size: Int, xd: Reg, x1: Re
     var src_width = reg_width_from_size(src_size);
 
     var instr = asm_write_instr(builder, op, n_args: 2);
-    instr.args[0] = asm_mk_reg_operand(dst_size, xd, shift: 0);
+    instr.args[0] = asm_mk_reg_operand(dst_width, xd, shift: 0);
     instr.args[1] = asm_mk_reg_operand(src_width, x1, shift: 0);
 }
 
