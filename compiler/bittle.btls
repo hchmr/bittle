@@ -168,6 +168,7 @@ struct StructSym: Sym {
     base: *StructSym,
     fields: *List, // List<StructField>
     unpadded_size: Int,
+    align: Int,
     is_defined: Bool,
 }
 

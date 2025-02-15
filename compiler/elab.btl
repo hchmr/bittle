@@ -970,7 +970,7 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     }
 }
 
-func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
+func add_struct_field(ctx: *ElabCtx, sym: *StructSym, field_decl: *StructFieldDecl) {
     var field_name = field_decl.name;
 
     var existing_index = find_struct_field(sym, field_name);
@@ -979,13 +979,12 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
     }
 
     var field_type = eval_type(ctx, field_decl.type);
-    var field_size = type_size(field_type);
-    var field_align = type_align(field_type);
     if (!is_sized(field_type)) {
         die_at(&field_decl.pos, "Field has unsized type");
     }
-    var struct_size = (sym as *StructSym).unpadded_size;
-    var field_offset = align_up(struct_size, field_align);
+    var field_size = type_size(field_type);
+    var field_align = type_align(field_type);
+    var field_offset = align_up(sym.unpadded_size, field_align);
 
     var field: *StructField = calloc(1, sizeof(StructField));
     *field = StructField {
@@ -994,8 +993,9 @@ func add_struct_field(ctx: *ElabCtx, sym: *Sym, field_decl: *StructFieldDecl) {
         offset: field_offset,
     };
 
-    list_push((sym as *StructSym).fields, field);
-    (sym as *StructSym).unpadded_size = field_offset + field_size;
+    list_push(sym.fields, field);
+    sym.unpadded_size = field_offset + field_size;
+    sym.align = int_max(sym.align, field_align);
 }
 
 func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym) {
@@ -1025,6 +1025,7 @@ func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym) {
         base: baseSym,
         fields: fields,
         unpadded_size: baseSym.unpadded_size,
+        align: baseSym.align,
         is_defined: false,
     };
 }
