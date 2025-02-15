@@ -641,7 +641,7 @@ struct LoopCtx {
 }
 
 struct Slot {
-    offset: Int,
+    fp_offset: Int,
 }
 
 struct CodegenCtx {
@@ -650,18 +650,17 @@ struct CodegenCtx {
     current_loop: LoopCtx,
     current_call_layout: CallLayout,
 
-    // slot space
-    slots_size: Int,
+    // slot area
     n_slots: Int,
     slots: *Slot,
 
-    // scratch space
-    scratch_offset: Int, // FP relative
-    scratch_size: Int,
-    max_scratch: Int,
+    // scratch area
+    scratch_fp_offset: Int,
+    current_scratch_size: Int,
+    max_scratch_size: Int,
 
-    // argument passing space
-    max_arg_size: Int,
+    // argument passing area
+    max_arg_pass_size: Int,
 
     // labels
     n_labels: Int,
@@ -692,20 +691,20 @@ func define_global_string(ctx: *CodegenCtx, value: *StringBuffer, xd: Reg): Int 
 //== Codegen
 
 func write_push(ctx: *CodegenCtx, reg: Reg) {
-    ctx.scratch_size += 8;
-    ctx.max_scratch = int_max(ctx.max_scratch, ctx.scratch_size);
+    ctx.current_scratch_size += 8;
+    ctx.max_scratch_size = int_max(ctx.max_scratch_size, ctx.current_scratch_size);
 
-    // str {reg}, [sp, #{??}]
-    var fp_offset = ctx.scratch_offset - ctx.scratch_size;
+    // str {reg}, [sp, #{stack_size + fp_offset}]
+    var fp_offset = ctx.scratch_fp_offset - ctx.current_scratch_size;
     asm_write_str_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
 }
 
 func write_pop(ctx: *CodegenCtx, reg: Reg) {
-    // ldr {reg}, [sp, #{??}]
-    var fp_offset = ctx.scratch_offset - ctx.scratch_size;
+    // ldr {reg}, [sp, #{stack_size + fp_offset}]
+    var fp_offset = ctx.scratch_fp_offset - ctx.current_scratch_size;
     asm_write_ldrs_r_frame_indexed(ctx.builder, width: 8, reg, fp_offset);
 
-    ctx.scratch_size -= 8;
+    ctx.current_scratch_size -= 8;
 }
 
 func lock_reg(ctx: *CodegenCtx, reg: Reg) {
@@ -826,32 +825,33 @@ func unspill_after_call(ctx: *CodegenCtx) {
     }
 }
 
-func get_slot_offset(ctx: *CodegenCtx, type: *Type, slot_index: Int): Int {
-    return -(ctx.slots[slot_index].offset + type_size(type));
+func get_fp_offset_for_slot(ctx: *CodegenCtx, type: *Type, slot_id: Int): Int {
+    return ctx.slots[slot_id].fp_offset;
 }
 
-// str {reg}, [fp, #{fp_offset} + #{slot_offset}]
-func write_slot_store_partial(ctx: *CodegenCtx, type: *Type, slot_index: Int, slot_offset: Int, reg: Reg) {
+// str {reg}, [fp, #{fp_offset + offset}]
+func write_slot_store_partial(ctx: *CodegenCtx, type: *Type, slot_id: Int, offset: Int, reg: Reg) {
     var width = type_size(type);
-    var fp_offset = get_slot_offset(ctx, type, slot_index);
-    asm_write_str_ri(ctx.builder, width: width, reg, FP, fp_offset + slot_offset);
+    var fp_offset = get_fp_offset_for_slot(ctx, type, slot_id);
+    asm_write_str_ri(ctx.builder, width: width, reg, FP, fp_offset + offset);
 }
 
 // str {reg}, [fp, #{fp_offset}]
-func write_slot_store(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
-    write_slot_store_partial(ctx, type, slot_index, 0, reg);
+func write_slot_store(ctx: *CodegenCtx, type: *Type, slot_id: Int, reg: Reg) {
+    write_slot_store_partial(ctx, type, slot_id, offset: 0, reg);
 }
 
 // add {reg} fp, #{fp_offset}
-func write_slot_addr(ctx: *CodegenCtx, type: *Type, slot_index: Int, reg: Reg) {
+func write_slot_addr(ctx: *CodegenCtx, type: *Type, slot_id: Int, reg: Reg) {
     var width = type_size(type);
-    var fp_offset = get_slot_offset(ctx, type, slot_index);
+    var fp_offset = get_fp_offset_for_slot(ctx, type, slot_id);
     asm_write_add_ri(ctx.builder, width: width, reg, FP, fp_offset);
 }
 
-func write_slot_read(ctx: *CodegenCtx, type: *Type, slot_index: Int, xd: Reg) {
+// ldr {reg}, [sp, #{stack_size + fp_offset}]
+func write_slot_read(ctx: *CodegenCtx, type: *Type, slot_id: Int, xd: Reg) {
     var width = type_size(type);
-    var fp_offset = get_slot_offset(ctx, type, slot_index);
+    var fp_offset = get_fp_offset_for_slot(ctx, type, slot_id);
     asm_write_ldrs_r_frame_indexed(ctx.builder, width: width, xd, fp_offset);
 }
 
@@ -909,15 +909,15 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
 
         if (sym.is_indirect) {
             var comment: *Char = calloc(100, sizeof(Char));
-            snprintf(comment, 100, "// local '%s' (indirect) @ %d", sym.name, sym.slot_index);
+            snprintf(comment, 100, "// local '%s' (indirect) @ %d", sym.name, sym.slot_id);
 
-            write_slot_read(ctx, sym.type, sym.slot_index, xd);
+            write_slot_read(ctx, sym.type, sym.slot_id, xd);
             asm_comment_prev(ctx.builder, comment);
         } else {
             var comment: *Char = calloc(100, sizeof(Char));
-            snprintf(comment, 100, "// local '%s' @ %d", sym.name, sym.slot_index);
+            snprintf(comment, 100, "// local '%s' @ %d", sym.name, sym.slot_id);
 
-            write_slot_addr(ctx, sym.type, sym.slot_index, xd);
+            write_slot_addr(ctx, sym.type, sym.slot_id, xd);
             asm_comment_prev(ctx.builder, comment);
         }
     } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
@@ -937,9 +937,9 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         var temp = e.temp;
 
         var comment: *Char = calloc(100, sizeof(Char));
-        snprintf(comment, 100, "// temp @ %d", temp.slot_index);
+        snprintf(comment, 100, "// temp @ %d", temp.slot_id);
 
-        write_slot_addr(ctx, temp.type, temp.slot_index, xd);
+        write_slot_addr(ctx, temp.type, temp.slot_id, xd);
         asm_comment_prev(ctx.builder, comment);
     } else if (e.kind == HirExpr_Member) {
         var e = e as *HirMemberExpr;
@@ -1310,7 +1310,7 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composit
     snprintf(comment, 100, "// call to %s done", e.callee.name);
     asm_write_raw(ctx.builder, comment);
 
-    ctx.max_arg_size = int_max(ctx.max_arg_size, layout.stack_space);
+    ctx.max_arg_pass_size = int_max(ctx.max_arg_pass_size, layout.stack_space);
 
     call_layout_drop(&layout);
 }
@@ -1428,14 +1428,14 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         if (arg_loc.is_reg) {
             for (var j = 0; j < arg_loc.n_regs; j += 1) {
                 var reg = (arg_loc.reg + j) as Reg;
-                write_slot_store_partial(ctx, param.type, local.slot_index, 8 * j, reg);
+                write_slot_store_partial(ctx, param.type, local.slot_id, 8 * j, reg);
             }
             local.is_indirect = is_pass_by_ptr(param.type);
         } else if (type_size(param.type) <= 8) {
             // ldr x0, [fp, #{offset + 16}] ; 16 bytes for fp and LR
             asm_write_ldrs_ri(ctx.builder, width: 8, Reg_X0, FP, arg_loc.offset + 16);
             // str x0, [fp, #{??}]
-            write_slot_store(ctx, param.type, local.slot_index, Reg_X0);
+            write_slot_store(ctx, param.type, local.slot_id, Reg_X0);
         } else {
             // Passed on stack. Must be copied to local slot. Handled separately below
             // to make sure calling memcpy doesn't clobber the remaining unread arguments.
@@ -1457,7 +1457,7 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
             // mov x2, #{size}
             // bl memcpy
 
-            write_slot_addr(ctx, param.type, local.slot_index, Reg_X0);
+            write_slot_addr(ctx, param.type, local.slot_id, Reg_X0);
             asm_write_add_ri(ctx.builder, width: 8, Reg_X1, FP, arg_loc.offset + 16);
             asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(param.type));
             asm_write_bl(ctx.builder, "memcpy");
@@ -1470,6 +1470,32 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
     asm_write_label(ctx.builder, ctx.ret_label, "ret");
 }
 
+func layout_slots(ctx: *CodegenCtx, start_fp_offset: Int): Int {
+    var sym = ctx.current_func;
+    
+    var n_locals = list_len(sym.locals);
+    var n_temps = list_len(sym.temps);
+    var n_slots = n_locals + n_temps;
+    var slots: *Slot = calloc(n_slots, sizeof(Slot));
+
+    var next_fp_offset = start_fp_offset;
+    for (var i = 0; i < n_locals; i += 1) {
+        var local: *LocalSym = list_get(sym.locals, i);
+        next_fp_offset = -align_up(-next_fp_offset + type_size(local.type), type_align(local.type));
+        slots[i] = Slot { fp_offset: next_fp_offset };
+    }
+    for (var i = 0; i < n_temps; i += 1) {
+        var temp: *HirTemp = list_get(sym.temps, i);
+        next_fp_offset = -align_up(-next_fp_offset + type_size(temp.type), type_align(temp.type));
+        slots[n_locals + i] = Slot { fp_offset: next_fp_offset };
+    }
+
+    ctx.n_slots = n_slots;
+    ctx.slots = slots;
+
+    return start_fp_offset - next_fp_offset;
+}
+
 func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     var hir_body = hir_lower(sym, sym.body);
 
@@ -1477,32 +1503,17 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
     ctx.ret_label = next_label(ctx);
     ctx.current_call_layout = get_call_layout_for_func(sym);
 
-    var saved_x8_size = ctx.current_call_layout.ret_loc.is_indirect ? 8 : 0;
+    var next_fp_offset = 0;
 
-    var n_locals = list_len(sym.locals);
-    var n_temps = list_len(sym.temps);
-    var n_slots = n_locals + n_temps;
-    var slots: *Slot = calloc(n_slots, sizeof(Slot));
-
-    var slots_size = saved_x8_size;
-    for (var i = 0; i < n_locals; i += 1) {
-        var local: *LocalSym = list_get(sym.locals, i);
-        var offset = align_up(slots_size, type_align(local.type));
-        slots[local.slot_index] = Slot { offset };
-        slots_size = offset + type_size(local.type);
-    }
-    for (var i = 0; i < n_temps; i += 1) {
-        var temp: *HirTemp = list_get(sym.temps, i);
-        var offset = align_up(slots_size, type_align(temp.type));
-        slots[temp.slot_index] = Slot { offset };
-        slots_size = offset + type_size(temp.type);
+    if (ctx.current_call_layout.ret_loc.is_indirect) {
+        next_fp_offset -= 8;
     }
 
-    ctx.n_slots = n_slots;
-    ctx.slots = slots;
-    ctx.slots_size = slots_size;
+    var slots_size = layout_slots(ctx, next_fp_offset);
+    next_fp_offset -= slots_size;
 
-    ctx.scratch_offset = -align_up(saved_x8_size + ctx.slots_size, 8);
+    ctx.scratch_fp_offset = -align_up(-next_fp_offset, 8);
+    next_fp_offset = ctx.scratch_fp_offset;
 
     ctx.builder = list_new();
 
@@ -1513,12 +1524,12 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
 
     asm_lower_func(ctx, sym, hir_body);
 
+    var frame_size = align_up(-next_fp_offset + ctx.max_scratch_size + ctx.max_arg_pass_size, 16);
+
     var is_reg_used: [Bool; N_REGS];
     for (var i = 0; i < N_REGS; i += 1) {
         is_reg_used[i] = ctx.regs[i].n_writes > 0;
     }
-
-    var frame_size = align_up(-ctx.scratch_offset + ctx.max_scratch + ctx.max_arg_size, 16);
 
     asm_print_func(&AsmFunc {
         name: sym.name,

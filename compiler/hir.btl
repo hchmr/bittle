@@ -79,7 +79,7 @@ func hir_dump_child(name: *Char, e: *HirExpr) {
     } else if (e.kind == HirExpr_Temp) {
         var e = e as *HirTempExpr;
         begin_inline_child("temp");
-        fprintf(stderr, "%d\n", e.temp.slot_index);
+        fprintf(stderr, "%d\n", e.temp.slot_id);
     } else if (e.kind == HirExpr_Cond) {
         var e = e as *HirCondExpr;
         begin_block("Cond");

@@ -199,7 +199,7 @@ struct FuncSym: Sym {
 
 struct LocalSym: Sym {
     type: *Type,
-    slot_index: Int,
+    slot_id: Int,
     is_indirect: Bool,
 }
 
@@ -585,7 +585,7 @@ func is_lvalue(expr: *Expr): Bool;
 
 struct HirTemp {
     type: *Type,
-    slot_index: Int,
+    slot_id: Int,
 }
 
 enum HirOpKind {

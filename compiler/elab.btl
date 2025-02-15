@@ -214,10 +214,10 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
         die_at(pos, "Symbol is already defined");
     }
 
-    var slot_index = list_len(ctx.current_func.locals);
+    var slot_id = list_len(ctx.current_func.locals);
 
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
-    *sym = LocalSym { kind: Sym_Local, name, type, slot_index: slot_index, is_indirect: false };
+    *sym = LocalSym { kind: Sym_Local, name, type, slot_id, is_indirect: false };
     add_sym(ctx, sym);
 
     list_push(ctx.current_func.locals, sym);

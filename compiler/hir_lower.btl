@@ -289,10 +289,10 @@ struct Context {
 }
 
 func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
-    var slot_index = list_len(ctx.func_.locals) + list_len(ctx.func_.temps);
+    var slot_id = list_len(ctx.func_.locals) + list_len(ctx.func_.temps);
 
     var temp: *HirTemp = calloc(1, sizeof(HirTemp));
-    *temp = HirTemp { type, slot_index };
+    *temp = HirTemp { type, slot_id: slot_id };
 
     list_push(ctx.func_.temps, temp);
 
