@@ -2,11 +2,6 @@ struct Pair;
 struct Pair { x: Int, y: Int }
 struct Pair;
 
-struct File;
-extern struct File;
-extern struct File;
-struct File;
-
 func foo(x: Int);
 func foo(x: Int) {}
 func foo(x: Int);
