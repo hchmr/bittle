@@ -1104,13 +1104,46 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
     return result;
 }
 
+func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
+    var param_decls = decl.params;
+    var params = sym.params;
+    var n_params = list_len(param_decls);
+    var is_variadic = sym.is_variadic;
+    var return_type = sym.return_type;
+
+    if (!type_eq(return_type, mk_int_type(4))) {
+        die_at(&decl.pos, "Return type of 'main' must be 'Int32'");
+    }
+
+    for (var i = 0; i < n_params; i += 1) {
+        var param_decl: *FuncParamDecl = list_get(param_decls, i);
+        var param: *FuncParam = list_get(params, i);
+        if (i == 0) {
+            if (!type_eq(param.type, mk_int_type(4))) {
+                die_at(&param_decl.pos, "The arg count parameter of 'main' must have type 'Int32'");
+            }
+        } else if (i == 1) {
+            if (!type_eq(param.type, mk_ptr_type(mk_ptr_type(mk_int_type(1))))) {
+                die_at(&param_decl.pos, "The arg vector parameter of 'main' must have type '**Char'");
+            }
+        } else {
+            die_at(&param_decl.pos, "The 'main' function can only have parameters 'argc: Int32' and 'argv: **Char'");
+        }
+    }
+
+    if (is_variadic) {
+        die_at(&decl.pos, "The 'main' function cannot be variadic");
+    }
+}
+
 func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     var name = decl.name;
 
     var param_decls = decl.params;
 
+    var n_params = list_len(param_decls);
     var params = list_new();
-    for (var i = 0; i < list_len(param_decls); i += 1) {
+    for (var i = 0; i < n_params; i += 1) {
         var param_decl = list_get(param_decls, i);
         var param = elab_param(ctx, param_decl);
         list_push(params, param);
@@ -1124,11 +1157,14 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
         die_at(&decl.pos, "Function return type must have known size");
     }
 
-    var is_variadic = decl.rest_param != null;
-
     var is_definition = decl.body != null;
-
+    var is_variadic = decl.rest_param != null;
+    
     var sym = declare_func(ctx, &decl.pos, name, params, decl.rest_param, return_type, is_definition);
+
+    if (str_eq(name, "main")) {
+       verify_main_signature(decl, sym);
+    }
 
     if (decl.body) {
         enter_scope(ctx);
