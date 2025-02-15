@@ -11,6 +11,7 @@ export type Type =
     | EnumType
     | StructType
     | NeverType
+    | RestParamType
     | ErrorType;
 
 export enum TypeKind {
@@ -22,6 +23,7 @@ export enum TypeKind {
     Enum = 'Enum',
     Struct = 'Struct',
     Never = 'Never',
+    RestParam = 'RestParam',
     Err = 'Err',
 }
 
@@ -63,6 +65,10 @@ export type NeverType = Readonly<{
     kind: TypeKind.Never;
 }>;
 
+export type RestParamType = Readonly<{
+    kind: TypeKind.RestParam;
+}>;
+
 export type ErrorType = Readonly<{
     kind: TypeKind.Err;
 }>;
@@ -84,6 +90,8 @@ const INT64_TYPE: IntType = { kind: TypeKind.Int, size: 64 };
 const INT_UNKNOWN_TYPE: IntType = { kind: TypeKind.Int, size: undefined };
 
 const NEVER_TYPE: NeverType = { kind: TypeKind.Never };
+
+const REST_PARAM_TYPE: RestParamType = { kind: TypeKind.RestParam };
 
 const ERROR_TYPE: ErrorType = { kind: TypeKind.Err };
 
@@ -126,6 +134,10 @@ export function mkArrayType(elemType: Type, size: number | undefined): Type {
 
 export function mkNeverType(): Type {
     return NEVER_TYPE;
+}
+
+export function mkRestParamType(): Type {
+    return REST_PARAM_TYPE;
 }
 
 export function mkEnumType(sym: EnumSym): EnumType {
@@ -205,6 +217,9 @@ export function typeLayout(type: Type): TypeLayout | undefined {
                 size: alignUp(a.size, a.align),
                 align: a.align,
             };
+        }
+        case TypeKind.RestParam: {
+            return { size: 32, align: 8 };
         }
         case TypeKind.Never:
         case TypeKind.Err: {
@@ -377,6 +392,7 @@ export function prettyType(t: Type): string {
         case TypeKind.Enum:
         case TypeKind.Struct: return t.sym.name;
         case TypeKind.Never: return '!';
+        case TypeKind.RestParam: return '...';
         case TypeKind.Err: return '{unknown}';
     }
 }

@@ -30,6 +30,7 @@ export const TypeNodeTypes = {
     PointerType: AstNodeTypes.PointerType,
     ArrayType: AstNodeTypes.ArrayType,
     NeverType: AstNodeTypes.NeverType,
+    RestParamTypeNode: AstNodeTypes.RestParamType,
 } as const;
 
 export const StmtNodeTypes = {

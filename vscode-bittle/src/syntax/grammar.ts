@@ -95,7 +95,12 @@ export const grammar = createGrammar({
             ':',
             label('type', $.Type),
         ),
-        '...',
+        seq(
+            '...',
+            optional(
+                label('restParamName', 'identifier'),
+            ),
+        ),
     ),
 
     GlobalDecl: $ => seq(
@@ -123,6 +128,7 @@ export const grammar = createGrammar({
         $.PointerType,
         $.ArrayType,
         $.NeverType,
+        $.RestParamType,
     ),
 
     GroupedType: $ => seq(
@@ -147,6 +153,10 @@ export const grammar = createGrammar({
     ),
 
     NeverType: $ => terminal('!'),
+
+    RestParamType: $ => seq(
+        '...',
+    ),
 
     Stmt: $ => choice(
         $.BlockStmt,

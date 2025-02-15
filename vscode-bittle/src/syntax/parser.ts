@@ -481,6 +481,11 @@ export class Parser extends ParserBase {
         if (this.match('...')) {
             this.beginNode(CompositeNodeTypes.FuncParam);
             this.bump('...');
+            if (this.match('identifier')) {
+                this.beginField('restParamName');
+                this.expect('identifier');
+                this.finishField('restParamName');
+            }
             this.finishNode(CompositeNodeTypes.FuncParam);
         } else {
             this.paramDecl();
@@ -910,6 +915,8 @@ export class Parser extends ParserBase {
             this.arrayType();
         } else if (this.match('!')) {
             this.neverType();
+        } else if (this.match('...')) {
+            this.restParamType();
         } else {
             this.addErrorAndTryBump(`Unexpected start of type: '${this.tok.kind}'.`);
         }
@@ -958,6 +965,12 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeTypes.NeverType);
         this.bump('!');
         this.finishNode(CompositeNodeTypes.NeverType);
+    }
+
+    restParamType() {
+        this.beginNode(CompositeNodeTypes.RestParamType);
+        this.bump('...');
+        this.finishNode(CompositeNodeTypes.RestParamType);
     }
 
     //=========================================================================

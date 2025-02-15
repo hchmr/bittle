@@ -5,7 +5,7 @@ import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
 import {
     ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode,
-    LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructExprNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
+    LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructExprNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
 } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
@@ -14,7 +14,7 @@ import {
     ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
 } from './sym';
 import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout,
+    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRestParamType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout,
 } from './type';
 
 export type ErrorLocation = {
@@ -428,7 +428,7 @@ export class Elaborator {
         return sym;
     }
 
-    private defineLocalSym(declNode: LocalDeclNode, nameNode: TokenNode | Nullish, type: Type): LocalSym {
+    private defineLocalSym(declNode: LocalDeclNode | FuncParamNode, nameNode: TokenNode | Nullish, type: Type): LocalSym {
         if (!nameNode) {
             return {
                 kind: SymKind.Local,
@@ -507,6 +507,8 @@ export class Elaborator {
                 return mkArrayType(elemType, size);
             } else if (typeNode instanceof NeverTypeNode) {
                 return mkNeverType();
+            } else if (typeNode instanceof RestParamTypeNode) {
+                return mkRestParamType();
             } else {
                 unreachable(typeNode);
             }
@@ -748,7 +750,7 @@ export class Elaborator {
             .map<FuncParamSym>((paramNode, index) => this.elabFuncParam(paramNode, name, index))
             .toArray();
 
-        const isVariadic = paramNodes.some(child => child.dotDotDotToken);
+        const restParamNode = this.handleRestParamNodes(paramNodes);
 
         const returnType: Type = node.returnType ? this.typeEval(node.returnType) : mkVoidType();
 
@@ -757,11 +759,15 @@ export class Elaborator {
         }
 
         const sym = this.inOuterScope(() => {
-            return this.declareFuncSym(node, nameNode, params, returnType, isVariadic, !!bodyNode);
+            return this.declareFuncSym(node, nameNode, params, returnType, !!restParamNode, !!bodyNode);
         });
 
         this.currentFunc = sym;
         this.nextLocalIndex = 0;
+
+        if (restParamNode) {
+            this.defineLocalSym(restParamNode, restParamNode.restParamName, mkRestParamType());
+        }
 
         if (bodyNode) {
             this.elabBlockStmt(bodyNode);
@@ -773,6 +779,18 @@ export class Elaborator {
         this.exitScope();
 
         sym.isDefined = !!bodyNode;
+    }
+
+    private handleRestParamNodes(paramNodes: FuncParamNode[]) {
+        const restParamNodes = paramNodes.filter(paramNode => paramNode.dotDotDotToken);
+        const restParamNode = restParamNodes.pop();
+        if (!restParamNode) {
+            return null;
+        }
+        for (const paramNode of restParamNodes) {
+            this.reportError(paramNode, `Variadic parameter must be the last parameter.`);
+        }
+        return restParamNode;
     }
 
     private elabFuncParam(paramNode: FuncParamNode, funcName: string, paramIndex: number): FuncParamSym {
