@@ -70,8 +70,8 @@ To build from source, you will need a system running Arm64 Linux with the follow
 - Basic generics with type parameters
 - Module system with export/import (replacing header files)
 - A standard library
-- Unions or algebraic data types
-- Pattern matching
+- Unions
+- Switch statements
 
 ### Compiler
 
