@@ -111,7 +111,7 @@ func declare_struct(
         }
     } else {
         sym = calloc(1, sizeof(StructSym)) as *StructSym;
-        *sym = Sym { kind: Sym_Struct, name }; // TODO
+        *sym = Sym { kind: Sym_Struct, name };
         add_sym(ctx, sym);
     }
     return sym as *StructSym;
