@@ -506,7 +506,7 @@ func asm_write_string_addr(builder: *List, xd: Reg, id: Int) {
 // Miscellaneous
 
 func asm_write_label(builder: *List, counter: Int, suffix: *Char) {
-    var instr = asm_write_instr(builder, null, 1);
+    var instr = asm_write_instr(builder, op: null, 1);
     instr.args[0] = asm_mk_label_operand(counter, suffix);
 }
 
@@ -514,9 +514,21 @@ func asm_write_raw(builder: *List, raw: *Char) {
     asm_write_instr(builder, raw, n_args: 0);
 }
 
-func asm_comment_prev(builder: *List, comment: *Char) {
+func asm_write_comment(builder: *List, fmt: *Char, ...args) {
+    var sb = sb_new();
+    sb_printf(sb, "// ");
+    sb_vprintf(sb, fmt, args);
+    var text = sb_finish(sb);
+    asm_write_raw(builder, text);
+}
+
+func asm_add_comment_to_last(builder: *List, fmt: *Char, ...args) {
+    var sb = sb_new();
+    sb_printf(sb, "// ");
+    sb_vprintf(sb, fmt, args);
+    var text = sb_finish(sb);
     var instr: *AsmInstr = list_get(builder, list_len(builder) - 1);
-    instr.comment = comment;
+    instr.comment = text;
 }
 
 //==============================================================================
@@ -759,7 +771,7 @@ func spill_reg(ctx: *CodegenCtx, reg: Reg) {
     write_push(ctx, reg);
     unlock_reg(ctx, reg);
 
-    asm_comment_prev(ctx.builder, "// 8 byte spill");
+    asm_add_comment_to_last(ctx.builder, "8 byte spill");
 }
 
 func unspill_reg(ctx: *CodegenCtx, reg: Reg) {
@@ -768,7 +780,7 @@ func unspill_reg(ctx: *CodegenCtx, reg: Reg) {
     write_pop(ctx, reg);
     lock_reg(ctx, reg);
 
-    asm_comment_prev(ctx.builder, "// 8 byte reload");
+    asm_add_comment_to_last(ctx.builder, "8 byte reload");
 }
 
 func reserve_reg(ctx: *CodegenCtx, reg: Reg) {
@@ -942,17 +954,11 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         var sym = e.sym as *LocalSym;
 
         if (sym.is_indirect) {
-            var comment: *Char = calloc(100, sizeof(Char));
-            snprintf(comment, 100, "// local '%s' (indirect) @ %d", sym.name, sym.slot_id);
-
             write_slot_read(ctx, sym.type, sym.slot_id, xd);
-            asm_comment_prev(ctx.builder, comment);
+            asm_add_comment_to_last(ctx.builder, "local '%s' (indirect) @ %d", sym.name, sym.slot_id);
         } else {
-            var comment: *Char = calloc(100, sizeof(Char));
-            snprintf(comment, 100, "// local '%s' @ %d", sym.name, sym.slot_id);
-
             write_slot_addr(ctx, sym.type, sym.slot_id, xd);
-            asm_comment_prev(ctx.builder, comment);
+            asm_add_comment_to_last(ctx.builder, "local '%s' @ %d", sym.name, sym.slot_id);
         }
     } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
         var e = e as *HirVarExpr;
@@ -970,23 +976,17 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         var e = e as *HirTempExpr;
         var temp = e.temp;
 
-        var comment: *Char = calloc(100, sizeof(Char));
-        snprintf(comment, 100, "// temp @ %d", temp.slot_id);
-
         write_slot_addr(ctx, temp.type, temp.slot_id, xd);
-        asm_comment_prev(ctx.builder, comment);
+        asm_add_comment_to_last(ctx.builder, "temp @ %d", temp.slot_id);
     } else if (e.kind == HirExpr_Member) {
         var e = e as *HirMemberExpr;
         var fields = (e.left.type as *StructType).sym.fields;
         var field: *StructField = list_get(fields, e.field_index);
 
-        var comment: *Char = calloc(100, sizeof(Char));
-        snprintf(comment, 100, "// member '%s'", field.name);
-
         asm_lower_expr_addr(ctx, e.left, xd);
         // add {xd}, {xd}, #{offset}
         asm_write_add_ri(ctx.builder, width: 8, xd, xd, field.offset);
-        asm_comment_prev(ctx.builder, comment);
+        asm_add_comment_to_last(ctx.builder, "member '%s'", field.name);
     } else if (e.kind == HirExpr_Deref) {
         var e = e as *HirDerefExpr;
         asm_lower_expr(ctx, e.expr, xd);
@@ -1141,7 +1141,7 @@ func asm_lower_return_expr(ctx: *CodegenCtx, e: *HirReturnExpr, xd: Reg) {
 
             asm_lower_expr_addr(ctx, e.expr, Reg_X1);
             asm_write_ldrs_ri(ctx.builder, width: 8, Reg_X0, FP, -8);
-            asm_comment_prev(ctx.builder, "// restore indirect result location");
+            asm_add_comment_to_last(ctx.builder, "restore indirect result location");
             asm_write_mov_i(ctx.builder, width: 8, Reg_X2, type_size(e.expr.type));
             asm_write_bl(ctx.builder, "memcpy");
 
@@ -1240,9 +1240,7 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composit
     var is_reg_ret_composite = layout.ret_loc.is_reg && is_composite(e.type);
     var is_indirect_ret = layout.ret_loc.is_indirect;
 
-    var comment: *Char = calloc(100, sizeof(Char));
-    snprintf(comment, 100, "// prepare call to %s", e.callee.name);
-    asm_write_raw(ctx.builder, comment);
+    asm_write_comment(ctx.builder, "prepare call to %s", e.callee.name);
 
     spill_before_call(ctx);
 
@@ -1340,9 +1338,7 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composit
 
     unspill_after_call(ctx);
 
-    comment = calloc(100, sizeof(Char));
-    snprintf(comment, 100, "// call to %s done", e.callee.name);
-    asm_write_raw(ctx.builder, comment);
+    asm_write_comment(ctx.builder, "call to %s done", e.callee.name);
 
     ctx.max_arg_pass_size = int_max(ctx.max_arg_pass_size, layout.stack_space);
 
@@ -1437,7 +1433,7 @@ func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
     } else if (e.kind == HirExpr_Cast) {
         asm_lower_cast_expr(ctx, e as *HirCastExpr, xd);
     } else if (e.kind == HirExpr_Unreachable) {
-        asm_write_raw(ctx.builder, "  // <- unreachable");
+        asm_write_comment(ctx.builder, "<- unreachable");
     } else {
         unreachable("asm_lower_expr");
     }
@@ -1451,7 +1447,7 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
     if (layout.ret_loc.is_indirect) {
         // str x8, [fp, #-8]
         asm_write_str_ri(ctx.builder, width: 8, Reg_X8, FP, -8);
-        asm_comment_prev(ctx.builder, "// save indirect result location");
+        asm_add_comment_to_last(ctx.builder, "save indirect result location");
     }
 
     // Save varargs
@@ -1503,7 +1499,7 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         //     vr_offs: Int32,
         // }
 
-        asm_write_raw(ctx.builder, "// initialize va_list");
+        asm_write_comment(ctx.builder, "initialize va_list");
 
         // x0 <- &local
         write_slot_addr(ctx, mk_rest_param_type(), slot_id, Reg_X0);
@@ -1533,7 +1529,7 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         asm_write_mov_i(ctx.builder, width: 4, Reg_X1, 0);
         asm_write_str_ri(ctx.builder, width: 4, Reg_X1, Reg_X0, 28);
 
-        asm_write_raw(ctx.builder, "// va_list initialized");
+        asm_write_comment(ctx.builder, "va_list initialized");
     }
 
 
@@ -1567,7 +1563,7 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
 
 func layout_slots(ctx: *CodegenCtx, start_fp_offset: Int): Int {
     var sym = ctx.current_func;
-    
+
     var n_locals = list_len(sym.locals);
     var n_temps = list_len(sym.temps);
     var n_slots = n_locals + n_temps;
@@ -1624,11 +1620,11 @@ func emit_func(ctx: *CodegenCtx, sym: *FuncSym) {
         ctx.regs[i].reservations = list_new();
     }
 
-    asm_write_raw(ctx.builder, "  // body");
+    asm_write_comment(ctx.builder, "body");
     asm_lower_func(ctx, sym, hir_body);
 
     var spills: [Reg; N_REGS];
-    
+
     spills[0] = Reg_X29;
     spills[1] = Reg_X30;
     var n_spills = 2; // x29, x30

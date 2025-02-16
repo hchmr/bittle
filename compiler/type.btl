@@ -197,32 +197,38 @@ func is_sized(type: *Type): Bool {
     return type_size(type) != -1;
 }
 
-func pretty_type(file: *File, type: *Type): Void {
+func sb_pretty_type(sb: *StringBuffer, type: *Type) {
     if (type.kind == Type_Void) {
-        fprintf(file, "Void");
+        sb_printf(sb, "Void");
     } else if (type.kind == Type_Bool) {
-        fprintf(file, "Bool");
+        sb_printf(sb, "Bool");
     } else if (type.kind == Type_Int) {
-        fprintf(file, "Int%d", (type as *IntType).size * 8);
+        sb_printf(sb, "Int%d", (type as *IntType).size * 8);
     } else if (type.kind == Type_Ptr) {
-        fprintf(file, "*");
-        pretty_type(file, (type as *PtrType).pointee);
+        sb_printf(sb, "*");
+        sb_pretty_type(sb, (type as *PtrType).pointee);
     } else if (type.kind == Type_Arr) {
         var type = type as *ArrType;
-        fprintf(file, "[");
-        pretty_type(file, type.elem);
-        fprintf(file, "; %d]", type.size);
+        sb_printf(sb, "[");
+        sb_pretty_type(sb, type.elem);
+        sb_printf(sb, "; %d]", type.size);
     } else if (type.kind == Type_Enum) {
         var sym = (type as *EnumType).sym;
-        fprintf(file, "%s", sym.name);
+        sb_printf(sb, "%s", sym.name);
     } else if (type.kind == Type_Struct) {
         var sym = (type as *StructType).sym;
-        fprintf(file, "%s", sym.name);
+        sb_printf(sb, "%s", sym.name);
     } else if (type.kind == Type_Never) {
-        fprintf(file, "!");
+        sb_printf(sb, "!");
     } else if (type.kind == Type_RestParam) {
-        fprintf(file, "...");
+        sb_printf(sb, "...");
     } else {
         unreachable("pretty_type");
     }
+}
+
+func pretty_type(type: *Type): *Char {
+    var sb = sb_new();
+    sb_pretty_type(sb, type);
+    return sb_finish(sb);
 }

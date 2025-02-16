@@ -258,13 +258,7 @@ func check_type(e: **Expr, expected: *Type) {
         return;
     }
     if (!type_eq((*e).type, expected)) {
-        error_at(&(*e).pos);
-        fprintf(stderr, "Type mismatch: ");
-        pretty_type(stderr, (*e).type);
-        fprintf(stderr, " != ");
-        pretty_type(stderr, expected);
-        fprintf(stderr, ".\n");
-        exit(1);
+        die_at(&(*e).pos, "Type mismatch: %s != %s.\n", pretty_type(expected), pretty_type((*e).type));
     }
 }
 
@@ -512,14 +506,10 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     var arg_count = list_len(args);
 
     if (arg_count < param_count) {
-        error_at(&expr.pos);
-        fprintf(stderr, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
-        exit(1);
+        die_at(&expr.pos, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
     }
     if (!sym.is_variadic && arg_count > param_count) {
-        error_at(&expr.pos);
-        fprintf(stderr, "Too many arguments provided (%d > %d).\n", arg_count, param_count);
-        exit(1);
+        die_at(&expr.pos, "Too many arguments provided (%d > %d).\n", arg_count, param_count);
     }
     var i = 0;
     for (; i < param_count; i += 1) {
@@ -748,9 +738,7 @@ func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
     for (var i = 0; i < n_fields; i += 1) {
         if (!is_initialized[i]) {
             var field: *StructField = list_get(fields, i);
-            error_at(&expr.pos);
-            fprintf(stderr, "Field '%s' is not initialized.\n", field.name);
-            exit(1);
+            die_at(&expr.pos, "Field '%s' is not initialized.\n", field.name);
         }
     }
 
@@ -1159,7 +1147,7 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
 
     var is_definition = decl.body != null;
     var is_variadic = decl.rest_param != null;
-    
+
     var sym = declare_func(ctx, &decl.pos, name, params, decl.rest_param, return_type, is_definition);
 
     if (str_eq(name, "main")) {

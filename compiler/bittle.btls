@@ -18,7 +18,7 @@ func unreachable(function: *Char): !;
 
 func error_at(pos: *Pos);
 func die(msg: *Char): !;
-func die_at(pos: *Pos, msg: *Char): !;
+func die_at(pos: *Pos, msg: *Char, ...args): !;
 
 func sb_new(): *StringBuffer;
 func sb_free(self: *StringBuffer);
@@ -27,6 +27,8 @@ func sb_get(self: *StringBuffer, i: Int): Char;
 func sb_cstr(self: *StringBuffer): *Char;
 func sb_ensure_cap(self: *StringBuffer, cap: Int);
 func sb_shrink_to_fit(self: *StringBuffer);
+func sb_vprintf(self: *StringBuffer, fmt: *Char, args: ...);
+func sb_printf(self: *StringBuffer, fmt: *Char, ...args);
 func sb_push(self: *StringBuffer, c: Char);
 func sb_append(self: *StringBuffer, s: *Char);
 func sb_finish(self: *StringBuffer): *Char;
@@ -134,7 +136,8 @@ func is_composite(type: *Type): Bool;
 func is_pass_by_ptr(type: *Type): Bool;
 func is_sized(type: *Type): Bool;
 
-func pretty_type(file: *File, type: *Type): Void;
+func sb_pretty_type(sb: *StringBuffer, type: *Type);
+func pretty_type(type: *Type): *Char;
 
 //==============================================================================
 //== sym.btl
