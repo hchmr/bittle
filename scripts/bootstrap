@@ -340,6 +340,8 @@ stage "feat(compiler): Add struct field initialization shorthand"
 
 stage "fix(compiler): Fix miscompilation when taking address of temporary"
 
+stage "feat(compiler): Add call signature checks for main function"
+
 if [ "$extra_stage" = true ]; then
     stage "$head_commit"
 fi
