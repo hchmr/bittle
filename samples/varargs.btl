@@ -1,7 +1,5 @@
 include "../compiler/libc.btls";
 
-func vfprintf(stream: *File, format: *Char, args: ...);
-
 func my_printf(format: *Char, ...args) {
     vfprintf(stdout, format, args);
 }

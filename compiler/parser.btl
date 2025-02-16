@@ -48,14 +48,7 @@ func eat(self: *Parser, kind: Int32): Bool {
 
 func expect(self: *Parser, kind: Int32) {
     if (!eat(self, kind)) {
-        error_at(&self.tok.pos);
-        fprintf(
-            stderr,
-            "Expected %s, but got %s.\n",
-            pretty_tok_kind(kind),
-            pretty_tok_kind(self.tok.kind),
-        );
-        exit(1);
+        die_at(&self.tok.pos, "Unexpected token. Expected %s, but got %s.", pretty_tok_kind(kind), pretty_tok_kind(self.tok.kind));
     }
 }
 

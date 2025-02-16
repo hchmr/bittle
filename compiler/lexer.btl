@@ -188,9 +188,7 @@ func scan_number(self: *Lexer) {
     }
 
     if (base != 10 && !at_digit(self, base)) {
-        error_at(&self.pos);
-        fprintf(stderr, "Expected base-%d digit.\n", base);
-        exit(1);
+        die_at(&self.pos, "Expected base-%d digit.\n", base);
     }
 
     while (at_digit(self, base)) {
@@ -395,9 +393,7 @@ func lexer_next(self: *Lexer): Tok {
                 finish_token(self, Tok_Dot, ".");
             }
         } else {
-            error_at(&self.pos);
-            fprintf(stderr, "Unexpected character: '%c'.\n", curr_char(self));
-            exit(1);
+            die_at(&self.pos, "Unexpected character: '%c'.\n", curr_char(self));
         }
 
         return Tok {

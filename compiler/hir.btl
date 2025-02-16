@@ -49,7 +49,9 @@ func begin_inline_child(name: *Char) {
 
 func hir_dump_type(t: *Type) {
     print_spaces(hir_indent);
-    pretty_type(stderr, t);
+    var pretty = pretty_type(t);
+    fprintf(stderr, "%s\n", pretty);
+    free(pretty);
 }
 
 func hir_dump_child(name: *Char, e: *HirExpr) {

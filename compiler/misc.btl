@@ -33,9 +33,10 @@ func die(msg: *Char): ! {
     exit(1);
 }
 
-func die_at(pos: *Pos, msg: *Char): ! {
+func die_at(pos: *Pos, msg: *Char, ...args): ! {
     error_at(pos);
-    fprintf(stderr, "%s\n", msg);
+    vfprintf(stderr, msg, args);
+    fprintf(stderr, "\n");
     exit(1);
 }
 
@@ -78,6 +79,18 @@ func sb_shrink_to_fit(self: *StringBuffer) {
     self.cap = self.len + 1;
 }
 
+func sb_vprintf(self: *StringBuffer, fmt: *Char, args: ...) {
+    var len = vsnprintf(null, 0, fmt, args);
+    assert(len >= 0, "sb_printf: vsnprintf will never fail");
+    sb_ensure_cap(self, self.len + len + 1);
+    vsnprintf(&self.buf[self.len], len + 1, fmt, args);
+    self.len += len;
+}
+
+func sb_printf(self: *StringBuffer, fmt: *Char, ...args) {
+    sb_vprintf(self, fmt, args);
+}
+
 func sb_push(self: *StringBuffer, c: Char) {
     sb_ensure_cap(self, self.len + 2);
     self.buf[self.len] = c;
@@ -86,11 +99,7 @@ func sb_push(self: *StringBuffer, c: Char) {
 }
 
 func sb_append(self: *StringBuffer, s: *Char) {
-    var i = 0;
-    while (s[i]) {
-        sb_push(self, s[i]);
-        i += 1;
-    }
+    sb_printf(self, "%s", s);
 }
 
 func sb_finish(self: *StringBuffer): *Char {
