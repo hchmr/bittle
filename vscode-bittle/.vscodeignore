@@ -1,0 +1,5 @@
+**/*
+!dist/**/*.js
+!bittle.tmLanguage.json
+!language-configuration.json
+!node_modules
