@@ -44,7 +44,25 @@
                 "scopeName": "source.btl",
                 "path": "./bittle.tmLanguage.json"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "Bittle",
+            "properties": {
+                "bittle.compilerPath": {
+                    "type": "string",
+                    "default": "bittlec",
+                    "description": "Path to compiler executable"
+                },
+                "bittle.exclude": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "description": "Files and folders to exclude"
+                }
+            }
+        }
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",
