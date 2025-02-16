@@ -6,6 +6,7 @@
     "publisher": "anon",
     "scripts": {
         "vscode:prepublish": "npm run build",
+        "vscode:package": "vsce package --allow-missing-repository --skip-license",
         "source-gen": "tsx ./src/prebuild.ts",
         "source-gen:watch": "chokidar --initial 'src/**/*.ts' '!src/syntax/generated.ts' -c 'npm run source-gen'",
         "tsc:build": "tsc -p ./",
@@ -16,7 +17,7 @@
         "lint": "eslint . --max-warnings 0"
     },
     "engines": {
-        "vscode": "^1.91.0"
+        "vscode": "^1.97.0"
     },
     "categories": [
         "Programming Languages"
@@ -45,19 +46,22 @@
             }
         ]
     },
+    "dependencies": {
+        "fuzzysort": "^3.1.0",
+        "minimatch": "^10.0.1"
+    },
     "devDependencies": {
         "@eslint/js": "^9.20.0",
         "@stylistic/eslint-plugin": "^3.1.0",
         "@types/eslint__js": "^8.42.3",
         "@types/node": "^22.13.2",
         "@types/vscode": "^1.97.0",
+        "@vscode/vsce": "^3.2.2",
         "chokidar-cli": "^3.0.0",
         "concurrently": "^9.1.2",
         "eslint": "^9.20.1",
         "eslint-plugin-only-warn": "^1.1.0",
-        "fuzzysort": "^3.1.0",
         "globals": "^15.15.0",
-        "minimatch": "^10.0.1",
         "tsx": "^4.19.2",
         "typescript": "^5.7.3",
         "typescript-eslint": "^8.24.0",

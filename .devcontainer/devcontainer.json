@@ -3,5 +3,20 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
-    "remoteUser": "anon"
+    "remoteUser": "anon",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "${containerWorkspaceFolder}/out/bittle.vsix",
+                "EditorConfig.EditorConfig"
+            ]
+        }
+    },
+    "updateContentCommand": {
+        "package-extension": "${containerWorkspaceFolder}/scripts/package-extension",
+        "bootstrap-compiler": "${containerWorkspaceFolder}/scripts/bootstrap"
+    },
+    "remoteEnv": {
+        "PATH": "${containerWorkspaceFolder}/out/bootstrap/bin:${containerEnv:PATH}"
+    }
 }

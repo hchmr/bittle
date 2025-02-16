@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(dirname "$(realpath "$0")")
+root_dir=$(realpath "$script_dir/..")
+src_dir="$root_dir/vscode-bittle"
+out_dir="$root_dir/out"
+
+mkdir -p "$out_dir"
+
+npm --prefix "$src_dir" install
+npm --prefix "$src_dir" run vscode:package -- --out "$out_dir/bittle.vsix"
