@@ -762,6 +762,10 @@ export class Elaborator {
             return this.declareFuncSym(node, nameNode, params, returnType, !!restParamNode, !!bodyNode);
         });
 
+        if (name === 'main') {
+            this.verify_main_signature(node, sym);
+        }
+
         this.currentFunc = sym;
         this.nextLocalIndex = 0;
 
@@ -803,6 +807,35 @@ export class Elaborator {
         }
 
         return this.defineFuncParamSym(paramNode, nameNode, funcName, paramIndex, type);
+    }
+
+    private verify_main_signature(node: FuncDeclNode, sym: FuncSym) {
+        if (!typeEq(sym.returnType, mkIntType(32))) {
+            const spanNode = node.returnType ?? node.name ?? node;
+            this.reportError(spanNode, `Return type of 'main' must be 'Int32'.`);
+        }
+
+        const regularParamNodes = node.params!.funcParamNodes.filter(paramNode => !paramNode.dotDotDotToken);
+        for (let i = 0; i < sym.params.length; i++) {
+            const paramNode = regularParamNodes[i];
+            const param = sym.params[i];
+            if (i === 0) {
+                if (!typeEq(param.type, mkIntType(32))) {
+                    this.reportError(paramNode, `The arg count parameter of 'main' must have type 'Int32'.`);
+                }
+            } else if (i === 1) {
+                if (!typeEq(param.type, mkPointerType(mkPointerType(mkIntType(8))))) {
+                    this.reportError(paramNode, `The arg vector parameter of 'main' must have type '**Char'.`);
+                }
+            } else {
+                this.reportError(paramNode, `The 'main' function can only have parameters 'argc: Int32' and 'argv: **Char'.`);
+            }
+        }
+
+        if (sym.isVariadic) {
+            const dotDotdotToken = stream(node.params!.funcParamNodes).filterMap(paramNode => paramNode.dotDotDotToken).first()!;
+            this.reportError(dotDotdotToken, `The 'main' function cannot be variadic.`);
+        }
     }
 
     private elabGlobal(node: GlobalDeclNode) {
