@@ -101,9 +101,7 @@ export function lowerRule(
 }
 
 export function collectTokens(grammar: Grammar): string[] {
-    // TODO:
-    const rules = Array.from(grammarRulesChildRulesRec(grammar));
-    return stream(rules)
+    return stream(grammarRulesChildRulesRec(grammar))
         .filter(rule => rule.kind === 'Terminal')
         .map(rule => rule.name)
         .distinct()
