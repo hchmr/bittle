@@ -1,2 +1,0 @@
-target create ./out/bittlec
-settings set target.input-path compiler/main.btl
