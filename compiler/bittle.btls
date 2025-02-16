@@ -803,6 +803,155 @@ func get_call_layout_for_call(e: *HirCallExpr): CallLayout;
 func get_call_layout_for_func(f: *FuncSym): CallLayout;
 
 //==============================================================================
+//== asm.btl
+
+enum Reg {
+    Reg_X0, Reg_X1, Reg_X2, Reg_X3, Reg_X4, Reg_X5, Reg_X6, Reg_X7, Reg_X8,
+    Reg_X9, Reg_X10, Reg_X11, Reg_X12, Reg_X13, Reg_X14, Reg_X15,
+    Reg_X16, Reg_X17, Reg_X18, Reg_X19, Reg_X20, Reg_X21, Reg_X22, Reg_X23, Reg_X24,
+    Reg_X25, Reg_X26, Reg_X27, Reg_X28, Reg_X29, Reg_X30, Reg_X31,
+    FP = Reg_X29, LR = Reg_X30, SP = Reg_X31,
+}
+
+const N_REGS = 32;
+const N_CALLEE_SAVED_REGS = Reg_X28 - Reg_X19 + 1;
+
+struct AsmInstrBuilder;
+
+struct AsmFunc {
+    name: *Char,
+    builder: *AsmInstrBuilder,
+    frame_size: Int,
+    n_spills: Int,
+    spills: [Reg; N_REGS],
+    spills_size: Int,
+}
+
+
+//== Instruction building
+
+
+func asm_builder_new(): *AsmInstrBuilder;
+
+
+// Data Movement
+
+
+// mov {xd}, {x1}
+func asm_write_mov_r(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg);
+
+// mov {xd}, #{value}
+//
+// movz {xd}, #{value & 0xffff}
+// ...
+// movk {xd}, #{value >> 48}, lsl 48
+func asm_write_mov_i(builder: *AsmInstrBuilder, width: Int, xd: Reg, value: Int);
+
+// ldr {xd}, [{xs}, #{offset}]
+func asm_write_ldrs_ri(builder: *AsmInstrBuilder, width: Int, xd: Reg, xs: Reg, offset: Int);
+
+// ldr {xd}, [{xs}]
+func asm_write_ldrs_r(builder: *AsmInstrBuilder, width: Int, xd: Reg, xs: Reg);
+
+// ldr {xd}, [fp, #{frame_start_from_fp + offset}]
+func asm_write_ldrs_r_fp_from_frame_start(builder: *AsmInstrBuilder, width: Int, xd: Reg, offset: Int);
+
+// ldr {xd}, [sp, #{stack_size + fp_offset}]
+func asm_write_ldrs_r_sp_from_fp(builder: *AsmInstrBuilder, width: Int, xd: Reg, fp_offset: Int);
+
+// str {xs}, [{xd}, #{offset}]
+func asm_write_str_ri(builder: *AsmInstrBuilder, width: Int, xs: Reg, xd: Reg, offset: Int);
+
+// str {xs}, [{xd}]
+func asm_write_str_r(builder: *AsmInstrBuilder, width: Int, xs: Reg, xd: Reg);
+
+// str {xs}, [sp, #{stack_size + fp_offset}]
+func asm_write_str_r_sp_from_fp(builder: *AsmInstrBuilder, width: Int, xs: Reg, fp_offset: Int);
+
+
+// Arithmetic, Logic and Comparison
+
+
+// sxt {xd}, {x1}
+func asm_write_sxt(builder: *AsmInstrBuilder, dst_size: Int, src_size: Int, xd: Reg, x1: Reg);
+
+// {op} {xd}, {x1}, {x2}
+func asm_write_binary_op_rr(builder: *AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg);
+
+// {op} {xd}, {x1}, #{imm}
+func asm_write_binary_op_ri(builder: *AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, imm: Int);
+
+// {op} {xd}, {x1}, {x2}, {x3}
+func asm_write_binary_op_rrr(builder: *AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg, x3: Reg);
+
+// add {xd}, {x1}, #{imm}
+func asm_write_add_ri(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, imm: Int);
+
+// add {xd}, fp, #{frame_start_from_fp + offset}
+func asm_write_add_r_fp_from_frame_start(builder: *AsmInstrBuilder, width: Int, xd: Reg, offset: Int);
+
+// add {xd}, {x1}, {x2}
+func asm_write_add_rr(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, x2: Reg);
+
+// cmp {xd}, {x1}
+func asm_write_cmp_rr(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg);
+
+// cset {xd}, {op}
+func asm_write_cset(builder: *AsmInstrBuilder, width: Int, xd: Reg, op: *Char);
+
+
+// Control Flow
+
+// cbz {xd}, {label}
+func asm_write_cbz(builder: *AsmInstrBuilder, xd: Reg, counter: Int, label_suffix: *Char);
+
+// b {label}
+func asm_write_b(builder: *AsmInstrBuilder, counter: Int, suffix: *Char);
+
+// bl {name}
+func asm_write_bl(builder: *AsmInstrBuilder, name: *Char);
+
+
+// Addressing
+
+
+// addrp {xd}, {name}
+// add {xd}, {xd}, :lo12:{name}
+func asm_write_global_addr(builder: *AsmInstrBuilder, xd: Reg, name: *Char);
+
+// addrp {xd}, :got:{name}
+// ldr {xd}, [{xd}, :got_lo12:{name}]
+func asm_write_got_global_addr(builder: *AsmInstrBuilder, xd: Reg, name: *Char);
+
+// addrp {xd}, str{id}
+// add {xd}, {xd}, :lo12:str{id}
+func asm_write_string_addr(builder: *AsmInstrBuilder, xd: Reg, id: Int);
+
+
+// Miscellaneous
+
+
+// .L{counter}.{suffix}:
+func asm_write_label(builder: *AsmInstrBuilder, counter: Int, suffix: *Char);
+
+// {raw}
+func asm_write_raw(builder: *AsmInstrBuilder, raw: *Char);
+
+// // {comment}
+func asm_write_comment(builder: *AsmInstrBuilder, fmt: *Char, ...args);
+
+// \b // {comment}
+func asm_add_comment_to_last(builder: *AsmInstrBuilder, fmt: *Char, ...args);
+
+
+//== Printing Assembly
+
+
+func asm_print_func(fun: *AsmFunc);
+func asm_print_global(name: *Char, size: Int, align: Int);
+func asm_print_string(id: Int, str: *StringBuffer);
+
+//==============================================================================
 //== codegen.btl
 
 func emit_program(syms: *List);
