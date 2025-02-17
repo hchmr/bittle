@@ -1,10 +1,5 @@
-build/
-__pycache__/
-/out/
-/bin/
-.vscode/
-.idea/
+/compiler/out
+/vscode-bittle/out/
+/.vscode/
 node_modules/
-/vscode-bittle/dist/
-/bittle-parser/dist/
 .DS_Store

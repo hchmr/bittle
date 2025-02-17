@@ -7,7 +7,7 @@
     "customizations": {
         "vscode": {
             "extensions": [
-                "${containerWorkspaceFolder}/out/bittle.vsix",
+                "${containerWorkspaceFolder}/vscode-bittle/out/bittle.vsix",
                 "EditorConfig.EditorConfig"
             ]
         }
@@ -17,6 +17,6 @@
         "bootstrap-compiler": "${containerWorkspaceFolder}/scripts/bootstrap"
     },
     "remoteEnv": {
-        "PATH": "${containerWorkspaceFolder}/out/bootstrap/bin:${containerEnv:PATH}"
+        "PATH": "${containerWorkspaceFolder}/compiler/out/bootstrap/bin:${containerEnv:PATH}"
     }
 }
