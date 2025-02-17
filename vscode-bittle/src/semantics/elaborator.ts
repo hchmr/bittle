@@ -1303,6 +1303,9 @@ export class Elaborator {
                 let argType = mkErrorType();
                 if (argValueNode) {
                     argType = this.elabExprInfer(argValueNode, { typeHint: undefined });
+                    if (argType.kind === TypeKind.RestParam) {
+                        this.reportWarning(argValueNode, `Rest parameter value passed as a variadic argument. This might be a mistake.`);
+                    }
                 }
                 if (sym.isVariadic) {
                     if (argLabelNode) {
