@@ -1472,17 +1472,23 @@ export class Elaborator {
     //==============================================================================
     //== Type checking
 
-    private tryCoerce(node: ExprNode, expected: Type) {
-        if (expected.kind === TypeKind.Int && expected.size && node instanceof LiteralExprNode && node.literalNode instanceof IntLiteralNode) {
-            const bitsRequired = numBinaryDigits(parseInt(node.syntax.text));
-            if (bitsRequired < expected.size) {
-                this.nodeTypeMap.set(node.syntax, expected);
-            }
-        }
+    private canCoerceWithCast(node: ExprNode, target: Type): boolean {
+        return typeImplicitlyConvertible(this.getType(node), target);
+    }
 
-        function numBinaryDigits(n: number): number {
-            return Math.floor(Math.max(0, Math.log2(Math.abs(n))) + 1);
+    private canCoerceToUnion(node: ExprNode, target: Type): boolean {
+        if (target.kind !== TypeKind.Record || target.sym.recordKind !== RecordKind.Union) {
+            return false;
         }
+        const field = target.sym.fields.find(f => typeEq(f.type, this.getType(node)));
+        return !!field;
+    }
+
+    private canCoerce(node: ExprNode, expected: Type) {
+        const actual = this.getType(node);
+        return typeEq(actual, expected)
+            || this.canCoerceWithCast(node, expected)
+            || this.canCoerceToUnion(node, expected);
     }
 
     private unifyTypes(node: ExprNode, e1: ExprNode | Nullish, e2: ExprNode | Nullish): Type {
@@ -1490,32 +1496,31 @@ export class Elaborator {
             return e1 ? this.getType(e1) : e2 ? this.getType(e2) : mkErrorType();
         }
 
-        this.tryCoerce(e1, this.getType(e2));
-        this.tryCoerce(e2, this.getType(e1));
+        let t1 = this.getType(e1);
+        let t2 = this.getType(e2);
 
-        const t1 = this.getType(e1);
-        const t2 = this.getType(e2);
-
-        let err = false;
-        const unified = tryUnifyTypes(t1, t2, () => {
-            err = true;
-        });
-        if (err) {
-            this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+        if (this.canCoerce(e1, t2)) {
+            t1 = t2;
+        }
+        if (this.canCoerce(e2, t1)) {
+            t2 = t1;
         }
 
-        return unified;
+        return tryUnifyTypes(t1, t2, () => {
+            this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+        });
     }
 
     private checkType(node: ExprNode, expected: Type) {
-        this.tryCoerce(node, expected);
-
         const actual = this.getType(node);
+        if (this.canCoerce(node, expected)) {
+            return;
+        }
 
         if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
             return;
         }
-        if (!typeLooseEq(actual, expected) && !typeImplicitlyConvertible(actual, expected)) {
+        if (!typeLooseEq(actual, expected)) {
             this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
         }
     }
