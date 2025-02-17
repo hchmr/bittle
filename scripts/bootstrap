@@ -76,7 +76,7 @@ monitor_command() {
 # Constants
 script_dir=$(dirname "$(realpath "$0")")
 root_dir=$(realpath "$script_dir/..")
-bootstrap_dir="$root_dir/out/bootstrap"
+bootstrap_dir="$root_dir/compiler/out/bootstrap"
 src_dir="$bootstrap_dir/src"
 build_dir="$bootstrap_dir/build"
 cache_dir="$bootstrap_dir/cache"

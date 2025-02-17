@@ -5,7 +5,7 @@ set -euo pipefail
 script_dir=$(dirname "$(realpath "$0")")
 root_dir=$(realpath "$script_dir/..")
 src_dir="$root_dir/vscode-bittle"
-out_dir="$root_dir/out"
+out_dir="$root_dir/vscode-bittle/out"
 
 mkdir -p "$out_dir"
 
