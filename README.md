@@ -13,15 +13,19 @@ Bittle resembles a smaller, more modern C, with the following core features:
 - Data types:
     - Primitives: Booleans and integers.
     - Derived Types: Pointers and fixed-length arrays.
-    - User-Defined Types: Structures and enumerations.
+    - User-Defined Types: Structures, unions and enumerations.
 - Procedural building blocks:
     - Structured control flow with `if`, `while`, `for`, `break`, etc.
-    - Functions
-    - Local and global variables
+    - Procedures.
+    - Local and global variables.
+- Value and reference semantics:
+    - All types are passed by value and returned by value.
+    - Pointers can be used for reference semantics.
+- Other:
+    - Memory is managed manually. Support for dynamic memory allocation using externally provided functions.
+    - Separate compilation with external declarations and header files (for now).
 
-Bittle supports separate compilation for modular programming, using header files to reference symbols from other units (for now).
-
-Bittle can also interoperate with C. Currently, there’s no standard library, so basic functionality like I/O is best handled via libc.
+Bittle can also interoperate with C. Currently, there is no standard library, so basic functionality like I/O must be provided externally.
 
 **Example: "Hello, World!"**
 
@@ -36,7 +40,7 @@ func main(): Int32 {
 
 ### Compiler
 
-The compiler is self-hosting, meaning its compiler is written in Bittle itself. The only supported platform is Arm64 Linux, which was chosen because it is an easily available, reproducible environment to bootstrap the compiler. The compiler is fairly basic, emitting naive Arm assembly code directly to stdout and halting on the first error encountered. Memory management is minimal—no deallocation, but given that the compiler is short-lived, this is fine.
+The language is self-hosting, meaning that the compiler is written in Bittle and can compile itself. More details on bootstrapping are provided below. The only supported platform is Linux on Arm64. The compiler is fairly basic, emitting naive assembly code directly to stdout and halting on the first error. Dynamically allocated memory is handled carelessly, but for a short-lived process like a compiler, memory leaks are of no concern.
 
 ### Language Extension
 
@@ -52,9 +56,9 @@ The language extension for Visual Studio Code provides the following features:
 
 ## Bootstrapping
 
-The initial implementation of the compiler was written in C and then rewritten in Bittle. Subsequent versions of the compiler are written in Bittle and are bootstrapped from the previous version. This is done to avoid having to maintain two separate compilers. This strategy implies a bootstrapping chain of compilers, where each compiler is written in the previous version of the language. The chain is maintained by a bootstrapping script which builds the compiler entirely from source. Previous versions of the compiler are retrieved from the git history of the source repository.
+The bootstrapping chain starts with a minimal compiler written in C. Each subsequent version of the compiler is written in Bittle and compiled using the previous version. The chain is maintained by a bootstrapping script that builds the compiler entirely from source. Previous versions of the compiler are retrieved from the git history of the source repository.
 
-To build from source, you will need a system running Arm64 Linux with the following software installed: GCC, Make, Bash, and Git. The bootstrapping script in the `scripts` directory checks out each revision in the bootstrap chain, builds the compiler using the previous version, and eventually produces a fully bootstrapped executable verified against itself.
+The host platform for the bootstrapping process is Linux on Arm64. A minimal set of build dependencies is required: `gcc`, `glibc`, `make`, `git`, and `bash`. The bootstrapping script in the `scripts` directory checks out each revision in the bootstrap chain, builds the compiler using the previous version, and eventually produces a fully bootstrapped executable verified against itself.
 
 ## Status
 
@@ -64,14 +68,15 @@ To build from source, you will need a system running Arm64 Linux with the follow
 
 - No floating-point support
 - No support for control flow labels
+- No include guards preventing multiple inclusion of header files
 
 **Planned Enhancements:**
 
-- Basic generics with type parameters
+- Initialization of global variables
 - Module system with export/import (replacing header files)
-- A standard library
-- Unions
+- A small standard library
 - Switch statements
+- Basic generics with type parameters
 
 ### Compiler
 
