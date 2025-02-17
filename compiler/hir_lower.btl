@@ -619,7 +619,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         var n_initializers = list_len(initializers);
         for (var i = 0; i < n_initializers; i += 1) {
             var initializer: *FieldInitializer = list_get(initializers, i);
-            var field_index = find_record_field(record_type.sym, initializer.name);
+            var field_index = find_record_field_by_name(record_type.sym, initializer.name);
             var field: *RecordField = list_get(record_type.sym.fields, field_index);
 
             var temp_deref = hir_mk_deref_expr(temp, pos);

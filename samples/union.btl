@@ -27,11 +27,11 @@ func int_result_ok(value: Int): IntResult {
 }
 
 func int_result_err(message: *Char): IntResult {
-    return IntResult {
-        err: ErrIntResult {
-            is_ok: false,
-            message: message
-        }
+    // Note: By not manually wrapping the result in an IntResult constructor,
+    // the compiler will automatically wrap the ErrIntResult in an IntResult.
+    return ErrIntResult {
+        is_ok: false,
+        message: message
     };
 }
 
