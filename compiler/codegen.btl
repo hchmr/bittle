@@ -362,8 +362,8 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         asm_add_comment_to_last(ctx.builder, "temp @ %d", temp.slot_id);
     } else if (e.kind == HirExpr_Member) {
         var e = e as *HirMemberExpr;
-        var fields = (e.left.type as *StructType).sym.fields;
-        var field: *StructField = list_get(fields, e.field_index);
+        var fields = (e.left.type as *RecordType).sym.fields;
+        var field: *RecordField = list_get(fields, e.field_index);
 
         asm_lower_expr_addr(ctx, e.left, xd);
         // add {xd}, {xd}, #{offset}

@@ -66,7 +66,7 @@ func parse_string(s: *Char): *StringBuffer;
 //== type.btl
 
 struct Sym;
-struct StructSym;
+struct RecordSym;
 struct EnumSym;
 
 enum TypeKind {
@@ -76,7 +76,7 @@ enum TypeKind {
     Type_Ptr,
     Type_Arr,
     Type_Enum,
-    Type_Struct,
+    Type_Record,
     Type_Never,
     Type_RestParam,
 }
@@ -108,8 +108,8 @@ struct EnumType: Type {
     sym: *EnumSym,
 }
 
-struct StructType: Type {
-    sym: *StructSym,
+struct RecordType: Type {
+    sym: *RecordSym,
 }
 
 struct NeverType: Type {
@@ -123,7 +123,7 @@ func mk_int_type(size: Int): *IntType;
 func mk_ptr_type(pointee: *Type): *PtrType;
 func mk_array_type(elem: *Type, size: Int): *ArrType;
 func mk_enum_type(sym: *EnumSym): *EnumType;
-func mk_struct_type(sym: *StructSym): *StructType;
+func mk_record_type(sym: *RecordSym): *RecordType;
 func mk_rest_param_type(): *Type;
 
 func type_eq(t1: *Type, t2: *Type): Bool;
@@ -147,7 +147,7 @@ struct Stmt;
 
 enum SymKind {
     Sym_Enum,
-    Sym_Struct,
+    Sym_Record,
     Sym_Global,
     Sym_Const,
     Sym_Func,
@@ -159,7 +159,7 @@ struct Sym {
     name: *Char,
 }
 
-struct StructField {
+struct RecordField {
     name: *Char,
     type: *Type,
     offset: Int,
@@ -169,9 +169,10 @@ struct EnumSym: Sym {
     size: Int,
 }
 
-struct StructSym: Sym {
-    base: *StructSym,
-    fields: *List, // List<StructField>
+struct RecordSym: Sym {
+    is_union: Bool,
+    base: *RecordSym,
+    fields: *List, // List<RecordField>
     unpadded_size: Int,
     align: Int,
     is_defined: Bool,
@@ -210,7 +211,7 @@ struct LocalSym: Sym {
 }
 
 func sym_is_defined(sym: *Sym): Bool;
-func find_struct_field(sym: *Sym, name: *Char): Int;
+func find_record_field(sym: *Sym, name: *Char): Int;
 
 //==============================================================================
 //== tok.btl
@@ -242,6 +243,7 @@ enum TokKind {
     Tok_Sizeof,
     Tok_Struct,
     Tok_True,
+    Tok_Union,
     Tok_Var,
     Tok_While,
     // Symbols
@@ -379,7 +381,7 @@ enum ExprKind {
     Expr_Binary,
     Expr_Ternary,
     Expr_Cast,
-    Expr_Struct,
+    Expr_Record,
 }
 
 struct Expr {
@@ -456,7 +458,7 @@ struct FieldInitializer {
     expr: *Expr,
 }
 
-struct StructExpr: Expr {
+struct RecordExpr: Expr {
     name: *Char,
     fields: *List, // List<FieldInit>
 }
@@ -520,7 +522,7 @@ struct ExprStmt: Stmt {
 // Decl
 
 enum DeclKind {
-    Decl_Struct,
+    Decl_Record,
     Decl_Func,
     Decl_Enum,
     Decl_Const,
@@ -532,16 +534,17 @@ struct Decl {
     pos: Pos,
 }
 
-struct StructFieldDecl {
+struct RecordFieldDecl {
     pos: Pos,
     name: *Char,
     type: *TypeExpr,
 }
 
-struct StructDecl: Decl {
+struct RecordDecl: Decl {
+    is_union: Bool,
     name: *Char,
     base: *TypeExpr,
-    fields: *List, // List<StructFieldDecl>
+    fields: *List, // List<RecordFieldDecl>
 }
 
 struct FuncParamDecl {

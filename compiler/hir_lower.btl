@@ -548,7 +548,7 @@ func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
 }
 
 // Evaluate and discard the initializers
-func lower_struct_expr(ctx: *Context, expr: *StructExpr): *HirExpr {
+func lower_record_expr(ctx: *Context, expr: *RecordExpr): *HirExpr {
     var sequence = mk_skip_stmt(&expr.pos);
     var n_initializers = list_len(expr.fields);
     for (var i = 0; i < n_initializers; i += 1) {
@@ -582,8 +582,8 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
         return lower_ternary_expr(ctx, expr as *TernaryExpr);
     } else if (expr.kind == Expr_Cast) {
         return lower_cast_expr(ctx, expr as *CastExpr);
-    } else if (expr.kind == Expr_Struct) {
-        return lower_struct_expr(ctx, expr as *StructExpr);
+    } else if (expr.kind == Expr_Record) {
+        return lower_record_expr(ctx, expr as *RecordExpr);
     } else {
         unreachable("lower_expr");
     }
@@ -592,7 +592,7 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
 func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
     var type = dst.type;
 
-    if (ast_src.kind == Expr_Struct) {
+    if (ast_src.kind == Expr_Record) {
         /*
             Desugar
                 x = Pair { value: 1, y: List { value: 2, next: null } }
@@ -605,8 +605,8 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
                 (*t2).next = null
         */
 
-        var struct_type = ast_src.type as *StructType;
-        var initializers = (ast_src as *StructExpr).fields;
+        var record_type = ast_src.type as *RecordType;
+        var initializers = (ast_src as *RecordExpr).fields;
 
         var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
 
@@ -619,8 +619,8 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
         var n_initializers = list_len(initializers);
         for (var i = 0; i < n_initializers; i += 1) {
             var initializer: *FieldInitializer = list_get(initializers, i);
-            var field_index = find_struct_field(struct_type.sym, initializer.name);
-            var field: *StructField = list_get(struct_type.sym.fields, field_index);
+            var field_index = find_record_field(record_type.sym, initializer.name);
+            var field: *RecordField = list_get(record_type.sym.fields, field_index);
 
             var temp_deref = hir_mk_deref_expr(temp, pos);
             var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);

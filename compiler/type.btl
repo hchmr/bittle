@@ -42,9 +42,9 @@ func mk_enum_type(sym: *EnumSym): *EnumType {
     return type;
 }
 
-func mk_struct_type(sym: *StructSym): *StructType {
-    var type: *StructType = calloc(1, sizeof(StructType));
-    *type = StructType { kind: Type_Struct, sym };
+func mk_record_type(sym: *RecordSym): *RecordType {
+    var type: *RecordType = calloc(1, sizeof(RecordType));
+    *type = RecordType { kind: Type_Record, sym };
     return type;
 }
 
@@ -74,28 +74,28 @@ func type_eq(t1: *Type, t2: *Type): Bool {
         var t1 = t1 as *EnumType;
         var t2 = t2 as *EnumType;
         return t1.sym == t2.sym;
-    } else if (t1.kind == Type_Struct) {
-        var t1 = t1 as *StructType;
-        var t2 = t2 as *StructType;
+    } else if (t1.kind == Type_Record) {
+        var t1 = t1 as *RecordType;
+        var t2 = t2 as *RecordType;
         return t1.sym == t2.sym;
     }
     return true;
 }
 
-func struct_le(s1: *StructSym, s2: *StructSym): Bool {
+func record_le(s1: *RecordSym, s2: *RecordSym): Bool {
     if (s1 == s2) {
         return true;
     }
     if (!s1.base) {
         return false;
     }
-    return struct_le(s1.base, s2);
+    return record_le(s1.base, s2);
 }
 
 func pointee_type_le(t1: *Type, t2: *Type): Bool {
     return type_eq(t1, t2)
         || t1.kind == Type_Void
-        || t1.kind == Type_Struct && t2.kind == Type_Struct && struct_le((t1 as *StructType).sym, (t2 as *StructType).sym);
+        || t1.kind == Type_Record && t2.kind == Type_Record && record_le((t1 as *RecordType).sym, (t2 as *RecordType).sym);
 }
 
 // Returns whether the first type is implicitly convertible to the second type.
@@ -153,8 +153,8 @@ func type_size(type: *Type): Int {
     } else if (type.kind == Type_Enum) {
         var type = type as *EnumType;
         return type_size(mk_int_type(type.sym.size));
-    } else if (type.kind == Type_Struct) {
-        var type = type as *StructType;
+    } else if (type.kind == Type_Record) {
+        var type = type as *RecordType;
         return list_len(type.sym.fields) == 0 ? -1 : align_up(type.sym.unpadded_size, type.sym.align);
     } else if (type.kind == Type_Never) {
         return -1;
@@ -166,8 +166,8 @@ func type_size(type: *Type): Int {
 }
 
 func type_align(type: *Type): Int {
-    if (type.kind == Type_Struct) {
-        var type = type as *StructType;
+    if (type.kind == Type_Record) {
+        var type = type as *RecordType;
         return list_len(type.sym.fields) == 0 ? -1 : type.sym.align;
     } else if (type.kind == Type_RestParam) {
         return 8;
@@ -185,7 +185,7 @@ func is_scalar(type: *Type): Bool {
 
 func is_composite(type: *Type): Bool {
     return type.kind == Type_Arr
-        || type.kind == Type_Struct
+        || type.kind == Type_Record
         || type.kind == Type_RestParam;
 }
 
@@ -215,8 +215,8 @@ func sb_pretty_type(sb: *StringBuffer, type: *Type) {
     } else if (type.kind == Type_Enum) {
         var sym = (type as *EnumType).sym;
         sb_printf(sb, "%s", sym.name);
-    } else if (type.kind == Type_Struct) {
-        var sym = (type as *StructType).sym;
+    } else if (type.kind == Type_Record) {
+        var sym = (type as *RecordType).sym;
         sb_printf(sb, "%s", sym.name);
     } else if (type.kind == Type_Never) {
         sb_printf(sb, "!");

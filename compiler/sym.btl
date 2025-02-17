@@ -1,8 +1,8 @@
 include "bittle.btls";
 
 func sym_is_defined(sym: *Sym): Bool {
-    if (sym.kind == Sym_Struct) {
-        return (sym as *StructSym).is_defined;
+    if (sym.kind == Sym_Record) {
+        return (sym as *RecordSym).is_defined;
     } else if (sym.kind == Sym_Global) {
         return (sym as *GlobalSym).is_defined;
     } else if (sym.kind == Sym_Func) {
@@ -12,13 +12,13 @@ func sym_is_defined(sym: *Sym): Bool {
     }
 }
 
-func find_struct_field(sym: *Sym, name: *Char): Int {
-    var fields = (sym as *StructSym).fields;
+func find_record_field(sym: *Sym, name: *Char): Int {
+    var fields = (sym as *RecordSym).fields;
     if (!fields) {
         return -1;
     }
     for (var i = 0; i < list_len(fields); i += 1) {
-        var field: *StructField = list_get(fields, i);
+        var field: *RecordField = list_get(fields, i);
         if (str_eq(field.name, name)) {
             return i;
         }
