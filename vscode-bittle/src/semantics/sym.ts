@@ -1,10 +1,10 @@
 import { SyntaxNode } from '../syntax';
 import { unreachable } from '../utils';
-import { mkEnumType, mkStructType, prettyType, Type } from './type';
+import { mkEnumType, mkRecordType, prettyType, Type } from './type';
 
 export enum SymKind {
-    Struct = 'Struct',
-    StructField = 'StructField',
+    Record = 'Record',
+    RecordField = 'RecordField',
     Enum = 'Enum',
     Func = 'Func',
     FuncParam = 'FuncParam',
@@ -13,9 +13,14 @@ export enum SymKind {
     Local = 'Local',
 }
 
+export enum RecordKind {
+    Struct = 'struct',
+    Union = 'union',
+}
+
 export type Sym =
-    | StructSym
-    | StructFieldSym
+    | RecordSym
+    | RecordFieldSym
     | EnumSym
     | FuncSym
     | FuncParamSym
@@ -35,15 +40,16 @@ export type EnumSym = SymBase & {
     size: number;
 };
 
-export type StructSym = SymBase & {
-    kind: SymKind.Struct;
-    base: StructSym | undefined;
-    fields: StructFieldSym[];
+export type RecordSym = SymBase & {
+    kind: SymKind.Record;
+    recordKind: RecordKind;
+    base: RecordSym | undefined;
+    fields: RecordFieldSym[];
     isDefined: boolean;
 };
 
-export type StructFieldSym = SymBase & {
-    kind: SymKind.StructField;
+export type RecordFieldSym = SymBase & {
+    kind: SymKind.RecordField;
     type: Type;
 };
 
@@ -85,7 +91,7 @@ export type Origin = {
 };
 
 export function isDefined(sym: Sym): boolean {
-    if (sym.kind === SymKind.Struct || sym.kind === SymKind.Func || sym.kind === SymKind.Global) {
+    if (sym.kind === SymKind.Record || sym.kind === SymKind.Func || sym.kind === SymKind.Global) {
         return sym.isDefined;
     } else {
         return true;
@@ -93,9 +99,9 @@ export function isDefined(sym: Sym): boolean {
 }
 
 export function symRelatedType(sym: Sym): Type {
-    if (sym.kind === SymKind.Struct) {
-        return mkStructType(sym);
-    } else if (sym.kind === SymKind.StructField) {
+    if (sym.kind === SymKind.Record) {
+        return mkRecordType(sym);
+    } else if (sym.kind === SymKind.RecordField) {
         return sym.type;
     } else if (sym.kind === SymKind.Enum) {
         return mkEnumType(sym);
@@ -117,9 +123,10 @@ export function symRelatedType(sym: Sym): Type {
 export function prettySym(sym: Sym): string {
     if (sym.kind === SymKind.Enum) {
         return `enum ${sym.name}`;
-    } else if (sym.kind === SymKind.Struct) {
-        return `struct ${sym.name}${prettyBase(sym)}`;
-    } else if (sym.kind === SymKind.StructField) {
+    } else if (sym.kind === SymKind.Record) {
+        const keyword = sym.recordKind === RecordKind.Struct ? 'struct' : 'union';
+        return `${keyword} ${sym.name}${prettyBase(sym)}`;
+    } else if (sym.kind === SymKind.RecordField) {
         return `(field) ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Func) {
         return `func ${prettyFuncSym(sym)}`;
@@ -144,11 +151,11 @@ export function prettyFuncSym(sym: FuncSym): string {
     return `${sym.name}(${params}${dots}): ${returnType}`;
 }
 
-export function prettyStructWithFields(sym: StructSym): string {
+export function prettyRecordWithFields(sym: RecordSym): string {
     const fields = sym.fields.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ');
     return `${sym.name} { ${fields} }`;
 }
 
-function prettyBase(sym: StructSym) {
+function prettyBase(sym: RecordSym) {
     return sym.base ? `: ${sym.base.name}` : '';
 }

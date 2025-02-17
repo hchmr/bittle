@@ -1,7 +1,7 @@
 import assert from 'assert';
 import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
-import { FuncParamSym, isDefined, prettySym, StructFieldSym, Sym, SymKind } from '../semantics/sym';
+import { FuncParamSym, isDefined, prettySym, RecordFieldSym, RecordKind, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
@@ -72,25 +72,25 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         // Infer type
-        let structType = this.semanticsService.inferType(filePath, leftNode);
-        if (structType.kind === TypeKind.Ptr) {
-            structType = structType.pointeeType;
+        let recordType = this.semanticsService.inferType(filePath, leftNode);
+        if (recordType.kind === TypeKind.Ptr) {
+            recordType = recordType.pointeeType;
         }
-        if (structType.kind !== TypeKind.Struct) {
+        if (recordType.kind !== TypeKind.Record) {
             return;
         }
 
         // Get fields
-        const structSym = this.semanticsService.getSymbol(filePath, structType.sym.qualifiedName);
-        if (structSym?.kind !== SymKind.Struct) {
+        const recordSym = this.semanticsService.getSymbol(filePath, recordType.sym.qualifiedName);
+        if (recordSym?.kind !== SymKind.Record) {
             return;
         }
-        if (!structSym.isDefined) {
+        if (!recordSym.isDefined) {
             return;
         }
 
         // Filter fields
-        const results = fuzzySearch(searchText, structSym.fields, { key: 'name' });
+        const results = fuzzySearch(searchText, recordSym.fields, { key: 'name' });
         if (results.length === 0) {
             return;
         }
@@ -117,26 +117,32 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         if (node.parent?.type !== NodeTypes.FieldInitList) {
             return;
         }
-        const structExprNode = node.parent.closest(NodeTypes.StructExpr);
-        if (!structExprNode) {
+        const recordExprNode = node.parent.closest(NodeTypes.RecordExpr);
+        if (!recordExprNode) {
             return;
         }
-        const structNameNode = structExprNode.childForFieldName('name');
-        if (!structNameNode) {
+        const recordNameNode = recordExprNode.childForFieldName('name');
+        if (!recordNameNode) {
             return;
         }
-        const structSym = this.semanticsService.resolveUnambiguousSymbol(filePath, structNameNode);
-        if (!structSym || structSym.kind !== SymKind.Struct) {
+        const recordSym = this.semanticsService.resolveUnambiguousSymbol(filePath, recordNameNode);
+        if (!recordSym || recordSym.kind !== SymKind.Record) {
             return;
         }
 
-        const usedNames = stream(structExprNode.childForFieldName('fields')!.children)
-            .filter(x => x.type === NodeTypes.FieldInit)
-            .filterMap(getFieldName)
-            .filter(x => x !== searchText)
-            .toSet();
 
-        const candidates = structSym.fields.filter(f => !usedNames.has(f.name));
+        const usedNames = stream(recordExprNode.childForFieldName('fields')!.children)
+                .filter(x => x.type === NodeTypes.FieldInit)
+                .filterMap(getFieldName)
+                .filter(x => x !== searchText)
+                .toSet();
+
+        let candidates: RecordFieldSym[];
+        if (recordSym.recordKind === RecordKind.Struct) {
+            candidates = recordSym.fields.filter(f => !usedNames.has(f.name));
+        } else {
+            candidates = usedNames.size === 0 ? recordSym.fields : [];
+        }
 
         return fuzzySearch(searchText, candidates, { key: 'name' })
             .map(toCompletionItem);
@@ -223,7 +229,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             switch (nodeType) {
                 case TopLevelNodeTypes.Func:
                 case TopLevelNodeTypes.Global:
-                case TopLevelNodeTypes.Struct:
+                case TopLevelNodeTypes.Record:
                     return true;
                 default:
                     return false;
@@ -303,8 +309,8 @@ function toDefinitionCompletionItem(sym: Sym): vscode.CompletionItem {
     let insertText;
     if (sym.kind === SymKind.Func) {
         insertText = (prettySym(sym) + ' {\n\t$1\n}').replace(/^func /, '');
-    } else if (sym.kind === SymKind.Struct) {
-        insertText = (prettySym(sym) + ' {\n\t$1\n}').replace(/^struct /, '');
+    } else if (sym.kind === SymKind.Record) {
+        insertText = (prettySym(sym) + ' {\n\t$1\n}').replace(/^(struct|union) /, '');
     } else if (sym.kind === SymKind.Global) {
         insertText = (prettySym(sym) + ';').replace(/^extern var /, '');
     } else {
@@ -320,9 +326,9 @@ function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
             return vscode.CompletionItemKind.Function;
         case SymKind.Enum:
             return vscode.CompletionItemKind.Enum;
-        case SymKind.Struct:
+        case SymKind.Record:
             return vscode.CompletionItemKind.Struct;
-        case SymKind.StructField:
+        case SymKind.RecordField:
             return vscode.CompletionItemKind.Field;
         case SymKind.Global:
             return vscode.CompletionItemKind.Variable;

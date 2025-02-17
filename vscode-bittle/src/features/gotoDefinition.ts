@@ -171,7 +171,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
         if (type.kind === TypeKind.Ptr) {
             type = type.pointeeType;
         }
-        if (type.kind !== TypeKind.Struct) {
+        if (type.kind !== TypeKind.Record) {
             return;
         }
         return this.semanticsService.getSymbol(filePath, type.sym.qualifiedName);

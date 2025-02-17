@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { FuncParamSym, FuncSym, prettyFuncSym, prettyStructWithFields, StructFieldSym, StructSym, SymKind } from '../semantics/sym';
+import { FuncParamSym, FuncSym, prettyFuncSym, prettyRecordWithFields, RecordFieldSym, RecordSym, SymKind } from '../semantics/sym';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { Point, SyntaxNode } from '../syntax';
@@ -89,33 +89,33 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
         position: Point,
         fieldInitListNode: SyntaxNode,
     ) {
-        const structNode = fieldInitListNode.closest(NodeTypes.StructExpr);
-        if (!structNode) {
+        const recordNode = fieldInitListNode.closest(NodeTypes.RecordExpr);
+        if (!recordNode) {
             return;
         }
 
-        const structNameNode = structNode.childForFieldName('name');
-        if (!structNameNode) {
+        const recordNameNode = recordNode.childForFieldName('name');
+        if (!recordNameNode) {
             return;
         }
 
-        const structSym = this.semanticsService.resolveUnambiguousSymbol(filePath, structNameNode);
-        if (!structSym || structSym.kind !== SymKind.Struct) {
+        const recordSym = this.semanticsService.resolveUnambiguousSymbol(filePath, recordNameNode);
+        if (!recordSym || recordSym.kind !== SymKind.Record) {
             return;
         }
 
-        const fieldListNodes = structNode.childForFieldName('fields')!.children;
+        const fieldListNodes = recordNode.childForFieldName('fields')!.children;
         const fieldInitNodes = fieldListNodes.filter((node) => node.type === NodeTypes.FieldInit);
         const fieldIndex = countPrecedingCommas(fieldListNodes, position);
         const fieldInitNode = fieldInitNodes[fieldIndex];
-        const fieldName = getFieldName(fieldInitNode) ?? nextUninitializedFieldName(structSym, fieldListNodes);
+        const fieldName = (fieldInitNode ? getFieldName(fieldInitNode) : undefined) ?? nextUninitializedFieldName(recordSym, fieldListNodes);
         if (!fieldName) {
             return;
         }
 
-        return createSignatureHelpForStruct(
-            structSym,
-            structSym.fields,
+        return createSignatureHelpForRecord(
+            recordSym,
+            recordSym.fields,
             fieldName,
         );
 
@@ -133,11 +133,14 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return undefined;
         }
 
-        function nextUninitializedFieldName(structSym: StructSym, fieldInitNodes: SyntaxNode[]): string | undefined {
+        function nextUninitializedFieldName(recordSym: RecordSym, fieldInitNodes: SyntaxNode[]): string | undefined {
             const usedNames = stream(fieldInitNodes)
                 .filterMap(getFieldName)
                 .toSet();
-            return structSym.fields
+            if (recordSym.recordKind === 'union' && usedNames.size > 0) {
+                return undefined;
+            }
+            return recordSym.fields
                 .map(x => x.name)
                 .find(x => !usedNames.has(x));
         }
@@ -169,12 +172,12 @@ function createSignatureHelpForFunc(
     return signatureHelp;
 }
 
-function createSignatureHelpForStruct(
-    sym: StructSym,
-    fields: StructFieldSym[],
+function createSignatureHelpForRecord(
+    sym: RecordSym,
+    fields: RecordFieldSym[],
     fieldIndex: string,
 ): vscode.SignatureHelp {
-    const signature = new vscode.SignatureInformation(prettyStructWithFields(sym));
+    const signature = new vscode.SignatureInformation(prettyRecordWithFields(sym));
     signature.parameters = fields.map((param) => new vscode.ParameterInformation(param.name));
 
     const signatureHelp = new vscode.SignatureHelp();
