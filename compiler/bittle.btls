@@ -211,7 +211,8 @@ struct LocalSym: Sym {
 }
 
 func sym_is_defined(sym: *Sym): Bool;
-func find_record_field(sym: *Sym, name: *Char): Int;
+func find_record_field_by_name(sym: *Sym, name: *Char): Int;
+func find_record_field_by_type(sym: *Sym, type: *Type): Int;
 
 //==============================================================================
 //== tok.btl

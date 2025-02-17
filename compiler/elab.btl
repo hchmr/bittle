@@ -249,21 +249,78 @@ func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
 //==============================================================================
 //== Type checking
 
-func try_coerce(e: *Expr, target: *Type): *Expr {
-    if (type_eq(e.type, target)) {
-        // Ok
-    } else if (type_implicitly_convertible(e.type, target)) {
-        var cast: *CastExpr = calloc(1, sizeof(CastExpr));
-        *cast = CastExpr { kind: Expr_Cast, pos: e.pos, type: target, expr: e, type_expr: null };
-        e = cast;
-    } else {
-        // Err
+func try_coerce_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
+    if (!type_implicitly_convertible(e.type, target)) {
+        return false;
     }
-    return e;
+    var cast: *CastExpr = calloc(1, sizeof(CastExpr));
+    *cast = CastExpr {
+        kind: Expr_Cast,
+        pos: e.pos,
+        type: target,
+        expr: e,
+        type_expr: null
+    };
+    *out = cast;
+    return true;
+}
+
+/*
+    Desugar
+        x: MyUnion = 123
+    to
+        x: MyUnion = MyUnion { field: 123 }
+*/
+func try_coerce_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
+    if (target.kind != Type_Record) {
+        return false;
+    }
+
+    var target = target as *RecordType;
+    if (!target.sym.is_union) {
+        return false;
+    }
+
+    var sym = target.sym;
+
+    var field_index = find_record_field_by_type(sym, e.type);
+    if (field_index == -1) {
+        return false;
+    }
+
+    var field: *RecordField = list_get(sym.fields, field_index);
+
+    var field_init: *FieldInitializer = calloc(1, sizeof(FieldInitializer));
+    *field_init = FieldInitializer {
+        pos: e.pos,
+        name: field.name,
+        expr: e
+    };
+
+    var field_inits: *List = list_new();
+    list_push(field_inits, field_init);
+
+    var record_expr: *RecordExpr = calloc(1, sizeof(RecordExpr));
+    *record_expr = RecordExpr {
+        kind: Expr_Record,
+        pos: e.pos,
+        type: target,
+        name: sym.name,
+        fields: field_inits,
+    };
+    *out = record_expr;
+
+    return true;
+}
+
+func try_coerce(e: *Expr, target: *Type, out: **Expr): Bool {
+    return type_eq(e.type, target)
+        || try_coerce_with_cast(e, target, out)
+        || try_coerce_to_union(e, target, out);
 }
 
 func check_type(e: **Expr, expected: *Type) {
-    *e = try_coerce((*e), expected);
+    try_coerce((*e), expected, e);
     if (expected.kind == Type_Ptr && (expected as *PtrType).pointee.kind == Type_Void && (*e).type.kind == Type_Ptr) {
         return;
     }
@@ -283,8 +340,8 @@ func check_type_bool(e: **Expr) {
 }
 
 func unify_types(e1: **Expr, e2: **Expr) {
-    *e2 = try_coerce(*e2, (*e1).type);
-    *e1 = try_coerce(*e1, (*e2).type);
+    try_coerce(*e2, (*e1).type, e2);
+    try_coerce(*e1, (*e2).type, e1);
     check_type(e2, (*e1).type);
 }
 
@@ -579,7 +636,7 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
     var left_type = left_type as *RecordType;
 
     var record_sym = left_type.sym;
-    var field_index = find_record_field(record_sym, field_name);
+    var field_index = find_record_field_by_name(record_sym, field_name);
     if (field_index == -1) {
         die_at(&expr.pos, "Unknown field");
     }
@@ -732,7 +789,7 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     for (var i = 0; i < n_initializers; i += 1) {
         var initializer: *FieldInitializer = list_get(initializers, i);
         var field_name = initializer.name;
-        var field_index = find_record_field(sym, field_name);
+        var field_index = find_record_field_by_name(sym, field_name);
         if (field_index == -1) {
             die_at(&initializer.pos, "Unknown field");
         }
@@ -984,7 +1041,7 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
 func add_record_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
     var field_name = field_decl.name;
 
-    var existing_index = find_record_field(sym, field_name);
+    var existing_index = find_record_field_by_name(sym, field_name);
     if (existing_index != -1) {
         die_at(&field_decl.pos, "Duplicate field");
     }
