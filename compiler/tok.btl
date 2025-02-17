@@ -31,6 +31,7 @@ func pretty_tok_kind(kind: Int32): *Char {
         : kind == Tok_Sizeof ? "'sizeof'"
         : kind == Tok_Struct ? "'struct'"
         : kind == Tok_True ? "'true'"
+        : kind == Tok_Union ? "'union'"
         : kind == Tok_Var ? "'var'"
         : kind == Tok_While ? "'while'"
         // Symbols

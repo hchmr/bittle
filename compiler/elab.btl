@@ -95,26 +95,36 @@ func define_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
     return sym;
 }
 
-func declare_struct(
+func declare_record(
     ctx: *ElabCtx,
     pos: *Pos,
+    is_union: Bool,
     name: *Char,
     is_definition: Bool
-): *StructSym {
+): *RecordSym {
     var sym = try_get_existing(ctx, name);
     if (sym) {
-        if (sym.kind != Sym_Struct) {
+        if (sym.kind != Sym_Record) {
             die_at(pos, "redeclared as different kind of symbol");
         }
         if (sym_is_defined(sym) && is_definition) {
             die_at(pos, "redefinition of existing symbol");
         }
     } else {
-        sym = calloc(1, sizeof(StructSym)) as *StructSym;
-        *sym = Sym { kind: Sym_Struct, name };
+        sym = calloc(1, sizeof(RecordSym)) as *RecordSym;
+        *(sym as *RecordSym) = RecordSym {
+            kind: Sym_Record,
+            is_union,
+            name,
+            base: null,
+            fields: null,
+            unpadded_size: 0,
+            align: 0,
+            is_defined: false,
+        };
         add_sym(ctx, sym);
     }
-    return sym as *StructSym;
+    return sym as *RecordSym;
 }
 
 func params_eq(xs: *List, ys: *List): Bool {
@@ -305,8 +315,8 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
             }
             if (sym.kind == Sym_Enum) {
                 return mk_enum_type(sym as *EnumSym);
-            } else if (sym.kind == Sym_Struct) {
-                return mk_struct_type(sym as *StructSym);
+            } else if (sym.kind == Sym_Record) {
+                return mk_record_type(sym as *RecordSym);
             } else {
                 die_at(&type_expr.pos, "Expected a type");
             }
@@ -563,18 +573,18 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
     if (left_type.kind == Type_Ptr) {
         left_type = (left_type as *PtrType).pointee;
     }
-    if (left_type.kind != Type_Struct) {
-        die_at(&left.pos, "Expected a struct");
+    if (left_type.kind != Type_Record) {
+        die_at(&left.pos, "Expected a record");
     }
-    var left_type = left_type as *StructType;
+    var left_type = left_type as *RecordType;
 
-    var struct_sym = left_type.sym;
-    var field_index = find_struct_field(struct_sym, field_name);
+    var record_sym = left_type.sym;
+    var field_index = find_record_field(record_sym, field_name);
     if (field_index == -1) {
         die_at(&expr.pos, "Unknown field");
     }
 
-    var field: *StructField = list_get(struct_sym.fields, field_index);
+    var field: *RecordField = list_get(record_sym.fields, field_index);
     expr.resolved_field = field_index;
     expr.type = field.type;
 }
@@ -698,17 +708,17 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     expr.type = target_type;
 }
 
-func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
+func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     var sym = lookup(ctx, expr.name);
     if (!sym) {
-        die_at(&expr.pos, "Unknown struct type");
+        die_at(&expr.pos, "Unknown record type");
     }
-    if (sym.kind != Sym_Struct) {
-        die_at(&expr.pos, "Expected a struct type");
+    if (sym.kind != Sym_Record) {
+        die_at(&expr.pos, "Expected a record type");
     }
-    var sym = sym as *StructSym;
+    var sym = sym as *RecordSym;
     if (!sym.is_defined) {
-        die_at(&expr.pos, "Struct has incomplete type");
+        die_at(&expr.pos, "Record has incomplete type");
     }
 
     var fields = sym.fields;
@@ -722,11 +732,11 @@ func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
     for (var i = 0; i < n_initializers; i += 1) {
         var initializer: *FieldInitializer = list_get(initializers, i);
         var field_name = initializer.name;
-        var field_index = find_struct_field(sym, field_name);
+        var field_index = find_record_field(sym, field_name);
         if (field_index == -1) {
             die_at(&initializer.pos, "Unknown field");
         }
-        var field: *StructField = list_get(fields, field_index);
+        var field: *RecordField = list_get(fields, field_index);
 
         if (is_initialized[field_index]) {
             die_at(&initializer.pos, "Field is already initialized");
@@ -735,16 +745,24 @@ func elab_struct_expr(ctx: *ElabCtx, expr: *StructExpr, type_hint: *Type) {
         elab_expr_expect(ctx, &initializer.expr, field.type);
     }
 
-    for (var i = 0; i < n_fields; i += 1) {
-        if (!is_initialized[i]) {
-            var field: *StructField = list_get(fields, i);
-            die_at(&expr.pos, "Field '%s' is not initialized.\n", field.name);
+    if (!sym.is_union) {
+        for (var i = 0; i < n_fields; i += 1) {
+            if (!is_initialized[i]) {
+                var field: *RecordField = list_get(fields, i);
+                die_at(&expr.pos, "Field '%s' is not initialized.", field.name);
+            }
+        }
+    } else {
+        if (n_initializers == 0) {
+            die_at(&expr.pos, "No field is initialized.");
+        } else if (n_initializers > 1) {
+            die_at(&expr.pos, "Only one field can be initialized in a union");
         }
     }
 
     free(is_initialized);
 
-    expr.type = mk_struct_type(sym);
+    expr.type = mk_record_type(sym);
 }
 
 func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
@@ -770,8 +788,8 @@ func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
         elab_ternary_expr(ctx, expr as *TernaryExpr, type_hint);
     } else if (expr.kind == Expr_Cast) {
         elab_cast_expr(ctx, expr as *CastExpr);
-    } else if (expr.kind == Expr_Struct) {
-        elab_struct_expr(ctx, expr as *StructExpr, type_hint);
+    } else if (expr.kind == Expr_Record) {
+        elab_record_expr(ctx, expr as *RecordExpr, type_hint);
     } else {
         unreachable("elab_expr_infer");
     }
@@ -963,10 +981,10 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     }
 }
 
-func add_struct_field(ctx: *ElabCtx, sym: *StructSym, field_decl: *StructFieldDecl) {
+func add_record_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
     var field_name = field_decl.name;
 
-    var existing_index = find_struct_field(sym, field_name);
+    var existing_index = find_record_field(sym, field_name);
     if (existing_index != -1) {
         die_at(&field_decl.pos, "Duplicate field");
     }
@@ -977,44 +995,54 @@ func add_struct_field(ctx: *ElabCtx, sym: *StructSym, field_decl: *StructFieldDe
     }
     var field_size = type_size(field_type);
     var field_align = type_align(field_type);
-    var field_offset = align_up(sym.unpadded_size, field_align);
+    var field_offset = sym.is_union
+        ? 0
+        : align_up(sym.unpadded_size, field_align);
 
-    var field: *StructField = calloc(1, sizeof(StructField));
-    *field = StructField {
+    var field: *RecordField = calloc(1, sizeof(RecordField));
+    *field = RecordField {
         name: field_name,
         type: field_type,
         offset: field_offset,
     };
 
     list_push(sym.fields, field);
-    sym.unpadded_size = field_offset + field_size;
+    if (sym.is_union) {
+        sym.unpadded_size = int_max(sym.unpadded_size, field_size);
+    } else {
+        sym.unpadded_size = field_offset + field_size;
+    }
     sym.align = int_max(sym.align, field_align);
 }
 
-func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym) {
+func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
     var base_type = eval_type(ctx, base);
-    if (base_type.kind != Type_Struct) {
-        die_at(&base.pos, "Expected a struct type");
+    if (base_type.kind != Type_Record) {
+        die_at(&base.pos, "Expected a record type");
     }
-    var baseSym = (base_type as *StructType).sym;
-    if (baseSym == struct_sym) {
-        die_at(&base.pos, "Struct cannot inherit from itself");
+    var baseSym = (base_type as *RecordType).sym;
+    var base_fields = baseSym.fields;
+    if (baseSym.is_union != record_sym.is_union && list_len(base_fields) != 1) {
+        die_at(&base.pos, "Base type must be the same kind of record or have exactly one field");
+    }
+    if (baseSym == record_sym) {
+        die_at(&base.pos, "Record cannot inherit from itself");
     }
     if (!baseSym.is_defined) {
         die_at(&base.pos, "Base has incomplete type");
     }
-    var base_fields = baseSym.fields;
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
-        var field: *StructField = list_get(base_fields, i);
-        var copy: *StructField = calloc(1, sizeof(StructField));
+        var field: *RecordField = list_get(base_fields, i);
+        var copy: *RecordField = calloc(1, sizeof(RecordField));
         *copy = *field;
         list_push(fields, copy);
     }
 
-    *struct_sym = StructSym {
-        kind: Sym_Struct,
-        name: struct_sym.name,
+    *record_sym = RecordSym {
+        kind: Sym_Record,
+        is_union: record_sym.is_union,
+        name: record_sym.name,
         base: baseSym,
         fields: fields,
         unpadded_size: baseSym.unpadded_size,
@@ -1023,17 +1051,17 @@ func elab_struct_base(ctx: *ElabCtx, base: *TypeExpr, struct_sym: *StructSym) {
     };
 }
 
-func elab_struct_decl(ctx: *ElabCtx, decl: *StructDecl) {
+func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
     var name = decl.name;
     var base = decl.base;
     var field_decls = decl.fields;
 
     var is_definition = field_decls != null;
 
-    var sym = declare_struct(ctx, &decl.pos, name, is_definition);
+    var sym = declare_record(ctx, &decl.pos, decl.is_union, name, is_definition);
 
     if (base) {
-        elab_struct_base(ctx, base, sym);
+        elab_record_base(ctx, base, sym);
     }
 
     if (field_decls) {
@@ -1043,12 +1071,12 @@ func elab_struct_decl(ctx: *ElabCtx, decl: *StructDecl) {
         var fields = sym.fields;
 
         for (var i = 0; i < list_len(field_decls); i += 1) {
-            var field_decl: *StructFieldDecl = list_get(field_decls, i);
-            add_struct_field(ctx, sym, field_decl);
+            var field_decl: *RecordFieldDecl = list_get(field_decls, i);
+            add_record_field(ctx, sym, field_decl);
         }
 
         if (list_len(fields) == 0) {
-            die_at(&decl.pos, "Empty struct");
+            die_at(&decl.pos, "Empty record");
         }
     }
 
@@ -1195,8 +1223,8 @@ func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
 }
 
 func elab_decl(ctx: *ElabCtx, decl: *Decl) {
-    if (decl.kind == Decl_Struct) {
-        elab_struct_decl(ctx, decl as *StructDecl);
+    if (decl.kind == Decl_Record) {
+        elab_record_decl(ctx, decl as *RecordDecl);
     } else if (decl.kind == Decl_Func) {
         elab_func_decl(ctx, decl as *FuncDecl);
     } else if (decl.kind == Decl_Enum) {

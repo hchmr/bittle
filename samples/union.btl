@@ -1,0 +1,83 @@
+extern func printf(fmt: *Char, ...): Int32;
+
+struct IntResultBase {
+    is_ok: Bool,
+}
+
+struct OkIntResult: IntResultBase {
+    value: Int,
+}
+
+struct ErrIntResult: IntResultBase {
+    message: *Char,
+}
+
+union IntResult: IntResultBase {
+    ok: OkIntResult,
+    err: ErrIntResult,
+}
+
+func int_result_ok(value: Int): IntResult {
+    return IntResult {
+        ok: OkIntResult {
+            is_ok: true,
+            value: value
+        }
+    };
+}
+
+func int_result_err(message: *Char): IntResult {
+    return IntResult {
+        err: ErrIntResult {
+            is_ok: false,
+            message: message
+        }
+    };
+}
+
+func parse_int(s: *Char): IntResult {
+    var value: Int = 0;
+    var sign: Int = 1;
+    if (*s == '-') {
+        sign = -1;
+        s = &s[1];
+    }
+    while (*s) {
+        if (*s < '0' || '9' < *s) {
+            return int_result_err("Invalid integer");
+        }
+        value = value * 10 + (*s - '0');
+        s = &s[1];
+    }
+    return int_result_ok(value * sign);
+}
+
+
+func print_result(input: *Char, result: IntResult) {
+    printf("\"%s\" => ", input);
+    if (result.is_ok) {
+        var result = result.ok;
+        printf("Ok(%d)\n", result.value);
+    } else {
+        var result = result.err;
+        printf("Err(\"%s\")\n", result.message);
+    }
+}
+
+func main(argc: Int32, argv: **Char): Int32 {
+    if (argc < 2) {
+        printf("Usage: %s <value>...\n", argv[0]);
+        return 1;
+    }
+
+    var n_ok: Int32 = 0;
+    for (var i = 1; i < argc; i += 1) {
+        var result = parse_int(argv[i]);
+        print_result(argv[i], result);
+        n_ok += result.is_ok as Int32;
+    }
+
+    printf("%d/%d values parsed successfully.\n", n_ok, argc - 1);
+
+    return 0;
+}

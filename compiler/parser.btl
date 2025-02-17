@@ -478,7 +478,7 @@ func p_field_initializer(self: *Parser): *FieldInitializer {
     return result;
 }
 
-func p_struct_expr(self: *Parser): *Expr {
+func p_record_expr(self: *Parser): *Expr {
     var pos = self.tok.pos;
     var name = p_ident(self);
     var field_initializers: *List = list_new();
@@ -491,9 +491,9 @@ func p_struct_expr(self: *Parser): *Expr {
         }
     }
 
-    var result: *StructExpr = calloc(1, sizeof(StructExpr));
-    *result = StructExpr {
-        kind: Expr_Struct,
+    var result: *RecordExpr = calloc(1, sizeof(RecordExpr));
+    *result = RecordExpr {
+        kind: Expr_Record,
         pos: pos,
         type: null,
         name: name,
@@ -504,7 +504,7 @@ func p_struct_expr(self: *Parser): *Expr {
 
 func p_ident_expr(self: *Parser): *Expr {
     if (next_is(self, Tok_LBrace)) {
-        return p_struct_expr(self);
+        return p_record_expr(self);
     } else {
         return p_name_expr(self);
     }
@@ -824,14 +824,14 @@ func p_stmt(self: *Parser): *Stmt {
 //==============================================================================
 //== Declarations
 
-func p_struct_field(self: *Parser): *StructFieldDecl {
+func p_record_field(self: *Parser): *RecordFieldDecl {
     var pos = self.tok.pos;
     var name = p_ident(self);
     expect(self, Tok_Colon);
     var type = p_type(self);
 
-    var result: *StructFieldDecl = calloc(1, sizeof(StructFieldDecl));
-    *result = StructFieldDecl {
+    var result: *RecordFieldDecl = calloc(1, sizeof(RecordFieldDecl));
+    *result = RecordFieldDecl {
         pos,
         name,
         type,
@@ -839,9 +839,14 @@ func p_struct_field(self: *Parser): *StructFieldDecl {
     return result;
 }
 
-func p_struct_decl(self: *Parser): *Decl {
+func p_record_decl(self: *Parser): *Decl {
     var pos = self.tok.pos;
-    expect(self, Tok_Struct);
+    var is_union = at(self, Tok_Union);
+    if (!is_union) {
+        expect(self, Tok_Struct);
+    } else {
+        expect(self, Tok_Union);
+    }
     var name = p_ident(self);
     var base: *TypeExpr = null;
     if (eat(self, Tok_Colon)) {
@@ -851,7 +856,7 @@ func p_struct_decl(self: *Parser): *Decl {
     if (eat(self, Tok_LBrace)) {
         body = list_new();
         while (!at_eof(self) && !eat(self, Tok_RBrace)) {
-            var field = p_struct_field(self);
+            var field = p_record_field(self);
             list_push(body, field);
             if (!at(self, Tok_RBrace)) {
                 expect(self, Tok_Comma);
@@ -862,10 +867,11 @@ func p_struct_decl(self: *Parser): *Decl {
         expect(self, Tok_Semicolon);
     }
 
-    var result: *StructDecl = calloc(1, sizeof(StructDecl));
-    *result = StructDecl {
-        kind: Decl_Struct,
+    var result: *RecordDecl = calloc(1, sizeof(RecordDecl));
+    *result = RecordDecl {
+        kind: Decl_Record,
         pos,
+        is_union,
         name,
         base,
         fields: body,
@@ -1027,8 +1033,8 @@ func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
 }
 
 func p_decl_decl(self: *Parser): *Decl {
-    if (at(self, Tok_Struct)) {
-        return p_struct_decl(self);
+    if (at(self, Tok_Struct) || at(self, Tok_Union)) {
+        return p_record_decl(self);
     } else if (at(self, Tok_Func)) {
         return p_func_decl(self, false);
     } else if (at(self, Tok_Enum)) {
