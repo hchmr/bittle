@@ -1,7 +1,7 @@
 import { analyzeControlFlow } from '../semantics/controlFlowAnalyzer';
 import { ElaborationDiag, Elaborator, ElaboratorResult, SymReference } from '../semantics/elaborator';
 import { Scope } from '../semantics/scope';
-import { StructFieldSym, Sym, SymKind } from '../semantics/sym';
+import { RecordFieldSym, Sym, SymKind } from '../semantics/sym';
 import { mkErrorType, Type } from '../semantics/type';
 import { SyntaxNode } from '../syntax';
 import { ExprNodeTypes } from '../syntax/nodeTypes';
@@ -56,12 +56,12 @@ export class SemanticsService {
         return symbols.length === 1 ? symbols[0] : undefined;
     }
 
-    private resolveFieldName(path: string, nameNode: SyntaxNode): StructFieldSym[] {
+    private resolveFieldName(path: string, nameNode: SyntaxNode): RecordFieldSym[] {
         const module = this.elaborateFile(path);
         const qnames = module.nodeSymMap.get(nameNode) ?? [];
         return qnames
             .map(qname => module.symbols.get(qname)!)
-            .filter(sym => sym.kind === SymKind.StructField);
+            .filter(sym => sym.kind === SymKind.RecordField);
     }
 
     public resolveName(path: string, nameNode: SyntaxNode): Sym[] {

@@ -11,9 +11,9 @@ export enum AstNodeTypes {
     EnumDecl = 'EnumDecl',
     EnumBody = 'EnumBody',
     EnumMember = 'EnumMember',
-    StructDecl = 'StructDecl',
-    StructBody = 'StructBody',
-    StructMember = 'StructMember',
+    RecordDecl = 'RecordDecl',
+    RecordBody = 'RecordBody',
+    Field = 'Field',
     FuncDecl = 'FuncDecl',
     FuncParamList = 'FuncParamList',
     FuncParam = 'FuncParam',
@@ -48,7 +48,7 @@ export enum AstNodeTypes {
     IndexExpr = 'IndexExpr',
     FieldExpr = 'FieldExpr',
     CastExpr = 'CastExpr',
-    StructExpr = 'StructExpr',
+    RecordExpr = 'RecordExpr',
     FieldInitList = 'FieldInitList',
     FieldInit = 'FieldInit',
     BoolLiteral = 'BoolLiteral',
@@ -62,7 +62,7 @@ export type AstNodeType = AstNodeTypes[keyof AstNodeTypes];
 
 export class RootNode extends AstNode {
     get declNodes(): DeclNode[] {
-        return this.getAstNodesOfType<DeclNode>(undefined, ['IncludeDecl', 'EnumDecl', 'StructDecl', 'FuncDecl', 'GlobalDecl', 'ConstDecl']);
+        return this.getAstNodesOfType<DeclNode>(undefined, ['IncludeDecl', 'EnumDecl', 'RecordDecl', 'FuncDecl', 'GlobalDecl', 'ConstDecl']);
     }
 }
 export class IncludeDeclNode extends AstNode {
@@ -106,15 +106,18 @@ export class EnumMemberNode extends AstNode {
         return this.getTokenOfType(undefined, ['=']);
     }
     get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
     }
 }
-export class StructDeclNode extends AstNode {
+export class RecordDeclNode extends AstNode {
     get structToken(): TokenNode<'struct'> | undefined {
         return this.getTokenOfType(undefined, ['struct']);
+    }
+    get unionToken(): TokenNode<'union'> | undefined {
+        return this.getTokenOfType(undefined, ['union']);
     }
     get name(): TokenNode<'identifier'> | undefined {
         return this.getTokenOfType('name', ['identifier']);
@@ -125,22 +128,22 @@ export class StructDeclNode extends AstNode {
     get base(): TypeNode | undefined {
         return this.getAstNodeOfType<TypeNode>('base', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
     }
-    get body(): StructBodyNode | undefined {
-        return this.getAstNodeOfType<StructBodyNode>('body', ['StructBody']);
+    get body(): RecordBodyNode | undefined {
+        return this.getAstNodeOfType<RecordBodyNode>('body', ['RecordBody']);
     }
 }
-export class StructBodyNode extends AstNode {
+export class RecordBodyNode extends AstNode {
     get lBraceToken(): TokenNode<'{'> | undefined {
         return this.getTokenOfType(undefined, ['{']);
     }
-    get structMemberNodes(): StructMemberNode[] {
-        return this.getAstNodesOfType<StructMemberNode>(undefined, ['StructMember']);
+    get fieldNodes(): FieldNode[] {
+        return this.getAstNodesOfType<FieldNode>(undefined, ['Field']);
     }
     get rBraceToken(): TokenNode<'}'> | undefined {
         return this.getTokenOfType(undefined, ['}']);
     }
 }
-export class StructMemberNode extends AstNode {
+export class FieldNode extends AstNode {
     get name(): TokenNode<'identifier'> | undefined {
         return this.getTokenOfType('name', ['identifier']);
     }
@@ -233,7 +236,7 @@ export class ConstDeclNode extends AstNode {
         return this.getTokenOfType(undefined, ['=']);
     }
     get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -268,7 +271,7 @@ export class ArrayTypeNode extends AstNode {
         return this.getTokenOfType(undefined, ['[']);
     }
     get size(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('size', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('size', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -318,7 +321,7 @@ export class LocalDeclNode extends AstNode {
         return this.getTokenOfType(undefined, ['=']);
     }
     get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -332,7 +335,7 @@ export class IfStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get cond(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -355,7 +358,7 @@ export class WhileStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get cond(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -378,10 +381,10 @@ export class ForStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [';']);
     }
     get cond(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get step(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('step', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('step', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -395,7 +398,7 @@ export class ReturnStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['return']);
     }
     get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -419,7 +422,7 @@ export class ContinueStmtNode extends AstNode {
 }
 export class ExprStmtNode extends AstNode {
     get expr(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('expr', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('expr', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -430,7 +433,7 @@ export class GroupedExprNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get exprNode(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>(undefined, ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>(undefined, ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -465,7 +468,7 @@ export class ArrayExprNode extends AstNode {
         return this.getTokenOfType(undefined, ['[']);
     }
     get exprNodes(): ExprNode[] {
-        return this.getAstNodesOfType<ExprNode>(undefined, ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodesOfType<ExprNode>(undefined, ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get rBracketToken(): TokenNode<']'> | undefined {
         return this.getTokenOfType(undefined, [']']);
@@ -473,7 +476,7 @@ export class ArrayExprNode extends AstNode {
 }
 export class CallExprNode extends AstNode {
     get callee(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('callee', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('callee', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get args(): CallArgListNode | undefined {
         return this.getAstNodeOfType<CallArgListNode>('args', ['CallArgList']);
@@ -498,18 +501,18 @@ export class CallArgNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
 }
 export class BinaryExprNode extends AstNode {
     get left(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('left', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('left', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get op(): TokenNode<'=' | '|=' | '^=' | '&=' | '<<=' | '>>=' | '+=' | '-=' | '*=' | '/=' | '%=' | '||' | '&&' | '|' | '^' | '&' | '==' | '!=' | '<' | '>' | '<=' | '>=' | '<<' | '>>' | '+' | '-' | '*' | '/' | '%'> | undefined {
         return this.getTokenOfType('op', ['=', '|=', '^=', '&=', '<<=', '>>=', '+=', '-=', '*=', '/=', '%=', '||', '&&', '|', '^', '&', '==', '!=', '<', '>', '<=', '>=', '<<', '>>', '+', '-', '*', '/', '%']);
     }
     get right(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('right', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('right', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
 }
 export class UnaryExprNode extends AstNode {
@@ -517,35 +520,35 @@ export class UnaryExprNode extends AstNode {
         return this.getTokenOfType('op', ['!', '-', '~', '*', '&']);
     }
     get right(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('right', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('right', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
 }
 export class TernaryExprNode extends AstNode {
     get cond(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('cond', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get questToken(): TokenNode<'?'> | undefined {
         return this.getTokenOfType(undefined, ['?']);
     }
     get then(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('then', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('then', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get colonToken(): TokenNode<':'> | undefined {
         return this.getTokenOfType(undefined, [':']);
     }
     get else(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('else', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('else', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
 }
 export class IndexExprNode extends AstNode {
     get indexee(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('indexee', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('indexee', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get lBracketToken(): TokenNode<'['> | undefined {
         return this.getTokenOfType(undefined, ['[']);
     }
     get index(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('index', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('index', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get rBracketToken(): TokenNode<']'> | undefined {
         return this.getTokenOfType(undefined, [']']);
@@ -553,7 +556,7 @@ export class IndexExprNode extends AstNode {
 }
 export class FieldExprNode extends AstNode {
     get left(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('left', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('left', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get dotToken(): TokenNode<'.'> | undefined {
         return this.getTokenOfType(undefined, ['.']);
@@ -564,7 +567,7 @@ export class FieldExprNode extends AstNode {
 }
 export class CastExprNode extends AstNode {
     get expr(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('expr', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('expr', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
     get asToken(): TokenNode<'as'> | undefined {
         return this.getTokenOfType(undefined, ['as']);
@@ -573,7 +576,7 @@ export class CastExprNode extends AstNode {
         return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
     }
 }
-export class StructExprNode extends AstNode {
+export class RecordExprNode extends AstNode {
     get name(): TokenNode<'identifier'> | undefined {
         return this.getTokenOfType('name', ['identifier']);
     }
@@ -600,7 +603,7 @@ export class FieldInitNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get value(): ExprNode | undefined {
-        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'StructExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
 }
 export class BoolLiteralNode extends AstNode {
@@ -637,7 +640,7 @@ export class StringLiteralNode extends AstNode {
 export enum DeclNodeTypes {
     IncludeDecl = 'IncludeDecl',
     EnumDecl = 'EnumDecl',
-    StructDecl = 'StructDecl',
+    RecordDecl = 'RecordDecl',
     FuncDecl = 'FuncDecl',
     GlobalDecl = 'GlobalDecl',
     ConstDecl = 'ConstDecl',
@@ -646,7 +649,7 @@ export enum DeclNodeTypes {
 export type DeclNode =
     | IncludeDeclNode
     | EnumDeclNode
-    | StructDeclNode
+    | RecordDeclNode
     | FuncDeclNode
     | GlobalDeclNode
     | ConstDeclNode;
@@ -698,7 +701,7 @@ export enum ExprNodeTypes {
     LiteralExpr = 'LiteralExpr',
     ArrayExpr = 'ArrayExpr',
     CallExpr = 'CallExpr',
-    StructExpr = 'StructExpr',
+    RecordExpr = 'RecordExpr',
     BinaryExpr = 'BinaryExpr',
     TernaryExpr = 'TernaryExpr',
     UnaryExpr = 'UnaryExpr',
@@ -714,7 +717,7 @@ export type ExprNode =
     | LiteralExprNode
     | ArrayExprNode
     | CallExprNode
-    | StructExprNode
+    | RecordExprNode
     | BinaryExprNode
     | TernaryExprNode
     | UnaryExprNode
@@ -744,9 +747,9 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.EnumDecl: return new EnumDeclNode(syntax);
         case AstNodeTypes.EnumBody: return new EnumBodyNode(syntax);
         case AstNodeTypes.EnumMember: return new EnumMemberNode(syntax);
-        case AstNodeTypes.StructDecl: return new StructDeclNode(syntax);
-        case AstNodeTypes.StructBody: return new StructBodyNode(syntax);
-        case AstNodeTypes.StructMember: return new StructMemberNode(syntax);
+        case AstNodeTypes.RecordDecl: return new RecordDeclNode(syntax);
+        case AstNodeTypes.RecordBody: return new RecordBodyNode(syntax);
+        case AstNodeTypes.Field: return new FieldNode(syntax);
         case AstNodeTypes.FuncDecl: return new FuncDeclNode(syntax);
         case AstNodeTypes.FuncParamList: return new FuncParamListNode(syntax);
         case AstNodeTypes.FuncParam: return new FuncParamNode(syntax);
@@ -781,7 +784,7 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.IndexExpr: return new IndexExprNode(syntax);
         case AstNodeTypes.FieldExpr: return new FieldExprNode(syntax);
         case AstNodeTypes.CastExpr: return new CastExprNode(syntax);
-        case AstNodeTypes.StructExpr: return new StructExprNode(syntax);
+        case AstNodeTypes.RecordExpr: return new RecordExprNode(syntax);
         case AstNodeTypes.FieldInitList: return new FieldInitListNode(syntax);
         case AstNodeTypes.FieldInit: return new FieldInitNode(syntax);
         case AstNodeTypes.BoolLiteral: return new BoolLiteralNode(syntax);

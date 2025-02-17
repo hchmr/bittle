@@ -18,7 +18,7 @@ export type NodeType = ValuesOf<typeof NodeTypes> | ErrorNodeType;
 export const TopLevelNodeTypes = {
     Include: AstNodeTypes.IncludeDecl,
     Enum: AstNodeTypes.EnumDecl,
-    Struct: AstNodeTypes.StructDecl,
+    Record: AstNodeTypes.RecordDecl,
     Func: AstNodeTypes.FuncDecl,
     Global: AstNodeTypes.GlobalDecl,
     Const: AstNodeTypes.ConstDecl,
@@ -58,7 +58,7 @@ export const ExprNodeTypes = {
     IndexExpr: AstNodeTypes.IndexExpr,
     FieldExpr: AstNodeTypes.FieldExpr,
     CastExpr: AstNodeTypes.CastExpr,
-    StructExpr: AstNodeTypes.StructExpr,
+    RecordExpr: AstNodeTypes.RecordExpr,
 } as const;
 
 export const LiteralNodeTypes = {

@@ -311,8 +311,8 @@ export class Parser extends ParserBase {
             this.includeDecl();
         } else if (this.match('enum')) {
             this.enumDecl();
-        } else if (this.match('struct')) {
-            this.structDecl();
+        } else if (this.match('struct') || this.match('union')) {
+            this.recordDecl();
         } else if (this.match('func')) {
             this.funcDecl();
         } else if (this.match('var')) {
@@ -391,9 +391,9 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.EnumMember);
     }
 
-    structDecl() {
-        this.beginNode(CompositeNodeTypes.StructDecl);
-        this.bump('struct');
+    recordDecl() {
+        this.beginNode(CompositeNodeTypes.RecordDecl);
+        this.bump(this.match('struct') ? 'struct' : 'union');
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
@@ -404,30 +404,30 @@ export class Parser extends ParserBase {
             this.finishField('base');
         }
         if (!this.match('{') && !this.match(';')) {
-            this.addErrorAndTryBump(`Expected struct body.`);
+            this.addErrorAndTryBump(`Expected record body.`);
         }
         if (this.match(';')) {
             this.bump(';');
         } else if (this.match('{')) {
             this.beginField('body');
-            this.structBody();
+            this.recordBody();
             this.finishField('body');
         }
-        this.finishNode(CompositeNodeTypes.StructDecl);
+        this.finishNode(CompositeNodeTypes.RecordDecl);
     }
 
-    structBody() {
-        this.beginNode(CompositeNodeTypes.StructBody);
-        this.delimited('{', '}', ',', () => this.structMember());
-        this.finishNode(CompositeNodeTypes.StructBody);
+    recordBody() {
+        this.beginNode(CompositeNodeTypes.RecordBody);
+        this.delimited('{', '}', ',', () => this.field());
+        this.finishNode(CompositeNodeTypes.RecordBody);
     }
 
-    structMember() {
+    field() {
         if (!this.match('identifier') && !this.match(':')) {
-            this.addErrorAndTryBump(`Expected struct member.`);
+            this.addErrorAndTryBump(`Expected record member.`);
             return;
         }
-        this.beginNode(CompositeNodeTypes.StructMember);
+        this.beginNode(CompositeNodeTypes.Field);
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
@@ -435,7 +435,7 @@ export class Parser extends ParserBase {
         this.beginField('type');
         this.type();
         this.finishField('type');
-        this.finishNode(CompositeNodeTypes.StructMember);
+        this.finishNode(CompositeNodeTypes.Field);
     }
 
     funcDecl(checkpoint?: Checkpoint) {
@@ -737,10 +737,10 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.GroupedExpr);
     }
 
-    // either 'identifier' or 'identifier { struct_fields }
+    // either 'identifier' or 'identifier { record_fields }
     identExpr() {
         if (this.match('identifier', '{')) {
-            this.structExpr();
+            this.recordExpr();
         } else {
             this.nameExpr();
         }
@@ -870,15 +870,15 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.CastExpr);
     }
 
-    structExpr() {
-        this.beginNode(CompositeNodeTypes.StructExpr);
+    recordExpr() {
+        this.beginNode(CompositeNodeTypes.RecordExpr);
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
         this.beginField('fields');
         this.fieldInitList();
         this.finishField('fields');
-        this.finishNode(CompositeNodeTypes.StructExpr);
+        this.finishNode(CompositeNodeTypes.RecordExpr);
     }
 
     fieldInitList() {
@@ -1203,7 +1203,7 @@ class TokenKindSet implements Iterable<TokenKind> {
 
 // First sets
 
-const topLevelFirst = new TokenKindSet('include', 'enum', 'struct', 'func', 'var', 'const', 'extern');
+const topLevelFirst = new TokenKindSet('include', 'enum', 'struct', 'union', 'func', 'var', 'const', 'extern');
 
 const exprFirst = new TokenKindSet(...Object.keys(nudTable) as TokenKind[]);
 

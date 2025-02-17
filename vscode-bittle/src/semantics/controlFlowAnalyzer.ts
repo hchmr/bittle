@@ -1,6 +1,6 @@
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
-import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StructExprNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
 import { Nullish, unreachable } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
@@ -230,8 +230,8 @@ class ControlFlowAnalyzer {
             return this.analyzeFieldExpr(node, state);
         } else if (node instanceof CastExprNode) {
             return this.analyzeCastExpr(node, state);
-        } else if (node instanceof StructExprNode) {
-            return this.analyzeStructExpr(node, state);
+        } else if (node instanceof RecordExprNode) {
+            return this.analyzeRecordExpr(node, state);
         } else {
             unreachable(node);
         }
@@ -333,7 +333,7 @@ class ControlFlowAnalyzer {
         return this.analyzeExpr(exprNode, state);
     }
 
-    private analyzeStructExpr(node: StructExprNode, state: ExecutionState): ExecutionState {
+    private analyzeRecordExpr(node: RecordExprNode, state: ExecutionState): ExecutionState {
         const fieldNodes = node.fields?.fieldInitNodes;
 
         if (!fieldNodes) {

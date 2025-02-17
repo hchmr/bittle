@@ -12,7 +12,7 @@ export const grammar = createGrammar({
     Decl: $ => choice(
         $.IncludeDecl,
         $.EnumDecl,
-        $.StructDecl,
+        $.RecordDecl,
         $.FuncDecl,
         $.GlobalDecl,
         $.ConstDecl,
@@ -47,23 +47,23 @@ export const grammar = createGrammar({
         ';',
     ),
 
-    StructDecl: $ => seq(
-        'struct',
+    RecordDecl: $ => seq(
+        choice('struct', 'union'),
         label('name', 'identifier'),
         optional(seq(
             ':',
             label('base', $.Type),
         )),
-        label('body', $.StructBody),
+        label('body', $.RecordBody),
     ),
 
-    StructBody: $ => seq(
+    RecordBody: $ => seq(
         '{',
-        commaSep($.StructMember),
+        commaSep($.Field),
         '}',
     ),
 
-    StructMember: $ => seq(
+    Field: $ => seq(
         label('name', 'identifier'),
         ':',
         label('type', $.Type),
@@ -246,7 +246,7 @@ export const grammar = createGrammar({
         $.LiteralExpr,
         $.ArrayExpr,
         $.CallExpr,
-        $.StructExpr,
+        $.RecordExpr,
         $.BinaryExpr,
         $.TernaryExpr,
         $.UnaryExpr,
@@ -335,7 +335,7 @@ export const grammar = createGrammar({
         label('type', $.Type),
     ),
 
-    StructExpr: $ => seq(
+    RecordExpr: $ => seq(
         label('name', 'identifier'),
         label('fields', $.FieldInitList),
     ),

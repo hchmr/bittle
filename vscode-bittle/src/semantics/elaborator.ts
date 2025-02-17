@@ -3,19 +3,12 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import {
-    ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode,
-    LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, StructDeclNode, StructExprNode, StructMemberNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode,
-} from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode, } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { Scope } from './scope';
-import {
-    ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, StructFieldSym, StructSym, Sym, SymKind,
-} from './sym';
-import {
-    isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRestParamType, mkStructType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout,
-} from './type';
+import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind, } from './sym';
+import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout, } from './type';
 
 export type ErrorLocation = {
     file: string;
@@ -146,9 +139,9 @@ export class Elaborator {
         }
     }
 
-    private resolveStructField(structName: string, nameNode: SyntaxNode) {
-        const sym = this.symbols.get(structName);
-        assert(sym?.kind === SymKind.Struct);
+    private resolveRecordField(recordName: string, nameNode: SyntaxNode) {
+        const sym = this.symbols.get(recordName);
+        assert(sym?.kind === SymKind.Record);
 
         const fieldName = nameNode.text;
         const field = sym.fields.find(f => f.name === fieldName);
@@ -184,10 +177,13 @@ export class Elaborator {
         }
     }
 
-    private declareStructSym(declNode: StructDeclNode, nameNode: TokenNode | Nullish, isDefinition: boolean): StructSym {
+    private declareRecordSym(declNode: RecordDeclNode, nameNode: TokenNode | Nullish, isDefinition: boolean): RecordSym {
+        const recordKind = declNode.structToken ? RecordKind.Struct : RecordKind.Union;
+
         if (!nameNode) {
             return {
-                kind: SymKind.Struct,
+                kind: SymKind.Record,
+                recordKind,
                 name: '',
                 qualifiedName: '',
                 origins: [],
@@ -199,7 +195,7 @@ export class Elaborator {
 
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
-            if (existing.kind !== SymKind.Struct) {
+            if (existing.kind !== SymKind.Record) {
                 this.reportError(nameNode, `Another symbol with the same name already exists.`);
             } else if (isDefined(existing) && isDefinition) {
                 this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
@@ -209,10 +205,11 @@ export class Elaborator {
                 return existing;
             }
         }
-        const sym: StructSym = {
-            kind: SymKind.Struct,
+        const sym: RecordSym = {
+            kind: SymKind.Record,
+            recordKind,
             name: nameNode.text,
-            qualifiedName: 'struct:' + nameNode.text,
+            qualifiedName: 'record:' + nameNode.text,
             origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
             base: undefined,
             fields: [],
@@ -224,19 +221,19 @@ export class Elaborator {
         return sym;
     }
 
-    private defineStructFieldSym(declNode: StructMemberNode, nameNode: TokenNode, type: Type, structSym: StructSym): StructFieldSym {
+    private defineRecordFieldSym(declNode: FieldNode, nameNode: TokenNode, type: Type, recordSym: RecordSym): RecordFieldSym {
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
-            if (existing.kind !== SymKind.StructField) {
+            if (existing.kind !== SymKind.RecordField) {
                 this.reportError(nameNode, `Another symbol with the same name already exists.`);
             } else {
                 this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             }
         }
-        const sym: StructFieldSym = {
-            kind: SymKind.StructField,
+        const sym: RecordFieldSym = {
+            kind: SymKind.RecordField,
             name: nameNode.text,
-            qualifiedName: `${structSym.name}.${nameNode.text}`,
+            qualifiedName: `${recordSym.name}.${nameNode.text}`,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             type,
         };
@@ -481,8 +478,8 @@ export class Elaborator {
                     if (!sym) {
                         return mkErrorType();
                     }
-                    if (sym.kind === SymKind.Struct) {
-                        return mkStructType(sym);
+                    if (sym.kind === SymKind.Record) {
+                        return mkRecordType(sym);
                     } else if (sym.kind === SymKind.Enum) {
                         return mkEnumType(sym);
                     } else {
@@ -604,8 +601,8 @@ export class Elaborator {
     private elabTopLevelDecl(node: DeclNode) {
         if (node instanceof IncludeDeclNode) {
             this.elabInclude(node);
-        } else if (node instanceof StructDeclNode) {
-            this.elabStruct(node);
+        } else if (node instanceof RecordDeclNode) {
+            this.elabRecord(node);
         } else if (node instanceof FuncDeclNode) {
             this.elabFunc(node);
         } else if (node instanceof GlobalDeclNode) {
@@ -637,16 +634,16 @@ export class Elaborator {
         this.path = oldPath;
     }
 
-    private elabStruct(node: StructDeclNode) {
+    private elabRecord(node: RecordDeclNode) {
         const nameNode = node.name;
         const baseTypeNode = node.base;
         const bodyNode = node.body;
 
-        const sym = this.declareStructSym(node, nameNode, !!bodyNode);
+        const sym = this.declareRecordSym(node, nameNode, !!bodyNode);
         this.enterScope(node);
 
         if (baseTypeNode) {
-            this.elabStructBase(baseTypeNode, sym);
+            this.elabRecordBase(baseTypeNode, sym);
         }
 
         if (bodyNode) {
@@ -655,12 +652,12 @@ export class Elaborator {
                 this.addSym(field);
             }
 
-            for (const fieldNode of bodyNode.structMemberNodes) {
-                this.elabStructField(fieldNode, sym);
+            for (const fieldNode of bodyNode.fieldNodes) {
+                this.elabRecordField(fieldNode, sym);
             }
 
             if (sym.fields.length === 0) {
-                this.reportError(bodyNode, `Struct must have at least one field.`);
+                this.reportError(bodyNode, `Record must have at least one field.`);
             }
         }
 
@@ -671,20 +668,24 @@ export class Elaborator {
         this.exitScope();
     }
 
-    private elabStructBase(
+    private elabRecordBase(
         baseTypeNode: TypeNode,
-        structSym: StructSym,
-    ): StructSym | undefined {
+        recordSym: RecordSym,
+    ): RecordSym | undefined {
         const baseType = this.typeEval(baseTypeNode);
         if (baseType.kind === TypeKind.Err) {
             return;
         }
-        if (baseType.kind !== TypeKind.Struct) {
-            this.reportError(baseTypeNode, `Base type must be a struct.`);
+        if (baseType.kind !== TypeKind.Record) {
+            this.reportError(baseTypeNode, `Base type must be a record.`);
             return;
         }
-        if (baseType.sym.qualifiedName === structSym.qualifiedName) {
-            this.reportError(baseTypeNode, `Struct cannot inherit from itself.`);
+        if (baseType.sym.recordKind !== recordSym.recordKind && baseType.sym.fields.length !== 1) {
+            this.reportError(baseTypeNode, `Base type must be the same kind of record or have exactly one field.`);
+            return;
+        }
+        if (baseType.sym.qualifiedName === recordSym.qualifiedName) {
+            this.reportError(baseTypeNode, `Record cannot inherit from itself.`);
             return;
         }
         if (this.isUnsizedType(baseType)) {
@@ -692,12 +693,12 @@ export class Elaborator {
             return;
         }
         const baseSym = this.symbols.get(baseType.sym.qualifiedName);
-        assert(baseSym?.kind === SymKind.Struct);
-        structSym.base = baseSym;
-        structSym.fields = [...baseSym.fields];
+        assert(baseSym?.kind === SymKind.Record);
+        recordSym.base = baseSym;
+        recordSym.fields = [...baseSym.fields];
     }
 
-    private elabStructField(fieldNode: StructMemberNode, structSym: StructSym) {
+    private elabRecordField(fieldNode: FieldNode, recordSym: RecordSym) {
         const nameNode = fieldNode.name;
         const typeNode = fieldNode.type;
 
@@ -711,8 +712,8 @@ export class Elaborator {
         if (!fieldName)
             return;
 
-        const fieldSym = this.defineStructFieldSym(fieldNode, nameNode, fieldType, structSym);
-        structSym.fields.push(fieldSym);
+        const fieldSym = this.defineRecordFieldSym(fieldNode, nameNode, fieldType, recordSym);
+        recordSym.fields.push(fieldSym);
     }
 
     private elabEnum(node: EnumDeclNode) {
@@ -1043,8 +1044,8 @@ export class Elaborator {
                 return this.elabFieldExpr(node);
             } else if (node instanceof CastExprNode) {
                 return this.elabCastExpr(node);
-            } else if (node instanceof StructExprNode) {
-                return this.elabStructExpr(node);
+            } else if (node instanceof RecordExprNode) {
+                return this.elabRecordExpr(node);
             } else {
                 unreachable(node);
             }
@@ -1071,9 +1072,9 @@ export class Elaborator {
                 return sym.type;
             case SymKind.Enum:
                 return mkEnumType(sym);
-            case SymKind.Struct:
+            case SymKind.Record:
             case SymKind.Func:
-            case SymKind.StructField:
+            case SymKind.RecordField:
                 this.reportError(nameNode, `Expected a variable or a constant.`);
                 return mkErrorType();
             default: {
@@ -1142,17 +1143,17 @@ export class Elaborator {
                 return mkPointerType(operandType);
             }
             case '*':
-            {
-                const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
-                const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
-                if (operandType.kind !== TypeKind.Ptr) {
-                    if (operandNode && operandType.kind !== TypeKind.Err) {
-                        this.reportError(operandNode, `Expected pointer type.`);
+                {
+                    const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
+                    const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
+                    if (operandType.kind !== TypeKind.Ptr) {
+                        if (operandNode && operandType.kind !== TypeKind.Err) {
+                            this.reportError(operandNode, `Expected pointer type.`);
+                        }
+                        return mkErrorType();
                     }
-                    return mkErrorType();
+                    return operandType.pointeeType;
                 }
-                return operandType.pointeeType;
-            }
             default:
                 return mkErrorType();
         }
@@ -1172,22 +1173,22 @@ export class Elaborator {
             case '*=':
             case '/=':
             case '%=':
-            {
-                const leftNode = node.left;
-                const rightNode = node.right;
+                {
+                    const leftNode = node.left;
+                    const rightNode = node.right;
 
-                if (!isLvalue(leftNode)) {
-                    this.reportError(leftNode ?? node, `L-value expected.`);
-                }
-                const leftType = op !== '='
-                    ? this.elabExprInferInt(leftNode, { typeHint })
-                    : this.elabExprInfer(leftNode, { typeHint: undefined });
+                    if (!isLvalue(leftNode)) {
+                        this.reportError(leftNode ?? node, `L-value expected.`);
+                    }
+                    const leftType = op !== '='
+                        ? this.elabExprInferInt(leftNode, { typeHint })
+                        : this.elabExprInfer(leftNode, { typeHint: undefined });
 
-                if (rightNode) {
-                    this.elabExpr(rightNode, leftType);
+                    if (rightNode) {
+                        this.elabExpr(rightNode, leftType);
+                    }
+                    return mkVoidType();
                 }
-                return mkVoidType();
-            }
             case '+':
             case '-':
             case '*':
@@ -1198,39 +1199,39 @@ export class Elaborator {
             case '&':
             case '|':
             case '^':
-            {
-                const leftNode = node.left;
-                const rightNode = node.right;
-                const leftType = this.elabExprInferInt(leftNode, { typeHint });
-                const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
-                return this.unifyTypes(node, leftNode, rightNode);
-            }
+                {
+                    const leftNode = node.left;
+                    const rightNode = node.right;
+                    const leftType = this.elabExprInferInt(leftNode, { typeHint });
+                    const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
+                    return this.unifyTypes(node, leftNode, rightNode);
+                }
             case '==':
             case '!=':
             case '<':
             case '<=':
             case '>':
             case '>=':
-            {
-                const leftNode = node.left;
-                const rightNode = node.right;
-                const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
-                const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
-                const cmpType = this.unifyTypes(node, leftNode, rightNode);
-                if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
-                    this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
+                {
+                    const leftNode = node.left;
+                    const rightNode = node.right;
+                    const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
+                    const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
+                    const cmpType = this.unifyTypes(node, leftNode, rightNode);
+                    if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
+                        this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
+                    }
+                    return mkBoolType();
                 }
-                return mkBoolType();
-            }
             case '&&':
             case '||':
-            {
-                const leftNode = node.left;
-                const rightNode = node.right;
-                this.elabExprBool(leftNode);
-                this.elabExprBool(rightNode);
-                return mkBoolType();
-            }
+                {
+                    const leftNode = node.left;
+                    const rightNode = node.right;
+                    this.elabExprBool(leftNode);
+                    this.elabExprBool(rightNode);
+                    return mkBoolType();
+                }
             default:
                 return mkErrorType();
         }
@@ -1350,7 +1351,7 @@ export class Elaborator {
             : indexeeType.pointeeType;
     }
 
-    private elabField(node: FieldExprNode): StructFieldSym | undefined {
+    private elabField(node: FieldExprNode): RecordFieldSym | undefined {
         const leftNode = node.left;
         const nameNode = node.name;
 
@@ -1358,9 +1359,9 @@ export class Elaborator {
         if (leftType.kind === TypeKind.Ptr) {
             leftType = leftType.pointeeType;
         }
-        if (leftType.kind !== TypeKind.Struct) {
+        if (leftType.kind !== TypeKind.Record) {
             if (leftType.kind !== TypeKind.Err) {
-                this.reportError(node, `Expected struct type.`);
+                this.reportError(node, `Expected record type.`);
             }
             return;
         }
@@ -1368,7 +1369,7 @@ export class Elaborator {
         if (!nameNode) {
             return;
         }
-        return this.resolveStructField(leftType.sym.qualifiedName, nameNode);
+        return this.resolveRecordField(leftType.sym.qualifiedName, nameNode);
     }
 
     private elabFieldExpr(node: FieldExprNode): Type {
@@ -1395,22 +1396,22 @@ export class Elaborator {
         return castType;
     }
 
-    private elabStructExpr(node: StructExprNode): Type {
+    private elabRecordExpr(node: RecordExprNode): Type {
         const nameNode = node.name!;
         const fieldListNode = node.fields!;
 
         const sym = this.resolveName(nameNode);
         if (!sym) {
-            return this.elabStructExprUnknown(node);
+            return this.elabRecordExprUnknown(node);
         }
-        if (sym.kind !== SymKind.Struct) {
-            this.reportError(nameNode, `Expected a struct name.`);
-            return this.elabStructExprUnknown(node);
+        if (sym.kind !== SymKind.Record) {
+            this.reportError(nameNode, `Expected a record name.`);
+            return this.elabRecordExprUnknown(node);
         }
 
         if (!sym.isDefined) {
             this.reportError(nameNode, `'${sym.name}' has incomplete type.`);
-            return this.elabStructExprUnknown(node);
+            return this.elabRecordExprUnknown(node);
         }
 
         const seenFields = new Set<string>();
@@ -1425,10 +1426,13 @@ export class Elaborator {
 
             let fieldType = mkErrorType();
             if (nameNode) {
-                const fieldSym = this.resolveStructField(sym.qualifiedName, nameNode);
+                const fieldSym = this.resolveRecordField(sym.qualifiedName, nameNode);
                 if (fieldSym) {
                     if (seenFields.has(fieldSym.name)) {
                         this.reportError(nameNode, `Field is already initialized.`);
+                    }
+                    if (sym.recordKind === RecordKind.Union && seenFields.size > 0) {
+                        this.reportError(nameNode, `Only one field can be initialized in a union.`);
                     }
                     seenFields.add(fieldSym.name);
                     fieldType = fieldSym.type;
@@ -1441,14 +1445,20 @@ export class Elaborator {
         }
 
         const uninitializedFields = sym.fields.filter(field => !seenFields.has(field.name));
-        for (const field of uninitializedFields) {
-            this.reportError(node, `Field '${field.name}' is not initialized.`);
+        if (sym.recordKind === RecordKind.Struct) {
+            for (const field of uninitializedFields) {
+                this.reportError(node, `Field '${field.name}' is not initialized.`);
+            }
+        } else {
+            if (uninitializedFields.length === 0) {
+                this.reportError(node, `No field is initialized.`);
+            }
         }
 
-        return mkStructType(sym);
+        return mkRecordType(sym);
     }
 
-    private elabStructExprUnknown(node: StructExprNode): Type {
+    private elabRecordExprUnknown(node: RecordExprNode): Type {
         const fieldListNode = node.fields!;
         for (const fieldNode of fieldListNode.fieldInitNodes) {
             const valueNode = fieldNode.value;

@@ -24,7 +24,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
             if (node.type === TypeNodeTypes.NameType) {
                 const nameNode = node.firstChild;
                 makeToken(builder, nameNode, 'type');
-            } else if (node.type === TopLevelNodeTypes.Struct) {
+            } else if (node.type === TopLevelNodeTypes.Record) {
                 const nameNode = node.childForFieldName('name');
                 makeToken(builder, nameNode, 'type');
             } else if (node.type === TopLevelNodeTypes.Func) {
@@ -33,7 +33,7 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
             } else if (node.type === ExprNodeTypes.CallExpr) {
                 const nameNode = node.childForFieldName('callee')?.firstChild;
                 makeToken(builder, nameNode, 'function');
-            } else if (node.type === ExprNodeTypes.StructExpr) {
+            } else if (node.type === ExprNodeTypes.RecordExpr) {
                 const nameNode = node.childForFieldName('name');
                 makeToken(builder, nameNode, 'type');
             }

@@ -77,18 +77,18 @@ exports[`prettySyntaxTree:bad 1`] = `
 
 exports[`prettySyntaxTree:good 1`] = `
 "Root@2:1
-  StructDecl@2:1
+  RecordDecl@2:1
     "struct"@2:1
     "Point"@2:8
-    StructBody@2:14
+    RecordBody@2:14
       "{"@2:14
-      StructMember@3:5
+      Field@3:5
         "x"@3:5
         ":"@3:6
         NameType@3:8
           "Int"@3:8
       ","@3:11
-      StructMember@4:5
+      Field@4:5
         "y"@4:5
         ":"@4:6
         NameType@4:8

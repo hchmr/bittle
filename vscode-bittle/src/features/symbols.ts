@@ -70,8 +70,8 @@ export class DocumentSymbolsProvider implements vscode.DocumentSymbolProvider, v
 const symbolKindMapping = {
     [NodeTypes.EnumDecl]: vscode.SymbolKind.Enum,
     [NodeTypes.EnumMember]: vscode.SymbolKind.Constant,
-    [NodeTypes.StructDecl]: vscode.SymbolKind.Struct,
-    [NodeTypes.StructMember]: vscode.SymbolKind.Field,
+    [NodeTypes.RecordDecl]: vscode.SymbolKind.Struct,
+    [NodeTypes.Field]: vscode.SymbolKind.Field,
     [NodeTypes.FuncDecl]: vscode.SymbolKind.Function,
     [NodeTypes.FuncParam]: vscode.SymbolKind.Variable,
     [NodeTypes.GlobalDecl]: vscode.SymbolKind.Variable,
@@ -137,7 +137,7 @@ function fromDocumentSymbol(uri: vscode.Uri, symbol: DocumentSymbol, parent?: Do
 }
 
 function isForwardDeclaration(node: SyntaxNode) {
-    if (node.type === NodeTypes.FuncDecl || node.type === NodeTypes.StructDecl) {
+    if (node.type === NodeTypes.FuncDecl || node.type === NodeTypes.RecordDecl) {
         return !node.childForFieldName('body');
     } else if (node.type === NodeTypes.GlobalDecl) {
         return !node.children.find(n => n.type === 'extern');

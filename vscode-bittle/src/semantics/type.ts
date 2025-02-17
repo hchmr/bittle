@@ -1,6 +1,6 @@
 import { unreachable } from '../utils';
 import { stream } from '../utils/stream';
-import { EnumSym, StructSym } from './sym';
+import { EnumSym, RecordSym } from './sym';
 
 export type Type =
     | VoidType
@@ -9,7 +9,7 @@ export type Type =
     | PointerType
     | ArrayType
     | EnumType
-    | StructType
+    | RecordType
     | NeverType
     | RestParamType
     | ErrorType;
@@ -21,7 +21,7 @@ export enum TypeKind {
     Ptr = 'Ptr',
     Arr = 'Arr',
     Enum = 'Enum',
-    Struct = 'Struct',
+    Record = 'Record',
     Never = 'Never',
     RestParam = 'RestParam',
     Err = 'Err',
@@ -56,9 +56,9 @@ export type EnumType = Readonly<{
     sym: EnumSym;
 }>;
 
-export type StructType = Readonly<{
-    kind: TypeKind.Struct;
-    sym: StructSym;
+export type RecordType = Readonly<{
+    kind: TypeKind.Record;
+    sym: RecordSym;
 }>;
 
 export type NeverType = Readonly<{
@@ -99,7 +99,7 @@ const POINTER_TYPES = new WeakMap<Type, PointerType>();
 
 const ENUM_TYPES = new WeakMap<EnumSym, EnumType>();
 
-const STRUCT_TYPES = new WeakMap<StructSym, StructType>();
+const RECORD_TYPES = new WeakMap<RecordSym, RecordType>();
 
 export function mkVoidType(): Type {
     return VOID_TYPE;
@@ -149,13 +149,13 @@ export function mkEnumType(sym: EnumSym): EnumType {
     return enumType;
 }
 
-export function mkStructType(sym: StructSym): StructType {
-    let structType = STRUCT_TYPES.get(sym);
-    if (!structType) {
-        structType = { kind: TypeKind.Struct, sym };
-        STRUCT_TYPES.set(sym, structType);
+export function mkRecordType(sym: RecordSym): RecordType {
+    let recordType = RECORD_TYPES.get(sym);
+    if (!recordType) {
+        recordType = { kind: TypeKind.Record, sym };
+        RECORD_TYPES.set(sym, recordType);
     }
-    return structType;
+    return recordType;
 }
 
 export function mkErrorType(): Type {
@@ -202,17 +202,25 @@ export function typeLayout(type: Type): TypeLayout | undefined {
         case TypeKind.Enum: {
             return typeLayout(mkIntType(type.sym.size));
         }
-        case TypeKind.Struct: {
+        case TypeKind.Record: {
             const sym = type.sym;
             if (!sym.isDefined) {
                 return undefined;
             }
             const a = stream(sym.fields)
                 .map(field => typeLayout(field.type))
-                .reduce<TypeLayout | undefined>((a, b) => a && b && {
-                    size: alignUp(a.size, b.align) + b.size,
-                    align: Math.max(a.align, b.align),
-                }, { size: 0, align: 0 });
+                .reduce<TypeLayout | undefined>(
+                    sym.recordKind === 'struct'
+                        ? (a, b) => a && b && {
+                                size: alignUp(a.size, b.align) + b.size,
+                                align: Math.max(a.align, b.align),
+                            }
+                        : (a, b) => a && b && {
+                                size: Math.max(a.size, b.size),
+                                align: Math.max(a.align, b.align),
+                            },
+                    { size: 0, align: 0 },
+                );
             return a && {
                 size: alignUp(a.size, a.align),
                 align: a.align,
@@ -259,7 +267,7 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
         const elemType = tryUnifyTypes(t1.elemType, t2.elemType, onError);
         const size = unifySize(t1.size, t2.size, onError);
         return mkArrayType(elemType, size);
-    } else if ((t1.kind === TypeKind.Enum || t1.kind === TypeKind.Struct) && t2.kind === t1.kind) {
+    } else if ((t1.kind === TypeKind.Enum || t1.kind === TypeKind.Record) && t2.kind === t1.kind) {
         if (t1.sym.qualifiedName !== t2.sym.qualifiedName) {
             onError();
             return mkErrorType();
@@ -300,8 +308,8 @@ export function typeEq(t1: Type, t2: Type): boolean {
     } else if (t1.kind === TypeKind.Arr) {
         t2 = t2 as ArrayType;
         return typeEq(t1.elemType, t2.elemType) && t1.size === t2.size;
-    } else if (t1.kind === TypeKind.Enum || t1.kind === TypeKind.Struct) {
-        t2 = t2 as EnumType | StructType;
+    } else if (t1.kind === TypeKind.Enum || t1.kind === TypeKind.Record) {
+        t2 = t2 as EnumType | RecordType;
         return t1.sym.qualifiedName === t2.sym.qualifiedName;
     } else {
         return true;
@@ -369,17 +377,17 @@ function pointeeTypeLe(t1: Type, t2: Type): boolean {
     return typeEq(t1, t2)
         || (t1.kind === TypeKind.Err || t2.kind === TypeKind.Err)
         || (t1.kind === TypeKind.Void)
-        || (t1.kind === TypeKind.Struct && t2.kind === TypeKind.Struct && structLe(t1.sym, t2.sym));
+        || (t1.kind === TypeKind.Record && t2.kind === TypeKind.Record && recordLe(t1.sym, t2.sym));
 }
 
-function structLe(s1: StructSym, s2: StructSym): boolean {
+function recordLe(s1: RecordSym, s2: RecordSym): boolean {
     if (s1.qualifiedName === s2.qualifiedName) {
         return true;
     }
     if (s1.base === undefined) {
         return false;
     }
-    return structLe(s1.base, s2);
+    return recordLe(s1.base, s2);
 }
 
 export function prettyType(t: Type): string {
@@ -390,7 +398,7 @@ export function prettyType(t: Type): string {
         case TypeKind.Ptr: return '*' + prettyType(t.pointeeType);
         case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
         case TypeKind.Enum:
-        case TypeKind.Struct: return t.sym.name;
+        case TypeKind.Record: return t.sym.name;
         case TypeKind.Never: return '!';
         case TypeKind.RestParam: return '...';
         case TypeKind.Err: return '{unknown}';
