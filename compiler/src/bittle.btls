@@ -140,6 +140,41 @@ func sb_pretty_type(sb: *StringBuffer, type: *Type);
 func pretty_type(type: *Type): *Char;
 
 //==============================================================================
+//== const.btl
+
+enum ValueKind {
+    ConstValue_Bool,
+    ConstValue_Int,
+    ConstValue_String,
+}
+
+struct ConstValue {
+    kind: ValueKind,
+    type: *Type,
+}
+
+struct BoolConstValue: ConstValue {
+    bool: Bool,
+}
+
+struct IntConstValue: ConstValue {
+    int: Int,
+}
+
+struct StringConstValue: ConstValue {
+    string: *StringBuffer,
+}
+
+func const_value_unop(op: Int32, a: *ConstValue): *ConstValue;
+func const_value_binop(op: Int32, a: *ConstValue, b: *ConstValue): *ConstValue;
+func const_value_ternop(a: *ConstValue, b: *ConstValue, c: *ConstValue): *ConstValue;
+func const_value_cast(value: *ConstValue, type: *Type): *ConstValue;
+
+func mk_bool_const_value(value: Bool): *BoolConstValue;
+func mk_int_const_value(value: Int, type: *Type): *IntConstValue;
+func mk_string_const_value(value: *StringBuffer): *StringConstValue;
+
+//==============================================================================
 //== sym.btl
 
 struct Sym;
@@ -162,8 +197,7 @@ struct Sym {
 struct RecordField {
     name: *Char,
     type: *Type,
-    has_default_value: Bool,
-    default_value: Int,
+    default_value: *ConstValue,
     offset: Int,
 }
 
@@ -186,8 +220,7 @@ struct GlobalSym: Sym {
 }
 
 struct ConstSym: Sym {
-    type: *Type,
-    value: Int32,
+    value: *ConstValue,
 }
 
 struct FuncParam {
@@ -391,6 +424,7 @@ struct Expr {
     kind: ExprKind,
     pos: Pos,
     type: *Type,
+    const_value: *ConstValue,
 }
 
 struct IdentExpr: Expr {
@@ -584,6 +618,7 @@ struct EnumDecl: Decl {
 
 struct ConstDecl: Decl {
     name: *Char,
+    type: *TypeExpr,
     value: *Expr,
 }
 

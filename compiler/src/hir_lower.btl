@@ -300,6 +300,24 @@ func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
 }
 
 //==============================================================================
+//== Constants
+
+func lower_const_value(value: *ConstValue, pos: *Pos): *HirExpr {
+    if (value.kind == ConstValue_Bool) {
+        var value = value as *BoolConstValue;
+        return hir_mk_int_expr(value.bool as Int, value.type, pos);
+    } else if (value.kind == ConstValue_Int) {
+        var value = value as *IntConstValue;
+        return hir_mk_int_expr(value.int, value.type, pos);
+    } else if (value.kind == ConstValue_String) {
+        var value = value as *StringConstValue;
+        return hir_mk_str_expr(value.string, pos);
+    } else {
+        unreachable("elab_ident_expr");
+    }
+}
+
+//==============================================================================
 //== Expressions
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
@@ -312,7 +330,7 @@ func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
         return hir_mk_var_expr(sym, expr.type, &expr.pos);
     } else if (sym.kind == Sym_Const) {
         var value = (sym as *ConstSym).value;
-        return hir_mk_int_expr(value, expr.type, &expr.pos);
+        return lower_const_value(value, &expr.pos);
     } else {
         unreachable("elab_ident_expr");
     }
@@ -635,13 +653,13 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
             continue;
         }
         var field: *RecordField = list_get(record_type.sym.fields, field_index);
-        if (!field.has_default_value) {
+        if (!field.default_value) {
             continue;
         }
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
         var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
-        var default_value = hir_mk_int_expr(field.default_value, field.type, pos);
+        var default_value = lower_const_value(field.default_value, pos);
         var assignment = hir_mk_assign_expr(field_access, default_value);
         body = hir_mk_seq_expr(body, assignment);
     }

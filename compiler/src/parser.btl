@@ -256,6 +256,7 @@ func p_name_expr(self: *Parser): *Expr {
         kind: Expr_Ident,
         pos,
         type: null,
+        const_value: null,
         name,
         sym: null,
     };
@@ -271,6 +272,7 @@ func p_literal_expr(self: *Parser): *Expr {
         kind: Expr_Literal,
         pos,
         type: null,
+        const_value: null,
         literal,
     };
     return result;
@@ -289,6 +291,7 @@ func p_sizeof_expr(self: *Parser): *Expr {
         pos,
         type_expr: type,
         type: null,
+        const_value: null,
         size: -1,
     };
     return result;
@@ -312,6 +315,7 @@ func p_array_expr(self: *Parser): *Expr {
         kind: Expr_Array,
         pos,
         type: null,
+        const_value: null,
         elems,
     };
     return result;
@@ -328,6 +332,7 @@ func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
         kind: Expr_Index,
         pos,
         type: null,
+        const_value: null,
         indexee,
         index,
     };
@@ -365,6 +370,7 @@ func p_call_expr(self: *Parser, callee: *Expr): *Expr {
         kind: Expr_Call,
         pos,
         type: null,
+        const_value: null,
         callee,
         args,
         resolved_callee: null,
@@ -382,6 +388,7 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
         kind: Expr_Member,
         pos,
         type: null,
+        const_value: null,
         left,
         name,
         resolved_field: -1,
@@ -398,6 +405,7 @@ func p_unary_expr(self: *Parser, op: Int32): *Expr {
         kind: Expr_Unary,
         pos,
         type: null,
+        const_value: null,
         op,
         right,
     };
@@ -413,6 +421,7 @@ func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
         kind: Expr_Cast,
         pos,
         type: null,
+        const_value: null,
         expr,
         type_expr: type,
     };
@@ -428,6 +437,7 @@ func p_binary_expr(self: *Parser, left: *Expr, op: Int32, prec: Int32): *Expr {
         kind: Expr_Binary,
         pos,
         type: null,
+        const_value: null,
         op,
         left,
         right,
@@ -447,6 +457,7 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
         kind: Expr_Ternary,
         pos,
         type: null,
+        const_value: null,
         cond,
         then_expr,
         else_expr,
@@ -496,6 +507,7 @@ func p_record_expr(self: *Parser): *Expr {
         kind: Expr_Record,
         pos: pos,
         type: null,
+        const_value: null,
         name: name,
         fields: field_initializers,
     };
@@ -1006,6 +1018,10 @@ func p_const_decl(self: *Parser): *Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Const);
     var name = p_ident(self);
+    var type: *TypeExpr = null;
+    if (eat(self, Tok_Colon)) {
+        type = p_type(self);
+    }
     expect(self, Tok_Eq);
     var value = p_expr(self, 0);
     expect(self, Tok_Semicolon);
@@ -1015,6 +1031,7 @@ func p_const_decl(self: *Parser): *Decl {
         kind: Decl_Const,
         pos,
         name,
+        type,
         value,
     };
     return result;

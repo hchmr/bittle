@@ -189,14 +189,14 @@ func declare_func(
     return sym as *FuncSym;
 }
 
-func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, value: Int32) {
+func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, value: *ConstValue) {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         die_at(pos, "Symbol is already defined");
     }
 
     var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
-    *sym = ConstSym { kind: Sym_Const, name, type, value };
+    *sym = ConstSym { kind: Sym_Const, name, value };
     add_sym(ctx, sym);
 }
 
@@ -254,10 +254,15 @@ func try_coerce_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
         return false;
     }
     var cast: *CastExpr = calloc(1, sizeof(CastExpr));
+    var const_value: *ConstValue = null;
+    if (e.const_value) {
+        const_value = const_value_cast(e.const_value, target);
+    }
     *cast = CastExpr {
         kind: Expr_Cast,
         pos: e.pos,
         type: target,
+        const_value,
         expr: e,
         type_expr: null
     };
@@ -305,6 +310,7 @@ func try_coerce_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
         kind: Expr_Record,
         pos: e.pos,
         type: target,
+        const_value: null,
         name: sym.name,
         fields: field_inits,
     };
@@ -319,6 +325,15 @@ func try_coerce(e: *Expr, target: *Type, out: **Expr): Bool {
         || try_coerce_to_union(e, target, out);
 }
 
+func try_coerce_to_int(e: *Expr, out: **Expr): Bool {
+    for (var size = 1; size <= 8; size *= 2) {
+        if (try_coerce_with_cast(e, mk_int_type(size), out)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 func check_type(e: **Expr, expected: *Type) {
     try_coerce((*e), expected, e);
     if (expected.kind == Type_Ptr && (expected as *PtrType).pointee.kind == Type_Void && (*e).type.kind == Type_Ptr) {
@@ -330,7 +345,7 @@ func check_type(e: **Expr, expected: *Type) {
 }
 
 func check_type_int(e: **Expr) {
-    if ((*e).type.kind != Type_Int) {
+    if (!try_coerce_to_int(*e, e)) {
         die_at(&(*e).pos, "Integer expression expected");
     }
 }
@@ -348,7 +363,7 @@ func unify_types(e1: **Expr, e2: **Expr) {
 //==============================================================================
 //== Types
 
-func const_eval(ctx: *ElabCtx, expr: *Expr): Int32;
+func const_eval_int64(ctx: *ElabCtx, expr: *Expr): Int;
 
 func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     if (type_expr.kind == TypeExpr_Named) {
@@ -384,7 +399,7 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     } else if (type_expr.kind == TypeExpr_Arr) {
         var type_expr = type_expr as *ArrTypeExpr;
         var elem = eval_type(ctx, type_expr.elem);
-        var size = const_eval(ctx, type_expr.size);
+        var size = const_eval_int64(ctx, type_expr.size);
         return mk_array_type(elem, size);
     } else if (type_expr.kind == TypeExpr_Never) {
         return mk_never_type();
@@ -398,58 +413,31 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
 //==============================================================================
 //== Constants
 
-func invalid_const_expr(ctx: *ElabCtx, expr: *Expr): ! {
-    die_at(&expr.pos, "Invalid constant expression");
+func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
+func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type);
+
+func const_eval_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type): *ConstValue {
+    elab_expr_infer(ctx, expr, type_hint);
+    if (!expr.const_value) {
+        die_at(&expr.pos, "Expected a constant expression");
+    }
+    return expr.const_value;
 }
 
-func const_eval(ctx: *ElabCtx, expr: *Expr): Int32 {
-    if (expr.kind == Expr_Literal && (expr as *LiteralExpr).literal.kind == Literal_Int) {
-        return ((expr as *LiteralExpr).literal as *IntLiteral).value as Int32;
-    } else if (expr.kind == Expr_Unary) {
-        var expr = expr as *UnaryExpr;
-        var op = expr.op;
-        var right_expr = expr.right;
-        if (op == Tok_Minus) {
-            return -const_eval(ctx, right_expr);
-        } else {
-            invalid_const_expr(ctx, expr);
-        }
-    } else if (expr.kind == Expr_Binary) {
-        var expr = expr as *BinaryExpr;
-        var op = expr.op;
-        var left_expr = expr.left;
-        var right_expr = expr.right;
-        var left = const_eval(ctx, left_expr);
-        var right = const_eval(ctx, right_expr);
-        if (op == Tok_Plus) {
-            return left + right;
-        } else if (op == Tok_Minus) {
-            return left - right;
-        } else if (op == Tok_Star) {
-            return left * right;
-        } else if (op == Tok_Slash) {
-            return left / right;
-        } else if (op == Tok_Percent) {
-            return left % right;
-        } else {
-            invalid_const_expr(ctx, expr);
-        }
-    } else if (expr.kind == Expr_Sizeof) {
-        var type = eval_type(ctx, (expr as *SizeofExpr).type_expr);
-        return type_size(type) as Int32;
-    } else if (expr.kind == Expr_Ident) {
-        var sym = lookup(ctx, (expr as *IdentExpr).name);
-        if (!sym) {
-            die_at(&expr.pos, "Unknown symbol");
-        }
-        if (sym.kind == Sym_Const) {
-            return (sym as *ConstSym).value;
-        } else {
-            invalid_const_expr(ctx, expr);
-        }
-    } else {
-        invalid_const_expr(ctx, expr);
+func const_eval_expect(ctx: *ElabCtx, expr: *Expr, expected: *Type): *ConstValue {
+    elab_expr_expect(ctx, &expr, expected);
+    if (!expr.const_value) {
+        die_at(&expr.pos, "Expected a constant expression");
     }
+    return expr.const_value;
+}
+
+func const_eval_int64(ctx: *ElabCtx, expr: *Expr): Int {
+    return (const_eval_expect(ctx, expr, mk_int_type(8)) as *IntConstValue).int;
+}
+
+func const_eval_int32(ctx: *ElabCtx, expr: *Expr): Int32 {
+    return (const_eval_expect(ctx, expr, mk_int_type(4)) as *IntConstValue).int as Int32;
 }
 
 //==============================================================================
@@ -480,18 +468,22 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
     }
 
     var type: *Type;
+    var const_val: *ConstValue = null;
     if (sym.kind == Sym_Local) {
         type = (sym as *LocalSym).type;
     } else if (sym.kind == Sym_Global) {
         type = (sym as *GlobalSym).type;
     } else if (sym.kind == Sym_Const) {
-        type = (sym as *ConstSym).type;
+        var sym = sym as *ConstSym;
+        type = sym.value.type;
+        const_val = sym.value;
     } else {
         die_at(&expr.pos, "Expected a variable or constant");
     }
 
     expr.sym = sym;
     expr.type = type;
+    expr.const_value = const_val;
 }
 
 func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr, type_hint: *Type) {
@@ -500,17 +492,25 @@ func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr, type_hint: *Type) {
     if (literal.kind == Literal_Null) {
         expr.type = mk_ptr_type(mk_void_type());
     } else if (literal.kind == Literal_Bool) {
+        var literal = literal as *BoolLiteral;
         expr.type = mk_bool_type();
+        expr.const_value = mk_bool_const_value(literal.value);
     } else if (literal.kind == Literal_Int) {
+        var literal = literal as *IntLiteral;
         if (type_hint && type_hint.kind == Type_Int) {
             expr.type = type_hint;
         } else {
             expr.type = mk_int_type(8);
         }
+        expr.const_value = mk_int_const_value(literal.value, expr.type);
     } else if (literal.kind == Literal_Char) {
+        var literal = literal as *CharLiteral;
         expr.type = mk_int_type(1);
+        expr.const_value = mk_int_const_value(literal.value, expr.type);
     } else if (literal.kind == Literal_String) {
+        var literal = literal as *StringLiteral;
         expr.type = mk_ptr_type(mk_int_type(1));
+        expr.const_value = mk_string_const_value(literal.value);
     } else {
         unreachable("elab_literal_expr");
     }
@@ -651,6 +651,7 @@ func elab_sizeof_expr(ctx: *ElabCtx, expr: *SizeofExpr) {
     var size = type_size(type);
     expr.size = size;
     expr.type = mk_int_type(8);
+    expr.const_value = mk_int_const_value(size, expr.type);
 }
 
 func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
@@ -684,6 +685,9 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
     } else {
         unreachable("elab_unary_expr");
     }
+    if (right.const_value) {
+        expr.const_value = const_value_unop(op, right.const_value);
+    }
 }
 
 func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
@@ -695,10 +699,11 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
         if (!is_lvalue(left)) {
             die_at(&left.pos, "L-value expected");
         }
+        elab_expr_infer(ctx, left, type_hint: null);
         if (op != Tok_Eq) {
-            elab_expr_int(ctx, &left, type_hint: null);
-        } else {
-            elab_expr_infer(ctx, left, type_hint: null);
+            if (expr.left.type.kind != Type_Int) {
+                die_at(&left.pos, "Left operand is not an integer expression");
+            }
         }
         elab_expr_expect(ctx, &right, left.type);
         if (!is_sized(left.type)) {
@@ -733,6 +738,9 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
     } else {
         unreachable("elab_binary_expr");
     }
+    if (left.const_value && right.const_value) {
+        expr.const_value = const_value_binop(op, left.const_value, right.const_value);
+    }
 }
 
 func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
@@ -749,6 +757,9 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
     expr.cond = cond;
     expr.then_expr = then_expr;
     expr.else_expr = else_expr;
+    if (cond.const_value) {
+        expr.const_value = const_value_ternop(cond.const_value, then_expr.const_value, else_expr.const_value);
+    }
 }
 
 func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
@@ -763,6 +774,10 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     }
 
     expr.type = target_type;
+
+    if (subexpr.const_value) {
+        expr.const_value = const_value_cast(subexpr.const_value, target_type);
+    }
 }
 
 func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
@@ -804,7 +819,7 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
 
     for (var i = 0; i < n_fields; i += 1) {
         var field: *RecordField = list_get(fields, i);
-        is_initialized[i] = is_initialized[i] || field.has_default_value;
+        is_initialized[i] = is_initialized[i] || field.default_value;
     }
 
     if (!sym.is_union) {
@@ -1016,11 +1031,13 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
 
 func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, type: *Type, next_value: Int32): Int32 {
     var name = member_decl.name;
-    var value = member_decl.value
-        ? const_eval(ctx, member_decl.value)
-        : next_value;
+    var value = next_value;
+    if (member_decl.value) {
+        value = const_eval_int32(ctx, member_decl.value);
+    }
 
-    define_const(ctx, &member_decl.pos, name, type, value);
+    var const_value = mk_int_const_value(value, type);
+    define_const(ctx, &member_decl.pos, name, const_value);
     return value;
 }
 
@@ -1043,12 +1060,18 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     }
 }
 
-func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl, field_type: *Type, has_default_value: Bool, default_value: Int32) {
+func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
     var field_name = field_decl.name;
+    var field_type = eval_type(ctx, field_decl.type);
 
     var existing_index = find_record_field_by_name(sym, field_name);
     if (existing_index != -1) {
         die_at(&field_decl.pos, "Duplicate field");
+    }
+
+    var default_value: *ConstValue = null;
+    if (field_decl.default_value) {
+        default_value = const_eval_expect(ctx, field_decl.default_value, field_type);
     }
 
     var field_size = type_size(field_type);
@@ -1061,7 +1084,6 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
     *field = RecordField {
         name: field_name,
         type: field_type,
-        has_default_value,
         default_value,
         offset: field_offset,
     };
@@ -1075,45 +1097,27 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
     sym.align = int_max(sym.align, field_align);
 }
 
-func add_default_value_to_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl, default_value: Int32) {
+func add_default_value_to_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
     var field_index = find_record_field_by_name(sym, field_decl.name);
     if (field_index == -1) {
         die_at(&field_decl.pos, "No existing field to add default value to");
     }
 
     var field: *RecordField = list_get(sym.fields, field_index);
-    if (field.has_default_value) {
+    if (field.default_value) {
         die_at(&field_decl.pos, "Field already has a default value");
     }
 
-    if (field.type.kind != Type_Int) {
-        die_at(&field_decl.pos, "Only integer fields can have default values");
-    }
-
-    field.has_default_value = true;
-    field.default_value = default_value;
+    field.default_value = const_eval_expect(ctx, field_decl.default_value, field.type);
 }
 
 func elab_record_field_decl(ctx: *ElabCtx, field_decl: *RecordFieldDecl, sym: *RecordSym) {
-    var type: *Type = null;
-    if (field_decl.type) {
-        type = eval_type(ctx, field_decl.type);
-    }
-
-    var has_default_value = field_decl.default_value != null;
-
-    var default_value: Int32 = 0;
-    if (has_default_value) {
-        default_value = const_eval(ctx, field_decl.default_value);
-    }
-
-    if (!type && has_default_value) {
-        add_default_value_to_field(ctx, sym, field_decl, default_value);
+    if (!field_decl.type && field_decl.default_value) {
+        add_default_value_to_field(ctx, sym, field_decl);
+    } else if (field_decl.type) {
+        add_field_to_record(ctx, sym, field_decl);
     } else {
-        if (!type) {
-            die_at(&field_decl.pos, "Missing field type");
-        }
-        add_field_to_record(ctx, sym, field_decl, type, has_default_value, default_value);
+        die_at(&field_decl.pos, "Field type missing");
     }
 }
 
@@ -1309,10 +1313,20 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
 func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
     var name = decl.name;
     var value_expr = decl.value;
-
-    var type = mk_int_type(4);
-    var value = const_eval(ctx, value_expr);
-    define_const(ctx, &decl.pos, name, type, value);
+    var type: *Type = null;
+    if (decl.type) {
+        type = eval_type(ctx, decl.type);
+        if (!is_scalar(type)) {
+            die_at(&decl.type.pos, "Constant must have a scalar type");
+        }
+    }
+    var value: *ConstValue;
+    if (type) {
+        value = const_eval_expect(ctx, value_expr, type);
+    } else {
+        value = const_eval_infer(ctx, value_expr, type_hint: null);
+    }
+    define_const(ctx, &decl.pos, name, value);
 }
 
 func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {

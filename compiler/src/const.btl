@@ -1,0 +1,141 @@
+include "bittle.btls";
+
+func mk_bool_const_value(value: Bool): *BoolConstValue {
+    var result: *BoolConstValue = calloc(1, sizeof(BoolConstValue));
+    *result = BoolConstValue {
+        kind: ConstValue_Bool,
+        type: mk_bool_type(),
+        bool: value,
+    };
+    return result;
+}
+
+func mk_int_const_value(value: Int, type: *Type): *IntConstValue {
+    var result: *IntConstValue = calloc(1, sizeof(IntConstValue));
+    *result = IntConstValue {
+        kind: ConstValue_Int,
+        type: type,
+        int: value,
+    };
+    return result;
+}
+
+func mk_string_const_value(value: *StringBuffer): *StringConstValue {
+    var result: *StringConstValue = calloc(1, sizeof(StringConstValue));
+    *result = StringConstValue {
+        kind: ConstValue_String,
+        type: mk_ptr_type(mk_int_type(1)),
+        string: value,
+    };
+    return result;
+}
+
+func is_cmp_op(op: Int32): Bool {
+    return op == Tok_EqEq || op == Tok_BangEq || op == Tok_Lt || op == Tok_LtEq || op == Tok_Gt || op == Tok_GtEq;
+}
+
+func signed_cmp(op: Int32, a: Int, b: Int): Bool {
+    if (op == Tok_EqEq) {
+        return a == b;
+    } else if (op == Tok_BangEq) {
+        return a != b;
+    } else if (op == Tok_Lt) {
+        return a < b;
+    } else if (op == Tok_LtEq) {
+        return a <= b;
+    } else if (op == Tok_Gt) {
+        return a > b;
+    } else if (op == Tok_GtEq) {
+        return a >= b;
+    }
+    unreachable("Invalid comparison operator");
+}
+
+func const_value_unop(op: Int32, a: *ConstValue): *ConstValue {
+    if (a.kind == ConstValue_Bool) {
+        var a = a as *BoolConstValue;
+        if (op == Tok_Bang) {
+            return mk_bool_const_value(!a.bool);
+        }
+    } else if (a.kind == ConstValue_Int) {
+        var a = a as *IntConstValue;
+        if (op == Tok_Minus) {
+            return mk_int_const_value(-a.int, a.type);
+        }
+    }
+    return null;
+}
+
+func const_value_binop(op: Int32, a: *ConstValue, b: *ConstValue): *ConstValue {
+    assert(type_eq(a.type, b.type), "const_value_binop: Types should match");
+
+    if (a.kind == ConstValue_Bool && b.kind == ConstValue_Bool) {
+        var a = a as *BoolConstValue;
+        var b = b as *BoolConstValue;
+        if (op == Tok_AmpAmp) {
+            return mk_bool_const_value(a.bool && b.bool);
+        } else if (op == Tok_BarBar) {
+            return mk_bool_const_value(a.bool || b.bool);
+        } else if (is_cmp_op(op)) {
+            return mk_bool_const_value(signed_cmp(op, a.bool as Int, b.bool as Int));
+        }
+    } else if (a.kind == ConstValue_Int && b.kind == ConstValue_Int) {
+        var a = a as *IntConstValue;
+        var b = b as *IntConstValue;
+        if (op == Tok_Plus) {
+            return mk_int_const_value(a.int + b.int, a.type);
+        } else if (op == Tok_Minus) {
+            return mk_int_const_value(a.int - b.int, a.type);
+        } else if (op == Tok_Star) {
+            return mk_int_const_value(a.int * b.int, a.type);
+        } else if (op == Tok_Slash) {
+            if (b.int == 0) {
+                return null;
+            }
+            return mk_int_const_value(a.int / b.int, a.type);
+        } else if (op == Tok_Percent) {
+            if (b.int == 0) {
+                return null;
+            }
+            return mk_int_const_value(a.int % b.int, a.type);
+        } else if (is_cmp_op(op)) {
+            return mk_bool_const_value(signed_cmp(op, a.int, b.int));
+        }
+    }
+    return null;
+}
+
+func const_value_ternop(a: *ConstValue, b: *ConstValue, c: *ConstValue): *ConstValue {
+    if (a.kind == ConstValue_Bool && b.kind == ConstValue_Bool && c.kind == ConstValue_Bool) {
+        var a = a as *BoolConstValue;
+        var b = b as *BoolConstValue;
+        var c = c as *BoolConstValue;
+        return mk_bool_const_value(a.bool ? b.bool : c.bool);
+    }
+    return null;
+}
+
+func const_value_cast(value: *ConstValue, target: *Type): *ConstValue {
+    if (type_eq(value.type, target)) {
+        return value;
+    }
+    if (value.kind == ConstValue_Bool) {
+        var value = value as *BoolConstValue;
+        if (target.kind == Type_Int) {
+            return mk_int_const_value(value.bool as Int, target);
+        }
+    } else if (value.kind == ConstValue_Int) {
+        var value = value as *IntConstValue;
+        if (target.kind == Type_Bool) {
+            return mk_bool_const_value(value.int);
+        } else if (target.kind == Type_Int || target.kind == Type_Enum) {
+            return mk_int_const_value(value.int, target);
+        }
+    } else if (value.kind == ConstValue_String) {
+        var value = value as *StringConstValue;
+        if (target.kind == Type_Bool) {
+            return mk_bool_const_value(true);
+        }
+    }
+    return null;
+}

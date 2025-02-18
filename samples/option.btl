@@ -1,16 +1,16 @@
 extern func printf(fmt: *Char, ...): Int32;
 
 struct OptionBase {
-    is_some: Int8,
+    is_some: Bool,
 }
 
 struct Some: OptionBase {
-    is_some = 1, // TODO: Allow booleans as costant values
+    is_some = true,
     value: Int,
 }
 
 struct None: OptionBase {
-    is_some = 0,
+    is_some = false,
 }
 
 union Option: OptionBase {
