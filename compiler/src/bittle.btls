@@ -162,6 +162,8 @@ struct Sym {
 struct RecordField {
     name: *Char,
     type: *Type,
+    has_default_value: Bool,
+    default_value: Int,
     offset: Int,
 }
 
@@ -538,6 +540,7 @@ struct Decl {
 struct RecordFieldDecl {
     pos: Pos,
     name: *Char,
+    default_value: *Expr,
     type: *TypeExpr,
 }
 

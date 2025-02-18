@@ -589,86 +589,112 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
     }
 }
 
+func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr, pos: *Pos): *HirExpr {
+    /*
+        Desugar
+            x = Pair { value: 1, y: List { value: 2, next: null } }
+        to
+            temp t1: *Pair;
+            t1 = &x;
+            (*t1).value = 1;
+            let t2: *List = &t1.next;
+            (*t2).value = 2;
+            (*t2).next = null
+    */
+
+    assert(ast_src.type.kind == Type_Record, "lower_record_expr: expr should have a record type");
+    var record_type = ast_src.type as *RecordType;
+
+    var n_fields = list_len(record_type.sym.fields);
+
+    var initializers = ast_src.fields;
+    var n_initializers = list_len(initializers);
+
+    var is_initialized: *Bool = calloc(n_fields, sizeof(Bool));
+
+    var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
+
+    var temp_var = mk_temp_var(ctx, addr_dst.type);
+    var temp = hir_mk_temp_expr(temp_var, pos);
+    var temp_init = hir_mk_assign_expr(temp, addr_dst);
+
+    var body: *HirExpr = temp_init;
+    for (var init_index = 0; init_index < n_initializers; init_index += 1) {
+        var initializer: *FieldInitializer = list_get(initializers, init_index);
+        var field_index = find_record_field_by_name(record_type.sym, initializer.name);
+        var field: *RecordField = list_get(record_type.sym.fields, field_index);
+
+        var temp_deref = hir_mk_deref_expr(temp, pos);
+        var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
+        var assignment = lower_assign_expr(ctx, field_access, initializer.expr, &initializer.expr.pos);
+        body = hir_mk_seq_expr(body, assignment);
+    }
+
+    for (var field_index = 0; field_index < n_fields; field_index += 1) {
+        if (is_initialized[field_index]) {
+            continue;
+        }
+        var field: *RecordField = list_get(record_type.sym.fields, field_index);
+        if (!field.has_default_value) {
+            continue;
+        }
+
+        var temp_deref = hir_mk_deref_expr(temp, pos);
+        var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
+        var default_value = hir_mk_int_expr(field.default_value, field.type, pos);
+        var assignment = hir_mk_assign_expr(field_access, default_value);
+        body = hir_mk_seq_expr(body, assignment);
+    }
+
+    return body;
+}
+
+func lower_assign_expr_array(ctx: *Context, dst: *HirExpr, ast_src: *ArrayExpr, pos: *Pos): *HirExpr {
+    /*
+        Desugar
+            x = [a, b, c]
+        to
+            temp t1: *T;
+            t1 = &x[0];
+            t1[0] = a;
+            t1[1] = b;
+            t1[2] = c
+    */
+
+    var arr_type = dst.type as *ArrType;
+    var elem_type = arr_type.elem;
+    var arr_size = arr_type.size;
+
+    var elems = ast_src.elems;
+    var n_elems = list_len(elems);
+
+    assert(n_elems == arr_size, "lower_assign_expr_array: all elements must be initialized");
+
+    var zero = hir_mk_int_expr(0, mk_int_type(4), pos);
+    var zero_index = hir_mk_index_expr(dst, zero);
+    var addr_zero_index = hir_mk_addr_expr(zero_index, pos);
+
+    var temp_var = mk_temp_var(ctx, addr_zero_index.type);
+    var temp = hir_mk_temp_expr(temp_var, pos);
+    var temp_init = hir_mk_assign_expr(temp, addr_zero_index);
+
+    var body: *HirExpr = temp_init;
+    for (var i = 0; i < arr_size; i += 1) {
+        var ast_elem: *Expr = list_get(elems, i);
+        var index = hir_mk_int_expr(i, mk_int_type(4), pos);
+        var index_expr = hir_mk_index_expr(temp, index);
+        var assignment = lower_assign_expr(ctx, index_expr, ast_elem, &ast_elem.pos);
+        body = hir_mk_seq_expr(body, assignment);
+    }
+
+    return body;
+}
+
 func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
-    var type = dst.type;
-
     if (ast_src.kind == Expr_Record) {
-        /*
-            Desugar
-                x = Pair { value: 1, y: List { value: 2, next: null } }
-            to
-                temp t1: *Pair;
-                t1 = &x;
-                (*t1).value = 1;
-                let t2: *List = &t1.next;
-                (*t2).value = 2;
-                (*t2).next = null
-        */
-
-        var record_type = ast_src.type as *RecordType;
-        var initializers = (ast_src as *RecordExpr).fields;
-
-        var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
-
-        var temp_var = mk_temp_var(ctx, addr_dst.type);
-        var temp = hir_mk_temp_expr(temp_var, pos);
-        var temp_init = hir_mk_assign_expr(temp, addr_dst);
-
-        var body: *HirExpr = temp_init;
-
-        var n_initializers = list_len(initializers);
-        for (var i = 0; i < n_initializers; i += 1) {
-            var initializer: *FieldInitializer = list_get(initializers, i);
-            var field_index = find_record_field_by_name(record_type.sym, initializer.name);
-            var field: *RecordField = list_get(record_type.sym.fields, field_index);
-
-            var temp_deref = hir_mk_deref_expr(temp, pos);
-            var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
-            var assignment = lower_assign_expr(ctx, field_access, initializer.expr, &initializer.expr.pos);
-            body = hir_mk_seq_expr(body, assignment);
-        }
-
-        return body;
+        return lower_assign_expr_record(ctx, dst, ast_src as *RecordExpr, pos);
     } else if (ast_src.kind == Expr_Array) {
-        /*
-            Desugar
-                x = [a, b, c]
-            to
-                temp t1: *T;
-                t1 = &x[0];
-                t1[0] = a;
-                t1[1] = b;
-                t1[2] = c
-        */
-
-        var elems = (ast_src as *ArrayExpr).elems;
-        var elem_type = (type as *ArrType).elem;
-        assert(elem_type, "lower_assign_expr: array type should have an element type");
-        var array_size = (type as *ArrType).size;
-
-        var zero = hir_mk_int_expr(0, mk_int_type(4), pos);
-        var zero_index = hir_mk_index_expr(dst, zero);
-        var addr_zero_index = hir_mk_addr_expr(zero_index, pos);
-
-        var temp_var = mk_temp_var(ctx, addr_zero_index.type);
-        var temp = hir_mk_temp_expr(temp_var, pos);
-        var temp_init = hir_mk_assign_expr(temp, addr_zero_index);
-
-        var body: *HirExpr = temp_init;
-
-        for (var i = 0; i < array_size; i += 1) {
-            var ast_elem: *Expr = list_get(elems, i);
-            var index = hir_mk_int_expr(i, mk_int_type(4), pos);
-            var index_expr = hir_mk_index_expr(temp, index);
-            var assignment = lower_assign_expr(ctx, index_expr, ast_elem, &ast_elem.pos);
-            body = hir_mk_seq_expr(body, assignment);
-        }
-
-        // something is null...
-        assert(addr_zero_index.type, "lower_assign_expr: addr_zero_index should have a type");
-        assert(addr_zero_index.expr.type, "lower_assign_expr: addr_zero_index should have a type");
-
-        return body;
+        return lower_assign_expr_array(ctx, dst, ast_src as *ArrayExpr, pos);
     } else if (ast_src.kind == Expr_Call) {
         return lower_call_expr(ctx, ast_src as *CallExpr, dest: dst);
     } else {

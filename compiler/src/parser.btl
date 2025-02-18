@@ -827,13 +827,20 @@ func p_stmt(self: *Parser): *Stmt {
 func p_record_field(self: *Parser): *RecordFieldDecl {
     var pos = self.tok.pos;
     var name = p_ident(self);
-    expect(self, Tok_Colon);
-    var type = p_type(self);
+    var type: *TypeExpr = null;
+    if (eat(self, Tok_Colon)) {
+        type = p_type(self);
+    }
+    var default_value: *Expr = null;
+    if (eat(self, Tok_Eq)) {
+        default_value = p_expr(self, 0);
+    }
 
     var result: *RecordFieldDecl = calloc(1, sizeof(RecordFieldDecl));
     *result = RecordFieldDecl {
         pos,
         name,
+        default_value,
         type,
     };
     return result;

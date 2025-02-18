@@ -802,6 +802,11 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
         elab_expr_expect(ctx, &initializer.expr, field.type);
     }
 
+    for (var i = 0; i < n_fields; i += 1) {
+        var field: *RecordField = list_get(fields, i);
+        is_initialized[i] = is_initialized[i] || field.has_default_value;
+    }
+
     if (!sym.is_union) {
         for (var i = 0; i < n_fields; i += 1) {
             if (!is_initialized[i]) {
@@ -1038,7 +1043,7 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     }
 }
 
-func add_record_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
+func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl, field_type: *Type, has_default_value: Bool, default_value: Int32) {
     var field_name = field_decl.name;
 
     var existing_index = find_record_field_by_name(sym, field_name);
@@ -1046,10 +1051,6 @@ func add_record_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDe
         die_at(&field_decl.pos, "Duplicate field");
     }
 
-    var field_type = eval_type(ctx, field_decl.type);
-    if (!is_sized(field_type)) {
-        die_at(&field_decl.pos, "Field has unsized type");
-    }
     var field_size = type_size(field_type);
     var field_align = type_align(field_type);
     var field_offset = sym.is_union
@@ -1060,6 +1061,8 @@ func add_record_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDe
     *field = RecordField {
         name: field_name,
         type: field_type,
+        has_default_value,
+        default_value,
         offset: field_offset,
     };
 
@@ -1070,6 +1073,48 @@ func add_record_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDe
         sym.unpadded_size = field_offset + field_size;
     }
     sym.align = int_max(sym.align, field_align);
+}
+
+func add_default_value_to_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl, default_value: Int32) {
+    var field_index = find_record_field_by_name(sym, field_decl.name);
+    if (field_index == -1) {
+        die_at(&field_decl.pos, "No existing field to add default value to");
+    }
+
+    var field: *RecordField = list_get(sym.fields, field_index);
+    if (field.has_default_value) {
+        die_at(&field_decl.pos, "Field already has a default value");
+    }
+
+    if (field.type.kind != Type_Int) {
+        die_at(&field_decl.pos, "Only integer fields can have default values");
+    }
+
+    field.has_default_value = true;
+    field.default_value = default_value;
+}
+
+func elab_record_field_decl(ctx: *ElabCtx, field_decl: *RecordFieldDecl, sym: *RecordSym) {
+    var type: *Type = null;
+    if (field_decl.type) {
+        type = eval_type(ctx, field_decl.type);
+    }
+
+    var has_default_value = field_decl.default_value != null;
+
+    var default_value: Int32 = 0;
+    if (has_default_value) {
+        default_value = const_eval(ctx, field_decl.default_value);
+    }
+
+    if (!type && has_default_value) {
+        add_default_value_to_field(ctx, sym, field_decl, default_value);
+    } else {
+        if (!type) {
+            die_at(&field_decl.pos, "Missing field type");
+        }
+        add_field_to_record(ctx, sym, field_decl, type, has_default_value, default_value);
+    }
 }
 
 func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
@@ -1129,7 +1174,7 @@ func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
 
         for (var i = 0; i < list_len(field_decls); i += 1) {
             var field_decl: *RecordFieldDecl = list_get(field_decls, i);
-            add_record_field(ctx, sym, field_decl);
+            elab_record_field_decl(ctx, field_decl, sym);
         }
 
         if (list_len(fields) == 0) {

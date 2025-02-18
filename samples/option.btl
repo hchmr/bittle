@@ -1,0 +1,48 @@
+extern func printf(fmt: *Char, ...): Int32;
+
+struct OptionBase {
+    is_some: Int8,
+}
+
+struct Some: OptionBase {
+    is_some = 1, // TODO: Allow booleans as costant values
+    value: Int,
+}
+
+struct None: OptionBase {
+    is_some = 0,
+}
+
+union Option: OptionBase {
+    some: Some,
+    none: None,
+}
+
+func find_element(arr: *Int, len: Int32, target: Int): Option {
+    for (var i = 0; i < len; i += 1) {
+        if (arr[i] == target) {
+            return Some { value: i };
+        }
+    }
+    return None {};
+}
+func print_option(option: Option) {
+    if (option.is_some) {
+        printf("Found at index: %d\n", option.some.value);
+    } else {
+        printf("Not found\n");
+    }
+}
+
+func main(): Int32 {
+    var arr = [1, 2, 3, 4, 5];
+    var targets = [3, 6, 1, 5, 0];
+
+    for (var i = 0; i < 5; i += 1) {
+        var result = find_element(&arr[0], 5, targets[i]);
+        printf("Searching for %d: ", targets[i]);
+        print_option(result);
+    }
+
+    return 0;
+}
