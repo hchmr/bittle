@@ -4,7 +4,7 @@ import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { Point, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, NodeTypes } from '../syntax/nodeTypes';
-import { Nullish } from '../utils';
+import { comparing, Nullish } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { countPrecedingCommas, nodeEndsAt, nodeStartsAt } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
@@ -140,9 +140,11 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             if (recordSym.recordKind === 'union' && usedNames.size > 0) {
                 return undefined;
             }
-            return recordSym.fields
-                .map(x => x.name)
-                .find(x => !usedNames.has(x));
+            return stream(recordSym.fields)
+                .filter(field => !usedNames.has(field.name))
+                .sort(comparing(field => field.defaultValue !== undefined))
+                .map(field => field.name)
+                .first();
         }
     }
 }

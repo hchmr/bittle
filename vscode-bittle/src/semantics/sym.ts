@@ -51,6 +51,7 @@ export type RecordSym = SymBase & {
 export type RecordFieldSym = SymBase & {
     kind: SymKind.RecordField;
     type: Type;
+    defaultValue: number | undefined;
 };
 
 export type FuncSym = SymBase & {
@@ -127,7 +128,8 @@ export function prettySym(sym: Sym): string {
         const keyword = sym.recordKind === RecordKind.Struct ? 'struct' : 'union';
         return `${keyword} ${sym.name}${prettyBase(sym)}`;
     } else if (sym.kind === SymKind.RecordField) {
-        return `(field) ${sym.name}: ${prettyType(sym.type)}`;
+        const defaultValue = sym.defaultValue !== undefined ? ` = ${sym.defaultValue}` : '';
+        return `(field) ${sym.name}: ${prettyType(sym.type)}${defaultValue}`;
     } else if (sym.kind === SymKind.Func) {
         return `func ${prettyFuncSym(sym)}`;
     } else if (sym.kind === SymKind.Global) {

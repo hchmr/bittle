@@ -423,7 +423,7 @@ export class Parser extends ParserBase {
     }
 
     field() {
-        if (!this.match('identifier') && !this.match(':')) {
+        if (!this.match('identifier')) {
             this.addErrorAndTryBump(`Expected record member.`);
             return;
         }
@@ -431,10 +431,18 @@ export class Parser extends ParserBase {
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
-        this.expect(':');
-        this.beginField('type');
-        this.type();
-        this.finishField('type');
+        if (this.match(':')) {
+            this.bump(':');
+            this.beginField('type');
+            this.type();
+            this.finishField('type');
+        }
+        if (this.match('=')) {
+            this.bump('=');
+            this.beginField('value');
+            this.expr();
+            this.finishField('value');
+        }
         this.finishNode(CompositeNodeTypes.Field);
     }
 

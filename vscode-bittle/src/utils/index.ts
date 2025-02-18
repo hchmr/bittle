@@ -27,3 +27,17 @@ export function dedent(text: string): string {
     const minIndent = stream(lines).map(countLeadingSpaces).reduce((a, b) => Math.min(a, b), Infinity);
     return lines.map(line => line.slice(minIndent)).join('\n');
 }
+
+export function comparing<T>(f: (x: T) => string | bigint | number | boolean): (a: T, b: T) => number {
+    return (a, b) => {
+        const fa = f(a);
+        const fb = f(b);
+        if (fa === fb) {
+            return 0;
+        } else if (fa < fb) {
+            return -1;
+        } else {
+            return 1;
+        }
+    };
+}

@@ -153,6 +153,12 @@ export class FieldNode extends AstNode {
     get type(): TypeNode | undefined {
         return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
     }
+    get eqToken(): TokenNode<'='> | undefined {
+        return this.getTokenOfType(undefined, ['=']);
+    }
+    get value(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
 }
 export class FuncDeclNode extends AstNode {
     get funcToken(): TokenNode<'func'> | undefined {

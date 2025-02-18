@@ -65,8 +65,14 @@ export const grammar = createGrammar({
 
     Field: $ => seq(
         label('name', 'identifier'),
-        ':',
-        label('type', $.Type),
+        optional(seq(
+            ':',
+            label('type', $.Type),
+        )),
+        optional(seq(
+            '=',
+            label('value', $.Expr),
+        )),
     ),
 
     FuncDecl: $ => seq(

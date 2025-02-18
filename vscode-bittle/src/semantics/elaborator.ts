@@ -221,7 +221,7 @@ export class Elaborator {
         return sym;
     }
 
-    private defineRecordFieldSym(declNode: FieldNode, nameNode: TokenNode, type: Type, recordSym: RecordSym): RecordFieldSym {
+    private defineRecordFieldSym(declNode: FieldNode, nameNode: TokenNode, type: Type, recordSym: RecordSym, defaultValue: number | undefined): RecordFieldSym {
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
             if (existing.kind !== SymKind.RecordField) {
@@ -236,6 +236,7 @@ export class Elaborator {
             qualifiedName: `${recordSym.name}.${nameNode.text}`,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             type,
+            defaultValue,
         };
         if (!existing) {
             this.addSym(sym);
@@ -647,11 +648,6 @@ export class Elaborator {
         }
 
         if (bodyNode) {
-            // Add base fields to the scope
-            for (const field of sym.fields) {
-                this.addSym(field);
-            }
-
             for (const fieldNode of bodyNode.fieldNodes) {
                 this.elabRecordField(fieldNode, sym);
             }
@@ -671,7 +667,7 @@ export class Elaborator {
     private elabRecordBase(
         baseTypeNode: TypeNode,
         recordSym: RecordSym,
-    ): RecordSym | undefined {
+    ) {
         const baseType = this.typeEval(baseTypeNode);
         if (baseType.kind === TypeKind.Err) {
             return;
@@ -694,26 +690,73 @@ export class Elaborator {
         }
         const baseSym = this.symbols.get(baseType.sym.qualifiedName);
         assert(baseSym?.kind === SymKind.Record);
+
+        for (const field of baseSym.fields) {
+            const newField: RecordFieldSym = {
+                ...field,
+                defaultValue: field.defaultValue,
+            };
+            recordSym.fields.push(newField);
+            this.addSym(newField);
+        }
+
         recordSym.base = baseSym;
-        recordSym.fields = [...baseSym.fields];
     }
 
     private elabRecordField(fieldNode: FieldNode, recordSym: RecordSym) {
         const nameNode = fieldNode.name;
         const typeNode = fieldNode.type;
+        const valueNode = fieldNode.value;
 
-        let fieldType = this.typeEval(typeNode);
-        if (typeNode && this.isUnsizedType(fieldType)) {
-            this.reportError(typeNode, `Field has incomplete type. Consider inserting an indirection.`);
-            fieldType = mkErrorType();
+        let fieldType: Type | undefined = undefined;
+        if (typeNode) {
+            fieldType = this.typeEval(typeNode);
+            if (this.isUnsizedType(fieldType)) {
+                this.reportError(typeNode, `Field has incomplete type. Consider inserting an indirection.`);
+                fieldType = mkErrorType();
+            }
+        }
+
+        let defaultValue = undefined;
+        if (valueNode) {
+            defaultValue = this.constEval(valueNode);
+            if (defaultValue === undefined) {
+                this.reportError(valueNode, `Field default value must be a constant.`);
+            }
         }
 
         const fieldName = nameNode?.text;
         if (!fieldName)
             return;
 
-        const fieldSym = this.defineRecordFieldSym(fieldNode, nameNode, fieldType, recordSym);
-        recordSym.fields.push(fieldSym);
+        if (!typeNode && valueNode) {
+            this.addDefaultValueToExistingField(recordSym, fieldName, nameNode, defaultValue);
+        } else {
+            if (!fieldType) {
+                this.reportError(nameNode, `Missing field type.`);
+                fieldType = mkErrorType();
+            }
+            const fieldSym = this.defineRecordFieldSym(fieldNode, nameNode, fieldType, recordSym, defaultValue);
+            recordSym.fields.push(fieldSym);
+        }
+    }
+
+    private addDefaultValueToExistingField(recordSym: RecordSym, fieldName: string, nameNode: TokenNode, defaultValue: number | undefined) {
+        const fieldSym = recordSym.fields.find(f => f.name === fieldName);
+        if (!fieldSym) {
+            this.reportError(nameNode, `No existing field to add default value to.`);
+            return;
+        }
+        this.recordNameResolution(fieldSym, nameNode);
+        if (fieldSym.defaultValue !== undefined) {
+            this.reportError(nameNode, `Field already has a default value.`);
+            return;
+        }
+        if (fieldSym.type.kind !== TypeKind.Int) {
+            this.reportError(nameNode, `Only integer fields can have default values.`);
+            return;
+        }
+        fieldSym.defaultValue = defaultValue;
     }
 
     private elabEnum(node: EnumDeclNode) {
@@ -1444,7 +1487,10 @@ export class Elaborator {
             }
         }
 
-        const uninitializedFields = sym.fields.filter(field => !seenFields.has(field.name));
+        const uninitializedFields = sym.fields.filter(field =>
+            !seenFields.has(field.name)
+            && field.defaultValue === undefined
+        );
         if (sym.recordKind === RecordKind.Struct) {
             for (const field of uninitializedFields) {
                 this.reportError(node, `Field '${field.name}' is not initialized.`);

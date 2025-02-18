@@ -6,6 +6,7 @@ export interface Stream<T> extends Iterable<T> {
     filter(p: (x: T) => unknown): Stream<T>;
     groupBy<K>(f: (x: T) => K): Stream<[K, T[]]>;
     groupBy<K, V>(f: (x: T) => K, g: (x: T) => V): Stream<[K, V[]]>;
+    sort(compareFn?: (a: T, b: T) => number): Stream<T>;
     distinct(): Stream<T>;
     distinctBy(f: (x: T) => unknown): Stream<T>;
     filterMap<U>(f: (x: T) => U | undefined): Stream<U>;
@@ -83,6 +84,10 @@ class StreamImpl<T> implements Stream<T> {
                 return groups.entries();
             },
         });
+    }
+
+    sort(compareFn?: (a: T, b: T) => number): Stream<T> {
+        return new StreamImpl(this.toArray().sort(compareFn));
     }
 
     distinct(): Stream<T> {
