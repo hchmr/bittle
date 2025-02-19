@@ -536,6 +536,12 @@ export class Parser extends ParserBase {
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
+        if (this.match(':')) {
+            this.expect(':');
+            this.beginField('type');
+            this.type();
+            this.finishField('type');
+        }
         this.expect('=');
         this.beginField('value');
         this.expr();

@@ -238,6 +238,12 @@ export class ConstDeclNode extends AstNode {
     get name(): TokenNode<'identifier'> | undefined {
         return this.getTokenOfType('name', ['identifier']);
     }
+    get colonToken(): TokenNode<':'> | undefined {
+        return this.getTokenOfType(undefined, [':']);
+    }
+    get type(): TypeNode | undefined {
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+    }
     get eqToken(): TokenNode<'='> | undefined {
         return this.getTokenOfType(undefined, ['=']);
     }

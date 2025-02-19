@@ -105,11 +105,11 @@ export function mkVoidType(): Type {
     return VOID_TYPE;
 }
 
-export function mkBoolType(): Type {
+export function mkBoolType(): BoolType {
     return BOOL_TYPE;
 }
 
-export function mkIntType(size: number | undefined): Type {
+export function mkIntType(size: number | undefined): IntType {
     switch (size) {
         case 8: return INT8_TYPE;
         case 16: return INT16_TYPE;
@@ -119,7 +119,7 @@ export function mkIntType(size: number | undefined): Type {
     }
 }
 
-export function mkPointerType(pointeeType: Type): Type {
+export function mkPointerType(pointeeType: Type): PointerType {
     let ptrType = POINTER_TYPES.get(pointeeType);
     if (ptrType === undefined) {
         ptrType = { kind: TypeKind.Ptr, pointeeType };

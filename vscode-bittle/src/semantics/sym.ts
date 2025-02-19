@@ -1,6 +1,7 @@
 import { SyntaxNode } from '../syntax';
 import { unreachable } from '../utils';
-import { mkEnumType, mkRecordType, prettyType, Type } from './type';
+import { ConstValue, ConstValueKind } from './const';
+import { mkEnumType, mkErrorType, mkRecordType, prettyType, Type } from './type';
 
 export enum SymKind {
     Record = 'Record',
@@ -51,7 +52,7 @@ export type RecordSym = SymBase & {
 export type RecordFieldSym = SymBase & {
     kind: SymKind.RecordField;
     type: Type;
-    defaultValue: number | undefined;
+    defaultValue: ConstValue | undefined;
 };
 
 export type FuncSym = SymBase & {
@@ -75,8 +76,7 @@ export type GlobalSym = SymBase & {
 
 export type ConstSym = SymBase & {
     kind: SymKind.Const;
-    type: Type;
-    value: number | undefined;
+    value: ConstValue | undefined;
 };
 
 export type LocalSym = SymBase & {
@@ -113,7 +113,7 @@ export function symRelatedType(sym: Sym): Type {
     } else if (sym.kind === SymKind.Local) {
         return sym.type;
     } else if (sym.kind === SymKind.Const) {
-        return sym.type;
+        return sym.value?.type ?? mkErrorType();
     } else if (sym.kind === SymKind.FuncParam) {
         return sym.type;
     } else {
@@ -128,7 +128,7 @@ export function prettySym(sym: Sym): string {
         const keyword = sym.recordKind === RecordKind.Struct ? 'struct' : 'union';
         return `${keyword} ${sym.name}${prettyBase(sym)}`;
     } else if (sym.kind === SymKind.RecordField) {
-        const defaultValue = sym.defaultValue !== undefined ? ` = ${sym.defaultValue}` : '';
+        const defaultValue = sym.defaultValue !== undefined ? ` = ${prettyConstValue(sym.defaultValue)}` : '';
         return `(field) ${sym.name}: ${prettyType(sym.type)}${defaultValue}`;
     } else if (sym.kind === SymKind.Func) {
         return `func ${prettyFuncSym(sym)}`;
@@ -138,7 +138,8 @@ export function prettySym(sym: Sym): string {
     } else if (sym.kind === SymKind.Local) {
         return `var ${sym.name}: ${prettyType(sym.type)}`;
     } else if (sym.kind === SymKind.Const) {
-        return `const ${sym.name}: ${prettyType(symRelatedType(sym))} = ${sym.value}`;
+        const value = sym.value !== undefined ? prettyConstValue(sym.value) : '{unknown}';
+        return `const ${sym.name}: ${prettyType(symRelatedType(sym))} = ${value}`;
     } else if (sym.kind === SymKind.FuncParam) {
         return `(parameter) ${sym.name}: ${prettyType(sym.type)}`;
     } else {
@@ -160,4 +161,16 @@ export function prettyRecordWithFields(sym: RecordSym): string {
 
 function prettyBase(sym: RecordSym) {
     return sym.base ? `: ${sym.base.name}` : '';
+}
+
+function prettyConstValue(value: ConstValue): string {
+    if (value.kind === ConstValueKind.Bool) {
+        return value.value ? 'true' : 'false';
+    } else if (value.kind === ConstValueKind.Int) {
+        return value.value.toString();
+    } else if (value.kind === ConstValueKind.String) {
+        return JSON.stringify(value.value);
+    } else {
+        return unreachable(value);
+    }
 }

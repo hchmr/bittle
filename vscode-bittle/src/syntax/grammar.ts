@@ -123,6 +123,10 @@ export const grammar = createGrammar({
     ConstDecl: $ => seq(
         'const',
         label('name', 'identifier'),
+        optional(seq(
+            ':',
+            label('type', $.Type),
+        )),
         '=',
         label('value', $.Expr),
         ';',
