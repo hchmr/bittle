@@ -6,7 +6,7 @@ struct File;
 extern var stdin: *File;
 extern var stderr: *File;
 extern var stdout: *File;
-const EOF = -1;
+const EOF: Int32 = -1;
 extern func fgetc(stream: *File): Int32;
 extern func fprintf(stream: *File, format: *Char, ...): Int32;
 extern func ferror(stream: *File): Int32;
@@ -19,7 +19,7 @@ extern func isspace(c: Char): Int32;
 
 // stdlib.h
 
-extern func exit(status: Int32): Void;
+extern func exit(status: Int32): !;
 
 //= Misc
 
@@ -55,28 +55,21 @@ func int32_max(a: Int32, b: Int32): Int32 {
 //= Stats
 
 struct Stats {
-    lines: Int32,
-    words: Int32,
-    bytes: Int32,
-    max_len: Int32,
+    lines: Int32 = 0,
+    words: Int32 = 0,
+    bytes: Int32 = 0,
+    max_len: Int32 = 0,
 }
 
-func stats_init(stats: *Stats) {
-    stats.lines = 0;
-    stats.words = 0;
-    stats.bytes = 0;
-    stats.max_len = 0;
-}
-
-func stats_accum(total: *Stats, other: *Stats) {
+func stats_accum(total: *Stats, other: Stats) {
     total.lines += other.lines;
     total.words += other.words;
     total.bytes += other.bytes;
     total.max_len = int32_max(total.max_len, other.max_len);
 }
 
-func get_stats(stream: *File, stats: *Stats) {
-    stats_init(stats);
+func get_stats(stream: *File): Stats {
+    var stats = Stats {};
     var prev_char = ' ';
     var curr_len: Int32 = 0;
     while (true) {
@@ -99,6 +92,7 @@ func get_stats(stream: *File, stats: *Stats) {
         }
     }
     stats.bytes += curr_len;
+    return stats;
 }
 
 //= Display
@@ -143,7 +137,7 @@ func print_usage(argv: **Char) {
 
 func arg_parse(argc: Int32, argv: **Char): Args {
     var options: Int32 = 0;
-    var i = 1;
+    var i: Int32 = 1;
     for (; i < argc; i += 1) {
         var arg = argv[i];
         if (arg[0] != '-')
@@ -170,30 +164,27 @@ func arg_parse(argc: Int32, argv: **Char): Args {
     return Args {
         options: options,
         files: &argv[i],
-        files_count: argc - i as Int32
+        files_count: argc - i,
     };
 }
 
 func main(argc: Int32, argv: **Char): Int32 {
     var args = arg_parse(argc, argv);
 
-    var total: Stats;
-    stats_init(&total);
+    var total = Stats {};
 
     var i = 0;
     for (; i < args.files_count; i += 1) {
-        var stats: Stats;
-        stats_init(&stats);
         var file_name = args.files[i];
         var stream = open_file(file_name);
-        get_stats(stream, &stats);
+        var stats = get_stats(stream);
         close_file(stream);
         print_row(args.options, &stats, label: file_name);
-        stats_accum(&total, &stats);
+        stats_accum(&total, stats);
     }
 
     if (i == 0) {
-        get_stats(stdin, &total);
+        total = get_stats(stdin);
         print_row(args.options, &total, null);
     } else if (i > 1) {
         print_row(args.options, &total, "total");

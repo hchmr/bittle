@@ -1,21 +1,22 @@
 extern func printf(fmt: *Char, ...): Int32;
 
-enum {
-    Shape_Base,
+enum ShapeKind {
     Shape_Rectangle,
     Shape_Circle,
 }
 
 struct Shape {
-    kind: Int32,
+    kind: ShapeKind,
 }
 
 struct Rectangle: Shape {
+    kind = Shape_Rectangle,
     width: Int,
     height: Int,
 }
 
 struct Circle: Shape {
+    kind = Shape_Circle,
     radius: Int,
 }
 
@@ -32,8 +33,8 @@ func area(shape: *Shape): Int {
 }
 
 func main(): Int32 {
-    var rect = Rectangle { kind: Shape_Rectangle, width: 10, height: 20 };
-    var circle = Circle { kind: Shape_Circle, radius: 7 };
+    var rect = Rectangle { width: 10, height: 20 };
+    var circle = Circle { radius: 7 };
 
     printf("Rectangle area: %d\n", area(&rect));
     printf("Circle area: %d\n", area(&circle));
