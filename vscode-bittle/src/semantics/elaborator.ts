@@ -224,7 +224,18 @@ export class Elaborator {
         return sym;
     }
 
-    private defineRecordFieldSym(declNode: FieldNode, nameNode: TokenNode, type: Type, recordSym: RecordSym, defaultValue: ConstValue | undefined): RecordFieldSym {
+    private defineRecordFieldSym(declNode: FieldNode, nameNode: TokenNode | Nullish, type: Type, recordSym: RecordSym, defaultValue: ConstValue | undefined): RecordFieldSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.RecordField,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                type,
+                defaultValue,
+            };
+        }
+
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
             if (existing.kind !== SymKind.RecordField) {
@@ -247,11 +258,7 @@ export class Elaborator {
         return sym;
     }
 
-    private defineEnumSym(declNode: EnumDeclNode, nameNode: TokenNode | Nullish): EnumSym | undefined {
-        if (!nameNode) {
-            return;
-        }
-
+    private defineEnumSym(declNode: EnumDeclNode, nameNode: TokenNode): EnumSym {
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
             if (existing.kind !== SymKind.Enum) {
@@ -682,33 +689,14 @@ export class Elaborator {
         const typeNode = fieldNode.type;
         const valueNode = fieldNode.value;
 
-        let fieldType: Type | undefined = undefined;
-        if (typeNode) {
-            fieldType = this.typeEval(typeNode);
-            if (this.isUnsizedType(fieldType)) {
-                this.reportError(typeNode, `Field has incomplete type. Consider inserting an indirection.`);
-                fieldType = mkErrorType();
-            }
-        }
-
-        const fieldName = nameNode?.text;
-        if (!fieldName)
-            return;
-
-        if (!typeNode && valueNode) {
-            this.addDefaultValueToExistingField(recordSym, fieldNode);
+        if (nameNode && !typeNode && valueNode) {
+            this.elabRecordFieldDefaultValueDecl(recordSym, fieldNode);
         } else {
-            if (!fieldType) {
-                this.reportError(nameNode, `Missing field type.`);
-                fieldType = mkErrorType();
-            }
-            const defaultValue = valueNode ? this.constEvalExpect(valueNode, fieldType) : undefined;
-            const fieldSym = this.defineRecordFieldSym(fieldNode, nameNode, fieldType, recordSym, defaultValue);
-            recordSym.fields.push(fieldSym);
+            this.elabRecordFieldRegularDecl(fieldNode, recordSym);
         }
     }
 
-    private addDefaultValueToExistingField(recordSym: RecordSym, fieldNode: FieldNode) {
+    private elabRecordFieldDefaultValueDecl(recordSym: RecordSym, fieldNode: FieldNode) {
         const nameNode = fieldNode.name!;
         const valueNode = fieldNode.value!;
         const fieldName = nameNode.text;
@@ -727,8 +715,39 @@ export class Elaborator {
         fieldSym.defaultValue = defaultValue;
     }
 
+    private elabRecordFieldRegularDecl(fieldNode: FieldNode, recordSym: RecordSym) {
+        const nameNode = fieldNode.name;
+        const typeNode = fieldNode.type;
+        const valueNode = fieldNode.value;
+
+        let fieldType: Type | undefined = undefined;
+        if (typeNode) {
+            fieldType = this.typeEval(typeNode);
+            if (this.isUnsizedType(fieldType)) {
+                this.reportError(typeNode, `Field has incomplete type. Consider inserting an indirection.`);
+                fieldType = mkErrorType();
+            }
+        } else {
+            if (nameNode) {
+                this.reportError(nameNode, `Missing field type.`);
+            }
+            fieldType = mkErrorType();
+        }
+
+        let defaultValue: ConstValue | undefined = undefined;
+        if (valueNode) {
+            defaultValue = this.constEvalExpect(valueNode, fieldType);
+        }
+
+        const fieldSym = this.defineRecordFieldSym(fieldNode, nameNode, fieldType, recordSym, defaultValue);
+        recordSym.fields.push(fieldSym);
+    }
+
     private elabEnum(node: EnumDeclNode) {
-        const enumSym = this.defineEnumSym(node, node.name);
+        let enumSym: EnumSym | undefined = undefined;
+        if (node.name) {
+            enumSym = this.defineEnumSym(node, node.name);
+        }
 
         const type = enumSym ? mkEnumType(enumSym) : mkIntType(32);
 
