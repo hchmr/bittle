@@ -172,10 +172,9 @@ export class Elaborator {
         this.references.set(sym.qualifiedName, references);
     }
 
-    private addSym(sym: Sym) {
+    private addSym(sym: Sym, nameNode: SyntaxNode | undefined) {
         this.scope.add(sym.name, sym.qualifiedName);
         this.symbols.set(sym.qualifiedName, sym);
-        const nameNode = sym.origins[0].nameNode;
         if (nameNode) {
             this.recordNameIntroduction(sym, nameNode);
         }
@@ -220,7 +219,7 @@ export class Elaborator {
             isDefined: false,
         };
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -243,7 +242,7 @@ export class Elaborator {
             defaultValue,
         };
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -269,7 +268,7 @@ export class Elaborator {
             size: 32,
         };
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -313,7 +312,7 @@ export class Elaborator {
             isDefined: false,
         };
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -347,7 +346,7 @@ export class Elaborator {
         };
 
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -388,7 +387,7 @@ export class Elaborator {
         };
 
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -423,7 +422,7 @@ export class Elaborator {
         };
 
         if (!existing) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -454,7 +453,7 @@ export class Elaborator {
         };
 
         if (!isConflictingRedefinition) {
-            this.addSym(sym);
+            this.addSym(sym, nameNode);
         }
         return sym;
     }
@@ -672,7 +671,7 @@ export class Elaborator {
                 defaultValue: field.defaultValue,
             };
             recordSym.fields.push(newField);
-            this.addSym(newField);
+            this.addSym(newField, undefined);
         }
 
         recordSym.base = baseSym;
