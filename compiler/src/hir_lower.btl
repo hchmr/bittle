@@ -190,7 +190,7 @@ func hir_mk_bit_not_expr(expr: *HirExpr): *HirExpr {
     return hir_mk_binary_op_expr(HirOp_Xor, expr, minus_one, expr.type);
 }
 
-func hir_mk_call_expr(callee: *FuncSym, args: *List, pos: *Pos): *HirCallExpr {
+func hir_mk_call_expr(callee: *FuncSym, args: **HirExpr, n_args: Int, pos: *Pos): *HirCallExpr {
     var result: *HirCallExpr = calloc(1, sizeof(HirCallExpr));
     *result = HirCallExpr {
         kind: HirExpr_Call,
@@ -198,6 +198,7 @@ func hir_mk_call_expr(callee: *FuncSym, args: *List, pos: *Pos): *HirCallExpr {
         pos: *pos,
         callee,
         args,
+        n_args,
     };
     return result;
 }
@@ -388,18 +389,44 @@ func lower_arg(ctx: *Context, expr: *Expr): *HirExpr {
 }
 
 func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
-    var ast_args = expr.args;
+    var sym = expr.resolved_callee;
+    var n_params = list_len(sym.params);
 
-    var hir_args = list_new();
-    for (var i = 0; i < list_len(ast_args); i += 1) {
+    var ast_args = expr.args;
+    var n_ast_args = list_len(ast_args);
+
+    var n_hir_args = int_max(n_params, n_ast_args);
+    var hir_args: **HirExpr = calloc(n_hir_args, sizeof(*HirExpr));
+
+    for (var i = 0; i < n_ast_args; i += 1) {
         var ast_arg: *CallArg = list_get(ast_args, i);
         var hir_arg = lower_arg(ctx, ast_arg.expr);
-        list_push(hir_args, hir_arg);
+
+        assert(0 <= ast_arg.positional_index && ast_arg.positional_index < n_hir_args, "lower_call_expr: positional index out of bounds");
+        hir_args[ast_arg.positional_index] = hir_arg;
     }
 
-    var hir_expr = hir_mk_call_expr(expr.resolved_callee, hir_args, &expr.pos);
 
-    if (!dest && is_composite(expr.resolved_callee.return_type)) {
+    for (var i = 0; i < n_hir_args; i += 1) {
+        if (i >= n_params) {
+            assert(hir_args[i], "lower_call_expr: variadic argument should be initialized");
+            continue;
+        }
+
+        var param: *FuncParam = list_get(sym.params, i);
+        if (hir_args[i]) {
+            continue;
+        }
+
+        var default_value = param.default_value;
+        assert(default_value, "lower_call_expr: missing argument should have a default value");
+
+        hir_args[i] = lower_const_value(default_value, &expr.pos);
+    }
+
+    var hir_expr = hir_mk_call_expr(sym, hir_args, n_hir_args, &expr.pos);
+
+    if (!dest && is_composite(sym.return_type)) {
         var temp_var = mk_temp_var(ctx, expr.type);
         dest = hir_mk_temp_expr(temp_var, &expr.pos);
     }

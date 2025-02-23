@@ -439,7 +439,7 @@ func asm_write_string_addr(builder: *AsmInstrBuilder, xd: Reg, id: Int) {
 // Miscellaneous
 
 func asm_write_label(builder: *AsmInstrBuilder, counter: Int, suffix: *Char) {
-    var instr = asm_write_instr(builder, op: null, 1);
+    var instr = asm_write_instr(builder, op: null, n_args: 1);
     instr.args[0] = asm_mk_label_operand(counter, suffix);
 }
 

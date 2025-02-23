@@ -102,13 +102,11 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayou
 }
 
 func get_call_layout_for_call(e: *HirCallExpr): CallLayout {
-    var n_args = list_len(e.args);
-    var arg_types: **Type = calloc(n_args, sizeof(*Type));
-    for (var i = 0; i < n_args; i += 1) {
-        var arg: *HirCallExpr = list_get(e.args, i);
-        arg_types[i] = arg.type;
+    var arg_types: **Type = calloc(e.n_args, sizeof(*Type));
+    for (var i = 0; i < e.n_args; i += 1) {
+        arg_types[i] = e.args[i].type;
     }
-    var layout = get_call_layout(n_args, arg_types, e.type);
+    var layout = get_call_layout(e.n_args, arg_types, e.type);
     free(arg_types);
     return layout;
 }

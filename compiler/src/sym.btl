@@ -39,3 +39,13 @@ func find_record_field_by_type(sym: *Sym, type: *Type): Int {
     }
     return -1;
 }
+
+func find_param_by_name(sym: *FuncSym, name: *Int8): Int {
+    for (var i = 0; i < list_len(sym.params); i += 1) {
+        var param: *FuncParam = list_get(sym.params, i);
+        if (str_eq(param.name, name)) {
+            return i;
+        }
+    }
+    return -1;
+}

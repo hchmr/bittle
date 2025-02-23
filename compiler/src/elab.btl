@@ -572,26 +572,49 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     var param_count = list_len(sym.params);
     var arg_count = list_len(args);
 
-    if (arg_count < param_count) {
-        die_at(&expr.pos, "Not enough arguments provided (%d < %d).\n", arg_count, param_count);
-    }
-    if (!sym.is_variadic && arg_count > param_count) {
-        die_at(&expr.pos, "Too many arguments provided (%d > %d).\n", arg_count, param_count);
-    }
-    var i = 0;
-    for (; i < param_count; i += 1) {
-        var param: *FuncParam = list_get(sym.params, i);
+    var is_initialized: *Bool = calloc(param_count, sizeof(*Bool));
+    var seen_named_arg = false;
+
+    for (var i = 0; i < arg_count; i += 1) {
         var arg: *CallArg = list_get(args, i);
-        if (arg.label && !str_eq(arg.label, param.name)) {
-            die_at(&arg.expr.pos, "Argument label does not match parameter name");
+        if (arg.label) {
+            var param_index = find_param_by_name(sym, arg.label);
+            if (param_index == -1) {
+                die_at(&arg.expr.pos, "Unknown parameter '%s'", arg.label);
+            } else if (is_initialized[param_index]) {
+                die_at(&arg.expr.pos, "Parameter '%s' is already initialized", arg.label);
+            }
+            var param: *FuncParam = list_get(sym.params, param_index);
+            elab_expr_expect(ctx, &arg.expr, param.type);
+
+            is_initialized[param_index] = true;
+            arg.positional_index = param_index;
+            seen_named_arg = true;
+        } else if (seen_named_arg) {
+            die_at(&arg.expr.pos, "Positional argument cannot follow a named argument");
+        } else if (i >= param_count) {
+            if (!sym.is_variadic) {
+                die_at(&arg.expr.pos, "Too many arguments provided");
+            }
+            elab_expr_infer(ctx, arg.expr, type_hint: null);
+            if (!is_sized(arg.expr.type)) {
+                die_at(&arg.expr.pos, "Cannot pass an unsized type as a variadic argument");
+            }
+            arg.positional_index = i;
+        } else {
+            var param: *FuncParam = list_get(sym.params, i);
+            elab_expr_expect(ctx, &arg.expr, param.type);
+
+            is_initialized[i] = true;
+            arg.positional_index = i;
         }
-        elab_expr_expect(ctx, &arg.expr, param.type);
     }
-    for (; i < arg_count; i += 1) {
-        var arg: *CallArg = list_get(args, i);
-        elab_expr_infer(ctx, arg.expr, type_hint: null);
-        if (!is_sized(arg.expr.type)) {
-            die_at(&expr.pos, "Cannot pass an unsized type as a variadic argument");
+
+    for (var i = 0; i < param_count; i += 1) {
+        var param: *FuncParam = list_get(sym.params, i);
+        if (!is_initialized[i] && !param.default_value) {
+            var param: *FuncParam = list_get(sym.params, i);
+            die_at(&expr.pos, "Parameter '%s' is not initialized", param.name);
         }
     }
 
@@ -1221,9 +1244,29 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
         die_at(&param_decl.pos, "Parameter has unsized type");
     }
 
+    var default_value: *ConstValue = null;
+    if (param_decl.default_value) {
+        default_value = const_eval_expect(ctx, param_decl.default_value, type);
+    }
+
     var result: *FuncParam = calloc(1, sizeof(FuncParam));
-    *result = FuncParam { name, type };
+    *result = FuncParam { name, type, default_value };
     return result;
+}
+
+func check_default_params_order(param_decls: *List, rest_param: *RestParamDecl) {
+    var seen_default = false;
+    var n_params = list_len(param_decls);
+    for (var i = 0; i < n_params; i += 1) {
+        var param_decl: *FuncParamDecl = list_get(param_decls, i);
+        if (!param_decl.default_value && seen_default) {
+            die_at(&param_decl.pos, "Non-default parameter follows default parameter");
+        }
+        seen_default = seen_default || param_decl.default_value;
+    }
+    if (rest_param && seen_default) {
+        die_at(&rest_param.pos, "Variadic parameter cannot follow default parameters");
+    }
 }
 
 func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
@@ -1270,6 +1313,8 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
         var param = elab_param(ctx, param_decl);
         list_push(params, param);
     }
+
+    check_default_params_order(param_decls, decl.rest_param);
 
     var return_type = decl.return_type
         ? eval_type(ctx, decl.return_type)

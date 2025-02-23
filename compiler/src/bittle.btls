@@ -226,6 +226,7 @@ struct ConstSym: Sym {
 struct FuncParam {
     name: *Char,
     type: *Type,
+    default_value: *ConstValue,
 }
 
 struct FuncSym: Sym {
@@ -248,6 +249,7 @@ struct LocalSym: Sym {
 func sym_is_defined(sym: *Sym): Bool;
 func find_record_field_by_name(sym: *Sym, name: *Char): Int;
 func find_record_field_by_type(sym: *Sym, type: *Type): Int;
+func find_param_by_name(sym: *FuncSym, name: *Char): Int;
 
 //==============================================================================
 //== tok.btl
@@ -449,6 +451,7 @@ struct CallExpr: Expr {
 struct CallArg {
     label: *Char,
     expr: *Expr,
+    positional_index: Int,
 }
 
 struct IndexExpr: Expr {
@@ -589,6 +592,7 @@ struct FuncParamDecl {
     pos: Pos,
     name: *Char,
     type: *TypeExpr,
+    default_value: *Expr,
 }
 
 struct RestParamDecl {
@@ -756,7 +760,8 @@ struct HirBinaryOpExpr: HirExpr {
 
 struct HirCallExpr: HirExpr {
     callee: *FuncSym,
-    args: *List, // List<*HirExpr>
+    args: **HirExpr,
+    n_args: Int,
 }
 
 struct HirMemberExpr: HirExpr {

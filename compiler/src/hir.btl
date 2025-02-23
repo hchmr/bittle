@@ -120,10 +120,8 @@ func hir_dump_child(name: *Char, e: *HirExpr) {
         begin_inline_child("name");
         fprintf(stderr, "\"%s\"\n", e.callee.name);
         begin_child("args");
-        var n_args = list_len(e.args);
-        for (var i = 0; i < n_args; i += 1) {
-            var arg: *HirExpr = list_get(e.args, i);
-            hir_dump_child(name: null, arg);
+        for (var i = 0; i < e.n_args; i += 1) {
+            hir_dump_child(name: null, e: e.args[i]);
         }
         end_child();
         end_block();
@@ -175,5 +173,5 @@ func hir_dump_child(name: *Char, e: *HirExpr) {
 
 func hir_dump(e: *HirExpr): Void {
     fprintf(stderr, "%s:%d:%d:\n", e.pos.file, e.pos.row, e.pos.col);
-    hir_dump_child(name: null, e);
+    hir_dump_child(name: null, e: e);
 }
