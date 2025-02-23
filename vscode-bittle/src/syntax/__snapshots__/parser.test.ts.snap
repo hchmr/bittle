@@ -33,13 +33,13 @@ exports[`prettySyntaxTree:bad 1`] = `
     "add"@2:6
     FuncParamList@2:9
       "("@2:9
-      FuncParam@2:10
+      NormalFuncParam@2:10
         "a"@2:10
         ":"@2:11
         NameType@2:13
           "Int"@2:13
       ","@2:16
-      FuncParam@2:18
+      NormalFuncParam@2:18
         "b"@2:18
         ":"@2:19
         NameType@2:21
@@ -100,7 +100,7 @@ exports[`prettySyntaxTree:good 1`] = `
     "sqr_dst"@6:6
     FuncParamList@6:13
       "("@6:13
-      FuncParam@6:14
+      NormalFuncParam@6:14
         "p1"@6:14
         ":"@6:16
         PointerType@6:18
@@ -108,7 +108,7 @@ exports[`prettySyntaxTree:good 1`] = `
           NameType@6:19
             "Point"@6:19
       ","@6:24
-      FuncParam@6:26
+      NormalFuncParam@6:26
         "p2"@6:26
         ":"@6:28
         PointerType@6:30

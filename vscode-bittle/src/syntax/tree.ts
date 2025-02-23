@@ -1,5 +1,10 @@
 import { Point } from './position';
 
+export type ClosestNodes =
+    | { left: SyntaxNode; right: SyntaxNode }
+    | { left: SyntaxNode; right: undefined }
+    | { left: undefined; right: SyntaxNode };
+
 export interface SyntaxNode {
     readonly type: string;
 
@@ -31,7 +36,9 @@ export interface SyntaxNode {
 
     descendantsForPosition(startPosition: Point, endPosition?: Point): SyntaxNode[];
 
-    closestDescendantsForPosition(position: Point): SyntaxNode[];
+    closestDescendantsForPosition(position: Point): ClosestNodes;
+
+    closestChildrenForPosition(position: Point): ClosestNodes;
 
     closest(types: string | string[]): SyntaxNode | null;
 }

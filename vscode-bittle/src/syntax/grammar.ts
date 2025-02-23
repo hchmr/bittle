@@ -96,16 +96,24 @@ export const grammar = createGrammar({
     ),
 
     FuncParam: $ => choice(
-        seq(
+        $.NormalFuncParam,
+        $.RestFuncParam,
+    ),
+
+    NormalFuncParam: $ => seq(
+        label('name', 'identifier'),
+        ':',
+        label('type', $.Type),
+        optional(seq(
+            '=',
+            label('value', $.Expr),
+        )),
+    ),
+
+    RestFuncParam: $ => seq(
+        '...',
+        optional(
             label('name', 'identifier'),
-            ':',
-            label('type', $.Type),
-        ),
-        seq(
-            '...',
-            optional(
-                label('restParamName', 'identifier'),
-            ),
         ),
     ),
 

@@ -487,25 +487,29 @@ export class Parser extends ParserBase {
 
     private funcParam() {
         if (this.match('...')) {
-            this.beginNode(CompositeNodeTypes.FuncParam);
-            this.bump('...');
-            if (this.match('identifier')) {
-                this.beginField('restParamName');
-                this.expect('identifier');
-                this.finishField('restParamName');
-            }
-            this.finishNode(CompositeNodeTypes.FuncParam);
+            this.restFuncParam();
         } else {
-            this.paramDecl();
+            this.normalFuncParam();
         }
     }
 
-    paramDecl() {
-        if (!this.match('identifier') && !this.match(':')) {
+    private restFuncParam() {
+        this.beginNode(CompositeNodeTypes.RestFuncParam);
+        this.bump('...');
+        if (this.match('identifier')) {
+            this.beginField('name');
+            this.expect('identifier');
+            this.finishField('name');
+        }
+        this.finishNode(CompositeNodeTypes.RestFuncParam);
+    }
+
+    normalFuncParam() {
+        if (!this.match('identifier') && !this.match(':') && !this.match('=')) {
             this.addErrorAndTryBump(`Expected parameter.`);
             return;
         }
-        this.beginNode(CompositeNodeTypes.FuncParam);
+        this.beginNode(CompositeNodeTypes.NormalFuncParam);
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
@@ -513,7 +517,13 @@ export class Parser extends ParserBase {
         this.beginField('type');
         this.type();
         this.finishField('type');
-        this.finishNode(CompositeNodeTypes.FuncParam);
+        if (this.match('=')) {
+            this.bump('=');
+            this.beginField('value');
+            this.expr();
+            this.finishField('value');
+        }
+        this.finishNode(CompositeNodeTypes.NormalFuncParam);
     }
 
     globalDecl(checkpoint?: Checkpoint) {

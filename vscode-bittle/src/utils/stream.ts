@@ -2,8 +2,8 @@ export interface Stream<T> extends Iterable<T> {
     concat<U>(other: Iterable<U>): Stream<T | U>;
     map<U>(f: (x: T, i: number) => U): Stream<U>;
     flatMap<U>(f: (x: T) => Iterable<U>): Stream<U>;
-    filter<S extends T>(p: (x: T) => x is S): Stream<S>;
-    filter(p: (x: T) => unknown): Stream<T>;
+    filter<S extends T>(p: (x: T, i: number) => x is S): Stream<S>;
+    filter(p: (x: T, i: number) => unknown): Stream<T>;
     groupBy<K>(f: (x: T) => K): Stream<[K, T[]]>;
     groupBy<K, V>(f: (x: T) => K, g: (x: T) => V): Stream<[K, V[]]>;
     sort(compareFn?: (a: T, b: T) => number): Stream<T>;
@@ -16,10 +16,12 @@ export interface Stream<T> extends Iterable<T> {
     reduce<U>(f: (acc: U, x: T, i: number) => U, initial: U): U;
     reduce(f: (acc: T, x: T) => T): T;
     find(p: (x: T) => unknown): T | undefined;
+    findLast(p: (x: T) => unknown): T | undefined;
     some(p: (x: T) => unknown): boolean;
     every(p: (x: T) => unknown): boolean;
     isEmpty(): boolean;
     first(): T | undefined;
+    last(): T | undefined;
     toArray(): T[];
     toSet(): Set<T>;
     join(separator: string): string;
@@ -56,13 +58,15 @@ class StreamImpl<T> implements Stream<T> {
         })(this.source));
     }
 
-    filter<S extends T>(p: (x: T) => x is S): Stream<S>;
-    filter(p: (x: T) => unknown): Stream<T> {
+    filter<S extends T>(p: (x: T, i: number) => x is S): Stream<S>;
+    filter(p: (x: T, i: number) => unknown): Stream<T> {
         return new StreamImpl((function* (source) {
+            let i = 0;
             for (const x of source) {
-                if (p(x)) {
+                if (p(x, i)) {
                     yield x;
                 }
+                i++;
             }
         })(this.source));
     }
@@ -180,6 +184,16 @@ class StreamImpl<T> implements Stream<T> {
         return undefined;
     }
 
+    findLast(p: (x: T) => unknown): T | undefined {
+        let last: T | undefined;
+        for (const x of this.source) {
+            if (p(x)) {
+                last = x;
+            }
+        }
+        return last;
+    }
+
     some(p: (x: T) => unknown): boolean {
         for (const x of this.source) {
             if (p(x)) {
@@ -199,6 +213,10 @@ class StreamImpl<T> implements Stream<T> {
 
     first(): T | undefined {
         return this.find(() => true);
+    }
+
+    last(): T | undefined {
+        return this.findLast(() => true);
     }
 
     toArray(): T[] {

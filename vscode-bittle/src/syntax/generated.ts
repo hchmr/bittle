@@ -16,7 +16,8 @@ export enum AstNodeTypes {
     Field = 'Field',
     FuncDecl = 'FuncDecl',
     FuncParamList = 'FuncParamList',
-    FuncParam = 'FuncParam',
+    NormalFuncParam = 'NormalFuncParam',
+    RestFuncParam = 'RestFuncParam',
     GlobalDecl = 'GlobalDecl',
     ConstDecl = 'ConstDecl',
     GroupedType = 'GroupedType',
@@ -188,13 +189,13 @@ export class FuncParamListNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get funcParamNodes(): FuncParamNode[] {
-        return this.getAstNodesOfType<FuncParamNode>(undefined, ['FuncParam']);
+        return this.getAstNodesOfType<FuncParamNode>(undefined, ['NormalFuncParam', 'RestFuncParam']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
     }
 }
-export class FuncParamNode extends AstNode {
+export class NormalFuncParamNode extends AstNode {
     get name(): TokenNode<'identifier'> | undefined {
         return this.getTokenOfType('name', ['identifier']);
     }
@@ -204,11 +205,19 @@ export class FuncParamNode extends AstNode {
     get type(): TypeNode | undefined {
         return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
     }
+    get eqToken(): TokenNode<'='> | undefined {
+        return this.getTokenOfType(undefined, ['=']);
+    }
+    get value(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
+}
+export class RestFuncParamNode extends AstNode {
     get dotDotDotToken(): TokenNode<'...'> | undefined {
         return this.getTokenOfType(undefined, ['...']);
     }
-    get restParamName(): TokenNode<'identifier'> | undefined {
-        return this.getTokenOfType('restParamName', ['identifier']);
+    get name(): TokenNode<'identifier'> | undefined {
+        return this.getTokenOfType('name', ['identifier']);
     }
 }
 export class GlobalDeclNode extends AstNode {
@@ -666,6 +675,15 @@ export type DeclNode =
     | GlobalDeclNode
     | ConstDeclNode;
 
+export enum FuncParamNodeTypes {
+    NormalFuncParam = 'NormalFuncParam',
+    RestFuncParam = 'RestFuncParam',
+};
+
+export type FuncParamNode =
+    | NormalFuncParamNode
+    | RestFuncParamNode;
+
 export enum TypeNodeTypes {
     GroupedType = 'GroupedType',
     NameType = 'NameType',
@@ -764,7 +782,8 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.Field: return new FieldNode(syntax);
         case AstNodeTypes.FuncDecl: return new FuncDeclNode(syntax);
         case AstNodeTypes.FuncParamList: return new FuncParamListNode(syntax);
-        case AstNodeTypes.FuncParam: return new FuncParamNode(syntax);
+        case AstNodeTypes.NormalFuncParam: return new NormalFuncParamNode(syntax);
+        case AstNodeTypes.RestFuncParam: return new RestFuncParamNode(syntax);
         case AstNodeTypes.GlobalDecl: return new GlobalDeclNode(syntax);
         case AstNodeTypes.ConstDecl: return new ConstDeclNode(syntax);
         case AstNodeTypes.GroupedType: return new GroupedTypeNode(syntax);

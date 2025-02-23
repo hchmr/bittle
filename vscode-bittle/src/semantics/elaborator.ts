@@ -3,14 +3,14 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode, } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { parseChar, parseString } from '../utils/literalParsing';
 import { stream } from '../utils/stream';
 import { ConstValue, constValueBinop, constValueCast, ConstValueKind, constValueTernop, constValueUnop, mkBoolConstValue, mkIntConstValue, mkStringConstValue } from './const';
 import { Scope } from './scope';
-import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind, } from './sym';
-import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout, } from './type';
+import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
+import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout } from './type';
 
 export type ErrorLocation = {
     file: string;
@@ -324,7 +324,7 @@ export class Elaborator {
         return sym;
     }
 
-    private defineFuncParamSym(declNode: FuncParamNode, nameNode: TokenNode | Nullish, funcName: string, paramIndex: number, type: Type): FuncParamSym {
+    private defineFuncParamSym(declNode: FuncParamNode, nameNode: TokenNode | Nullish, funcName: string, paramIndex: number, type: Type, defaultValue: ConstValue | undefined): FuncParamSym {
         if (!nameNode) {
             return {
                 kind: SymKind.FuncParam,
@@ -332,6 +332,7 @@ export class Elaborator {
                 qualifiedName: '',
                 origins: [],
                 type,
+                defaultValue,
             };
         }
 
@@ -350,6 +351,7 @@ export class Elaborator {
             qualifiedName: `func:${funcName}.param:${paramIndex}`,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             type,
+            defaultValue,
         };
 
         if (!existing) {
@@ -777,10 +779,13 @@ export class Elaborator {
         this.enterScope(node);
 
         const name = nameNode?.text ?? '';
+
         const params = stream(paramNodes)
-            .filter(paramNode => !paramNode.dotDotDotToken)
+            .filter(paramNode => paramNode instanceof NormalFuncParamNode)
             .map<FuncParamSym>((paramNode, index) => this.elabFuncParam(paramNode, name, index))
             .toArray();
+
+        this.checkDefaultParamsOrder(paramNodes);
 
         const restParamNode = this.handleRestParamNodes(paramNodes);
 
@@ -802,7 +807,7 @@ export class Elaborator {
         this.nextLocalIndex = 0;
 
         if (restParamNode) {
-            this.defineLocalSym(restParamNode, restParamNode.restParamName, mkRestParamType());
+            this.defineLocalSym(restParamNode, restParamNode.name, mkRestParamType());
         }
 
         if (bodyNode) {
@@ -817,19 +822,39 @@ export class Elaborator {
         sym.isDefined = !!bodyNode;
     }
 
-    private handleRestParamNodes(paramNodes: FuncParamNode[]) {
-        const restParamNodes = paramNodes.filter(paramNode => paramNode.dotDotDotToken);
-        const restParamNode = restParamNodes.pop();
-        if (!restParamNode) {
-            return null;
+    private checkDefaultParamsOrder(paramNodes: FuncParamNode[]) {
+        let hasSeenDefaultParam = false;
+        for (const paramNode of paramNodes) {
+            if (paramNode instanceof NormalFuncParamNode) {
+                if (hasSeenDefaultParam && !paramNode.value) {
+                    this.reportError(paramNode, `Non-default parameter cannot follow a default parameter.`);
+                }
+                hasSeenDefaultParam ||= !!paramNode.value;
+            } else if (paramNode instanceof RestParamTypeNode) {
+                if (hasSeenDefaultParam) {
+                    this.reportError(paramNode, `Variadic parameter cannot follow a default parameter.`);
+                }
+            }
         }
-        for (const paramNode of restParamNodes) {
-            this.reportError(paramNode, `Variadic parameter must be the last parameter.`);
-        }
-        return restParamNode;
     }
 
-    private elabFuncParam(paramNode: FuncParamNode, funcName: string, paramIndex: number): FuncParamSym {
+    private handleRestParamNodes(paramNodes: FuncParamNode[]): RestFuncParamNode | undefined {
+        const lastParam = paramNodes[paramNodes.length - 1];
+        for (const paramNode of paramNodes) {
+            if (!(paramNode instanceof RestFuncParamNode)) {
+                continue;
+            }
+            if (paramNode != lastParam) {
+                this.reportError(paramNode, `Variadic parameter must be the last parameter.`);
+            }
+        }
+        if (!(lastParam instanceof RestFuncParamNode)) {
+            return undefined;
+        }
+        return lastParam;
+    }
+
+    private elabFuncParam(paramNode: NormalFuncParamNode, funcName: string, paramIndex: number): FuncParamSym {
         const nameNode = paramNode.name;
         const typeNode = paramNode.type;
 
@@ -838,7 +863,12 @@ export class Elaborator {
             this.reportError(paramNode, `Parameter must have a known size.`);
         }
 
-        return this.defineFuncParamSym(paramNode, nameNode, funcName, paramIndex, type);
+        let defaultValue: ConstValue | undefined = undefined;
+        if (paramNode.value) {
+            defaultValue = this.constEvalExpect(paramNode.value, type);
+        }
+
+        return this.defineFuncParamSym(paramNode, nameNode, funcName, paramIndex, type, defaultValue);
     }
 
     private verify_main_signature(node: FuncDeclNode, sym: FuncSym) {
@@ -847,9 +877,9 @@ export class Elaborator {
             this.reportError(spanNode, `Return type of 'main' must be 'Int32'.`);
         }
 
-        const regularParamNodes = node.params!.funcParamNodes.filter(paramNode => !paramNode.dotDotDotToken);
+        const normalParamNodes = node.params!.funcParamNodes.filter(paramNode => paramNode instanceof NormalFuncParamNode);
         for (let i = 0; i < sym.params.length; i++) {
-            const paramNode = regularParamNodes[i];
+            const paramNode = normalParamNodes[i];
             const param = sym.params[i];
             if (i === 0) {
                 if (!typeEq(param.type, mkIntType(32))) {
@@ -865,8 +895,10 @@ export class Elaborator {
         }
 
         if (sym.isVariadic) {
-            const dotDotdotToken = stream(node.params!.funcParamNodes).filterMap(paramNode => paramNode.dotDotDotToken).first()!;
-            this.reportError(dotDotdotToken, `The 'main' function cannot be variadic.`);
+            const restParamNode = stream(node.params!.funcParamNodes)
+                .filter(paramNode => paramNode instanceof RestParamTypeNode)
+                .last()!;
+            this.reportError(restParamNode, `The 'main' function cannot have a variadic parameter.`);
         }
     }
 
@@ -1150,7 +1182,7 @@ export class Elaborator {
         } else if (literal instanceof IntLiteralNode) {
             const type = typeHint?.kind === TypeKind.Int ? typeHint : mkIntType(64);
 
-            let value = parseInt(text);
+            const value = parseInt(text);
             if (Number.isSafeInteger(value)) {
                 this.setConstValue(node, mkIntConstValue(value, type));
             }
@@ -1165,7 +1197,7 @@ export class Elaborator {
             return type;
         } else if (literal instanceof StringLiteralNode) {
             const type = mkPointerType(mkIntType(8));
-            let value = parseString(text);
+            const value = parseString(text);
             if (typeof value === 'string') {
                 this.setConstValue(node, mkStringConstValue(value));
             }
@@ -1228,7 +1260,7 @@ export class Elaborator {
         })();
 
         this.computeConstantValue(node, [operandNode], ([operandValue]) =>
-            constValueUnop(op, operandValue)
+            constValueUnop(op, operandValue),
         );
 
         return type;
@@ -1311,7 +1343,7 @@ export class Elaborator {
         })();
 
         this.computeConstantValue(node, [node.left, node.right], ([leftValue, rightValue]) =>
-            constValueBinop(op, leftValue, rightValue)
+            constValueBinop(op, leftValue, rightValue),
         );
 
         return type;
@@ -1326,7 +1358,7 @@ export class Elaborator {
         const type = this.unifyTypes(node, thenNode, elseNode);
 
         this.computeConstantValue(node, [node.cond, node.then, node.else], ([condValue, thenValue, elseValue]) =>
-            constValueTernop(condValue, thenValue, elseValue)
+            constValueTernop(condValue, thenValue, elseValue),
         );
 
         return type;
@@ -1359,51 +1391,7 @@ export class Elaborator {
             return this.elabCallExprUnknown(node);
         }
 
-        const params = sym.params;
-        const argNodes = argListNode.callArgNodes;
-
-        const nParams = sym.params.length;
-        const nArgs = argListNode.callArgNodes.length;
-
-        if (nArgs < nParams) {
-            this.reportError(argListNode, `Too few arguments provided (${nArgs} < ${nParams}).`);
-        } else if (nArgs > nParams && !sym.isVariadic) {
-            this.reportError(argListNode, `Too many arguments provided (${nArgs} > ${nParams}).`);
-        }
-        for (let i = 0; i < nArgs; i++) {
-            const argNode = argNodes[i];
-            const argLabelNode = argNode.label;
-            const argValueNode = argNode.value;
-            if (i < nParams) {
-                if (argLabelNode) {
-                    const paramName = params[i].name;
-                    if (argLabelNode.text !== paramName) {
-                        this.reportError(argLabelNode, `Expected label '${paramName}'.`);
-                    } else {
-                        this.recordNameResolution(params[i], argLabelNode);
-                    }
-                }
-                if (argValueNode) {
-                    this.elabExpr(argValueNode, params[i].type);
-                }
-            } else {
-                let argType = mkErrorType();
-                if (argValueNode) {
-                    argType = this.elabExprInfer(argValueNode, { typeHint: undefined });
-                    if (argType.kind === TypeKind.RestParam) {
-                        this.reportWarning(argValueNode, `Rest parameter value passed as a variadic argument. This might be a mistake.`);
-                    }
-                }
-                if (sym.isVariadic) {
-                    if (argLabelNode) {
-                        this.reportError(argLabelNode, `Variadic argument cannot have a label.`);
-                    }
-                    if (argValueNode && this.isUnsizedType(argType)) {
-                        this.reportError(argValueNode, `Variadic argument must have a known size.`);
-                    }
-                }
-            }
-        }
+        this.elabCallArgs(sym, argListNode);
 
         return sym.returnType;
     }
@@ -1416,6 +1404,75 @@ export class Elaborator {
             this.elabExprInfer(valueNode, { typeHint: undefined });
         }
         return mkErrorType();
+    }
+
+    private elabCallArgs(sym: FuncSym, argListNode: CallArgListNode) {
+        const params = sym.params;
+        const argNodes = argListNode.callArgNodes;
+
+        const nParams = sym.params.length;
+        const nArgs = argListNode.callArgNodes.length;
+
+        let hasSeenNamedArg = false;
+
+        const isInitialized = Array(nParams).fill(false);
+        let nUnmatchedPositionalParams = 0;
+
+        for (let i = 0; i < nArgs; i++) {
+            const argNode = argNodes[i];
+            const argLabelNode = argNode.label;
+            const argValueNode = argNode.value;
+
+            if (argLabelNode) {
+                const paramName = argLabelNode.text;
+                const paramIndex = params.findIndex(p => p.name === paramName);
+                if (paramIndex === -1) {
+                    this.reportError(argLabelNode, `Unknown parameter '${paramName}'.`);
+                    this.elabExprInfer(argValueNode, { typeHint: undefined });
+                } else if (isInitialized[paramIndex]) {
+                    this.reportError(argLabelNode, `Parameter '${paramName}' is already initialized.`);
+                    this.elabExprInfer(argValueNode, { typeHint: undefined });
+                } else {
+                    this.recordNameResolution(params[paramIndex], argLabelNode);
+                    this.elabExpr(argValueNode, params[paramIndex].type);
+                    isInitialized[paramIndex] = true;
+                }
+                hasSeenNamedArg = true;
+            } else {
+                if (hasSeenNamedArg) {
+                    this.reportError(argNode, `Positional argument cannot follow a named argument.`);
+                    this.elabExprInfer(argValueNode, { typeHint: undefined });
+                    nUnmatchedPositionalParams++;
+                } else if (i >= nParams) {
+                    if (!sym.isVariadic) {
+                        this.reportError(argNode, `Too many arguments provided.`);
+                        this.elabExprInfer(argValueNode, { typeHint: undefined });
+                    } else {
+                        const argType = this.elabExprInfer(argValueNode, { typeHint: undefined });
+                        if (argValueNode && this.isUnsizedType(argType)) {
+                            this.reportError(argValueNode, `Variadic argument must have a known size.`);
+                        }
+                        if (argValueNode && argType.kind === TypeKind.RestParam) {
+                            this.reportWarning(argValueNode, `Rest parameter value passed as a variadic argument. This might be a mistake.`);
+                        }
+                    }
+                    nUnmatchedPositionalParams++;
+                } else {
+                    this.elabExpr(argValueNode, params[i].type);
+                    isInitialized[i] = true;
+                }
+            }
+        }
+
+        for (let i = 0; i < nParams; i++) {
+            if (!isInitialized[i] && !params[i].defaultValue) {
+                if (nUnmatchedPositionalParams-- > 0) {
+                    continue;
+                }
+                const errorNode = argListNode.rParToken ?? argNodes[argNodes.length - 1];
+                this.reportError(errorNode, `Missing argument for parameter '${params[i].name}'.`);
+            }
+        }
     }
 
     private elabIndexExpr(node: IndexExprNode): Type {
@@ -1536,7 +1593,7 @@ export class Elaborator {
 
         const uninitializedFields = sym.fields.filter(field =>
             !seenFields.has(field.name)
-            && field.defaultValue === undefined
+            && field.defaultValue === undefined,
         );
         if (sym.recordKind === RecordKind.Struct) {
             for (const field of uninitializedFields) {
@@ -1671,7 +1728,6 @@ export class Elaborator {
         }
         this.setConstValue(node, value);
     }
-
 
     private reportDiagnostic(range: PointRange, severity: Severity, message: string) {
         this.diagnostics.push({

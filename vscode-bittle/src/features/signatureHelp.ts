@@ -68,13 +68,12 @@ export class SignatureHelpProvider implements vscode.SignatureHelpProvider {
             return;
         }
 
-        const argNodes = callNode.childForFieldName('args')!.children;
-        const argIndex = countPrecedingCommas(argNodes, position);
-
         const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleeNameNode);
         if (!calleeSym || calleeSym.kind !== SymKind.Func) {
             return;
         }
+
+        const argIndex = getArgIndex(calleeSym, argListNode, position);
 
         return createSignatureHelpForFunc(
             calleeSym,
@@ -188,4 +187,36 @@ function createSignatureHelpForRecord(
     signatureHelp.activeParameter = fields.findIndex((param) => param.name === fieldIndex);
 
     return signatureHelp;
+}
+
+function getArgIndex(sym: FuncSym, argListNode: SyntaxNode, position: Point): number {
+    const { left, right } = argListNode.closestChildrenForPosition(position);
+    const argNode = [left, right].find(node => node?.type === NodeTypes.CallArg);
+    const anyNode = left ?? right;
+    if (argNode && isNamedCallArg(argNode)) {
+        return getArgIndexForNamedArg(sym, argNode);
+    } else if (anyNode) {
+        return getArgIndexForPositionalArg(argListNode, (left || right)!);
+    } else {
+        return -1;
+    }
+}
+
+function getArgIndexForNamedArg(sym: FuncSym, argNode: SyntaxNode): number {
+    const labelNode = argNode.childForFieldName('label')!;
+    const label = labelNode.text;
+    return sym.params.findIndex((param) => param.name === label);
+}
+
+function getArgIndexForPositionalArg(argListNode: SyntaxNode, node: SyntaxNode): number {
+    const firstNamedArg = argListNode.children.find(isNamedCallArg);
+    if (firstNamedArg && firstNamedArg.startIndex < node.startIndex) {
+        return -1;
+    }
+
+    return countPrecedingCommas(argListNode.children, node.endPosition);
+}
+
+function isNamedCallArg(node: SyntaxNode): boolean {
+    return node.type === NodeTypes.CallArg && !!node.childForFieldName('label');
 }

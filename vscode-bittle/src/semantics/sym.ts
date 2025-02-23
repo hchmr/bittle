@@ -66,6 +66,7 @@ export type FuncSym = SymBase & {
 export type FuncParamSym = SymBase & {
     kind: SymKind.FuncParam;
     type: Type;
+    defaultValue: ConstValue | undefined;
 };
 
 export type GlobalSym = SymBase & {
@@ -148,15 +149,25 @@ export function prettySym(sym: Sym): string {
 }
 
 export function prettyFuncSym(sym: FuncSym): string {
-    const params = sym.params.map(p => `${p.name}: ${prettyType(p.type)}`).join(', ');
+    const params = sym.params.map(prettyFuncParam).join(', ');
     const dots = sym.isVariadic ? sym.params.length ? ', ...' : '...' : '';
     const returnType = prettyType(sym.returnType);
     return `${sym.name}(${params}${dots}): ${returnType}`;
 }
 
+function prettyFuncParam(sym: FuncParamSym): string {
+    const defaultValue = sym.defaultValue ? ` = ${prettyConstValue(sym.defaultValue)}` : '';
+    return `${sym.name}: ${prettyType(sym.type)}${defaultValue}`;
+}
+
 export function prettyRecordWithFields(sym: RecordSym): string {
-    const fields = sym.fields.map(f => `${f.name}: ${prettyType(f.type)}`).join(', ');
+    const fields = sym.fields.map(prettyRecordField).join(', ');
     return `${sym.name} { ${fields} }`;
+}
+
+function prettyRecordField(sym: RecordFieldSym): string {
+    const defaultValue = sym.defaultValue !== undefined ? ` = ${prettyConstValue(sym.defaultValue)}` : '';
+    return `${sym.name}: ${prettyType(sym.type)}${defaultValue}`;
 }
 
 function prettyBase(sym: RecordSym) {

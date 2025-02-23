@@ -73,7 +73,7 @@ const symbolKindMapping = {
     [NodeTypes.RecordDecl]: vscode.SymbolKind.Struct,
     [NodeTypes.Field]: vscode.SymbolKind.Field,
     [NodeTypes.FuncDecl]: vscode.SymbolKind.Function,
-    [NodeTypes.FuncParam]: vscode.SymbolKind.Variable,
+    [NodeTypes.NormalFuncParam]: vscode.SymbolKind.Variable,
     [NodeTypes.GlobalDecl]: vscode.SymbolKind.Variable,
     [NodeTypes.ConstDecl]: vscode.SymbolKind.Constant,
     [NodeTypes.LocalDecl]: vscode.SymbolKind.Variable,
@@ -115,7 +115,7 @@ class DocumentSymbol extends vscode.DocumentSymbol {
 function ignoreInWorkspaceSymbols(node: SyntaxNode) {
     return node.type in {
         [NodeTypes.LocalDecl]: true,
-        [NodeTypes.FuncParam]: true,
+        [NodeTypes.NormalFuncParam]: true,
     };
 }
 

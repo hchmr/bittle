@@ -21,3 +21,13 @@ export function countPrecedingCommas(argsNodes: SyntaxNode[], treePosition: Poin
         )
         .length;
 }
+
+export function countPrecedingNamedArgs(argsNodes: SyntaxNode[], treePosition: Point) {
+    return argsNodes
+        .filter((argNode) =>
+            argNode.type == NodeTypes.CallArg
+            && argNode.childForFieldName('name')
+            && pointLe(argNode.endPosition, treePosition),
+        )
+        .length;
+}

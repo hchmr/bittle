@@ -1,9 +1,8 @@
-import assert from 'assert';
 import util from 'util';
 import { stream } from '../utils/stream';
-import { Point, pointGe, pointGt, pointLe, pointLt, PointRange, rangeContains, rangeContainsPoint } from './position';
+import { Point, pointGt, pointLt, PointRange, rangeContains } from './position';
 import { Token, TokenKind } from './token.js';
-import { SyntaxNode, Tree } from './tree.js';
+import { ClosestNodes, SyntaxNode, Tree } from './tree.js';
 
 export abstract class SyntaxNodeImpl implements SyntaxNode {
     private _type: string;
@@ -162,30 +161,57 @@ export abstract class SyntaxNodeImpl implements SyntaxNode {
         );
     }
 
-    closestDescendantsForPosition(position: Point): SyntaxNode[] {
+    closestDescendantsForPosition(position: Point): ClosestNodes {
         if (!this.childCount) {
-            return [this];
+            return { left: this, right: this };
+        }
+
+        const { left, right } = this.closestChildrenForPosition(position);
+
+        if (right && !left) {
+            // The position is before the first child.
+            return right.closestDescendantsForPosition(position);
+        } else if (left && left === right) {
+            // The position is inside a child
+            return left.closestDescendantsForPosition(position);
+        } else if (left && !right) {
+            // The position is after the last child.
+            return left.closestDescendantsForPosition(position);
+        } else if (left && right) {
+            // The position is between two children.
+            const leftDescendants = left.closestDescendantsForPosition(position);
+            const rightDescendants = right.closestDescendantsForPosition(position);
+            return {
+                left: leftDescendants.left!,
+                right: rightDescendants.right!,
+            };
+        } else {
+            throw new Error('Unreachable');
+        }
+    }
+
+    closestChildrenForPosition(position: Point): ClosestNodes {
+        if (!this.childCount) {
+            return { left: this, right: this };
         }
 
         const leftIdx = this._children.findLastIndex(child => pointLt(child.node.startPosition, position));
         if (leftIdx === -1) {
             // The position is before the first child.
-            return this.firstChild!.closestDescendantsForPosition(position);
+            return { left: undefined, right: this._children[0].node };
         } else if (pointGt(this._children[leftIdx].node.endPosition, position)) {
-            // The position is inside the left child.
-            return this._children[leftIdx].node.closestDescendantsForPosition(position);
+            // The position is inside a child.
+            return { left: this._children[leftIdx].node, right: this._children[leftIdx].node };
         } else if (leftIdx === this.childCount - 1) {
             // The position is after the last child.
-            return this.lastChild!.closestDescendantsForPosition(position);
+            return { left: this._children[leftIdx].node, right: undefined };
         } else {
             // The position is between two children.
             const rightIdx = leftIdx + 1;
-            const leftDescendants = this._children[leftIdx].node.closestDescendantsForPosition(position);
-            const rightDescendants = this._children[rightIdx].node.closestDescendantsForPosition(position);
-            return [
-                leftDescendants[leftDescendants.length - 1],
-                rightDescendants[0],
-            ];
+            return {
+                left: this._children[leftIdx].node,
+                right: this._children[rightIdx].node,
+            };
         }
     }
 

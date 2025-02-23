@@ -5,13 +5,13 @@ import { FuncParamSym, isDefined, prettySym, RecordFieldSym, RecordKind, Sym, Sy
 import { TypeKind } from '../semantics/type';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
-import { rangeContains, rangeContainsPoint, SyntaxNode } from '../syntax';
+import { ClosestNodes, pointEq, rangeContains, SyntaxNode } from '../syntax';
 import { ExprNodeTypes, isArgNode, NodeTypes, TopLevelNodeTypes } from '../syntax/nodeTypes';
 import { keywords } from '../syntax/token';
 import { unreachable } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { countPrecedingCommas } from '../utils/nodeSearch';
+import { countPrecedingCommas, countPrecedingNamedArgs } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
 import { fromVscPosition, toVscRange } from '../utils/vscode';
 
@@ -34,25 +34,23 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         const position = fromVscPosition(vscPosition);
         const closest = tree.rootNode.closestDescendantsForPosition(position);
 
-        const node =
-            closest.find(node => rangeContainsPoint(node, position))
-            ?? closest[0];
-        if (!node) {
+        if (!closest.left && !closest.right) {
             return;
         }
 
-        return this.autoCompleteFieldAccess(filePath, node)
-            ?? this.autoCompleteFieldInit(filePath, node)
-            ?? this.autoCompleteArgumentLabel(filePath, node)
-            ?? this.autoCompleteDefinition(filePath, node)
-            ?? this.autoCompleteDefault(filePath, node);
+        return this.autoCompleteFieldAccess(filePath, closest)
+            ?? this.autoCompleteFieldInit(filePath, closest)
+            ?? this.autoCompleteArgumentLabel(filePath, closest)
+            ?? this.autoCompleteDefinition(filePath, closest)
+            ?? this.autoCompleteDefault(filePath, closest);
     }
 
     private autoCompleteFieldAccess(
         filePath: string,
-        node: SyntaxNode,
+        closest: ClosestNodes,
     ): vscode.CompletionItem[] | undefined {
-        if (node.parent?.type !== ExprNodeTypes.FieldExpr) {
+        const node = closest.left;
+        if (node?.parent?.type !== ExprNodeTypes.FieldExpr) {
             return;
         }
 
@@ -100,8 +98,12 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteFieldInit(
         filePath: string,
-        node: SyntaxNode,
+        closest: ClosestNodes,
     ): vscode.CompletionItem[] | undefined {
+        let node = closest.left;
+        if (!node) {
+            return;
+        }
         let searchText: string;
         if (node.type === 'identifier') {
             if (node.parent?.type !== NodeTypes.FieldInit) {
@@ -130,12 +132,11 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
 
-
         const usedNames = stream(recordExprNode.childForFieldName('fields')!.children)
-                .filter(x => x.type === NodeTypes.FieldInit)
-                .filterMap(getFieldName)
-                .filter(x => x !== searchText)
-                .toSet();
+            .filter(x => x.type === NodeTypes.FieldInit)
+            .filterMap(getFieldName)
+            .filter(x => x !== searchText)
+            .toSet();
 
         let candidates: RecordFieldSym[];
         if (recordSym.recordKind === RecordKind.Struct) {
@@ -164,57 +165,80 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteArgumentLabel(
         filePath: string,
-        node: SyntaxNode,
+        closest: ClosestNodes,
     ): vscode.CompletionItem[] | undefined {
-        if (node.type !== 'identifier' && node.type !== ',' && node.type !== '(') {
+        const node = closest.left;
+        if (!node || node.type !== '(' && node.type !== ',' && node.type !== 'identifier') {
             return;
         }
 
-        const callNode = node.closest(NodeTypes.CallArgList)?.closest(NodeTypes.CallExpr);
+        const callNode = node.closest(NodeTypes.CallExpr);
         if (!callNode) {
             return;
         }
+
+        const argListNode = callNode.childForFieldName('args');
+        if (!argListNode) {
+            return;
+        }
+
+        const argListChildNode = argListNode.children.find(child => pointEq(child.startPosition, node.startPosition));
+        if (!argListChildNode) {
+            return;
+        }
+
+        const labelNode = argListChildNode.childForFieldName('label');
+
         const calleeNode = callNode.childForFieldName('callee');
         if (!calleeNode) {
             return;
         }
-        const calleeNameNode = calleeNode.type === ExprNodeTypes.NameExpr && calleeNode.firstChild;
-        if (!calleeNameNode) {
+
+        const calleNameNode = calleeNode.type === ExprNodeTypes.NameExpr ? calleeNode.firstChild! : undefined;
+        if (!calleNameNode) {
             return;
         }
-        const argNodes = callNode.childForFieldName('args')!.children;
-        const argIndex = countPrecedingCommas(argNodes, node.endPosition);
 
-        const potentialArgNode = argNodes.filter(n => n.type === '(' || n.type === ',')[argIndex]?.nextSibling;
-        const labelNode =
-            potentialArgNode && isArgNode(potentialArgNode)
-                ? potentialArgNode.childForFieldName('label')
-                : null;
-        if (labelNode && !rangeContains(labelNode, node)) {
-            return; // Already has a label
-        }
-
-        const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleeNameNode);
+        const calleeSym = this.semanticsService.resolveUnambiguousSymbol(filePath, calleNameNode);
         if (!calleeSym || calleeSym.kind !== SymKind.Func) {
             return;
         }
 
-        const labelSym = calleeSym.params[argIndex];
-        if (!labelSym) {
-            return;
+        const nPrecedingCommas = countPrecedingCommas(argListNode.children, node.endPosition);
+        const nPrecedingPositionalArgs = nPrecedingCommas - countPrecedingNamedArgs(argListNode.children, node.endPosition);
+
+        let searchText = '';
+        if (node.type === 'identifier') {
+            searchText = node.text;
         }
 
-        const labelCompletion = toLabelCompletionItem(labelSym, labelNode);
+        const usedPositionalArgNames = stream(calleeSym.params)
+            .filter((_, i) => i < nPrecedingPositionalArgs)
+            .map(p => p.name);
 
-        const valueCompletions = this.autoCompleteDefault(filePath, node) ?? [];
+        const usedNamedArgNames = stream(argListNode.children)
+            .filter(isArgNode)
+            .filter(x => x !== argListChildNode)
+            .filterMap(argNode => argNode.childForFieldName('label')?.text);
 
-        return [labelCompletion, ...valueCompletions];
+        const usedNames = new Set(usedPositionalArgNames.concat(usedNamedArgNames));
+
+        const unusedParams = calleeSym.params.filter(p => !usedNames.has(p.name));
+
+        const results = fuzzySearch(searchText, unusedParams, { key: 'name' });
+
+        const labelCompletions = results.map(p => toLabelCompletionItem(p, labelNode));
+
+        const valueCompletions = this.autoCompleteDefault(filePath, closest) ?? [];
+
+        return [...labelCompletions, ...valueCompletions];
     }
 
     private autoCompleteDefinition(
         filePath: string,
-        nameNode: SyntaxNode,
+        closest: ClosestNodes,
     ): vscode.CompletionItem[] | undefined {
+        const nameNode = closest.left ?? closest.right;
         if (nameNode.type !== 'identifier' || !nameNode.parent || !isCompletable(nameNode.parent.type)) {
             return;
         }
@@ -244,8 +268,12 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
     private autoCompleteDefault(
         filePath: string,
-        node: SyntaxNode,
+        closest: ClosestNodes,
     ): vscode.CompletionItem[] | undefined {
+        const { left, right } = closest;
+        const nameNode = [left, right].find(node => node?.type === 'identifier');
+        const node = nameNode ?? left ?? right;
+
         const candidates: CompletionCandidate[] =
             this.semanticsService.getSymbolsAtNode(filePath, node)
                 .filter(sym => sym.origins.some(origin => origin.nameNode !== node))
