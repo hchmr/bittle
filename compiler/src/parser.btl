@@ -7,6 +7,19 @@ struct Parser {
     lexer: *Lexer,
     tok: Tok,
     lookahead: Tok,
+    includes: *List, // List<*Char>
+}
+
+func try_add_include(self: *Parser, file_path: *Char): Bool {
+    var n_includes = list_len(self.includes);
+    for (var i = 0; i < n_includes; i += 1) {
+        if (str_eq(file_path, list_get(self.includes, i))) {
+            return false;
+        }
+    }
+
+    list_push(self.includes, file_path);
+    return true;
 }
 
 func advance(self: *Parser) {
@@ -21,6 +34,7 @@ func peek(self: *Parser): *Tok {
 func parser_new(lexer: *Lexer): *Parser {
     var self: *Parser = calloc(1, sizeof(Parser));
     self.lexer = lexer;
+    self.includes = list_new();
     advance(self);
     advance(self);
     return self;
@@ -1093,24 +1107,37 @@ func p_decl_decl(self: *Parser): *Decl {
 //==============================================================================
 //== Top-level
 
+func parse_file(self: *Parser, decls: *List);
+
+func p_include(self: *Parser, decls: *List) {
+    var pos = self.tok.pos;
+    var string_literal = expect_with_lexeme(self, Tok_String);
+    var file_name = parse_string(string_literal);
+    expect(self, Tok_Semicolon);
+
+    var file_dir = get_directory(pos.file);
+    var file_path = join_paths(file_dir, sb_cstr(file_name));
+    var file_path = realpath(file_path, null);
+
+    if (!try_add_include(self, file_path)) {
+        return; // Already included.
+    }
+
+    var file = fopen(file_path, "r");
+    if (!file) {
+        die_at(&pos, "Cannot open file.");
+    }
+    var file_input = read_file(file);
+    var file_lexer = lexer_new(file_path, file_input);
+    var file_parser = parser_new(file_lexer);
+    file_parser.includes = self.includes;
+    parse_file(file_parser, decls);
+}
+
 func parse_file(self: *Parser, decls: *List) {
     while (!at_eof(self)) {
         if (eat(self, Tok_Include)) {
-            var pos = self.tok.pos;
-            var string_literal = expect_with_lexeme(self, Tok_String);
-            var file_name = parse_string(string_literal);
-            expect(self, Tok_Semicolon);
-
-            var file_dir = get_directory(pos.file);
-            var file_path = join_paths(file_dir, sb_cstr(file_name));
-            var file = fopen(file_path, "r");
-            if (!file) {
-                die_at(&pos, "Cannot open file.");
-            }
-            var file_input = read_file(file);
-            var file_lexer = lexer_new(file_path, file_input);
-            var file_parser = parser_new(file_lexer);
-            parse_file(file_parser, decls);
+            p_include(self, decls);
         } else {
             list_push(decls, p_decl_decl(self));
         }

@@ -31,6 +31,7 @@ extern func malloc(size: Int): *Void;
 extern func realloc(ptr: *Void, size: Int): *Void;
 extern func free(ptr: *Void): Void;
 extern func strtol(str: *Char, endptr: *Char, base: Int32): Int32;
+extern func realpath(path: *Char, resolved: *Char): *Char;
 
 // errno.h
 
