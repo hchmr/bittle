@@ -1,4 +1,6 @@
-include "../compiler/libc.btls";
+struct File;
+extern var stdout: *File;
+extern func vfprintf(file: *File, format: *Char, args: ...): Int32;
 
 func my_printf(format: *Char, ...args) {
     vfprintf(stdout, format, args);
