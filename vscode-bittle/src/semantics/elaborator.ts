@@ -47,6 +47,8 @@ export type ElaboratorResult = {
 export class Elaborator {
     private rootNode: RootNode;
 
+    private includes: Set<string> = new Set();
+
     private scope: Scope;
 
     // Symbol.qualifiedName -> Symbol
@@ -609,6 +611,11 @@ export class Elaborator {
             this.reportError(node, `Cannot resolve include.`);
             return;
         }
+
+        if (this.includes.has(path)) {
+            return;
+        }
+        this.includes.add(path);
 
         const tree = this.parsingService.parseAsAst(path);
 
