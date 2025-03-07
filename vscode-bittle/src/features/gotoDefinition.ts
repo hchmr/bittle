@@ -1,7 +1,7 @@
 import path from 'path';
 import * as vscode from 'vscode';
 import { Origin, Sym, SymKind, symRelatedType } from '../semantics/sym';
-import { mkErrorType, Type, TypeKind, unifyTypes } from '../semantics/type';
+import { Type, TypeKind, unifyTypes } from '../semantics/type';
 import { IncludeGraphService } from '../services/includeGraphService';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
@@ -28,7 +28,7 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
         return stream(tree.rootNode.descendantsForPosition(position))
-            .filter(node => node.type === NodeTypes.StringLiteral && node.parent?.type === NodeTypes.IncludeDecl)
+            .filter(node => node.type === 'string_literal' && node.parent?.type === NodeTypes.IncludeDecl)
             .filterMap(node => {
                 const stringValue = parseString(node.text);
                 if (!stringValue) {
