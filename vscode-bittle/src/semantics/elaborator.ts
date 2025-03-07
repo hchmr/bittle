@@ -5,9 +5,9 @@ import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
 import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
-import { parseChar, parseString } from '../utils/literalParsing';
 import { stream } from '../utils/stream';
-import { ConstValue, constValueBinop, constValueCast, ConstValueKind, constValueTernop, constValueUnop, mkBoolConstValue, mkIntConstValue, mkStringConstValue } from './const';
+import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
+import { ConstEvaluator } from './constEvaluator';
 import { Scope } from './scope';
 import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
 import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout } from './type';
@@ -60,8 +60,6 @@ export class Elaborator {
     private nodeSymMap: WeakMap<SyntaxNode, string[]> = new WeakMap();
     // SyntaxNode -> Type
     private nodeTypeMap: WeakMap<SyntaxNode, Type> = new WeakMap();
-    // SyntaxNode -> Value
-    private nodeValueMap: WeakMap<SyntaxNode, ConstValue> = new WeakMap();
 
     private diagnostics: ElaborationDiag[] = [];
 
@@ -573,6 +571,18 @@ export class Elaborator {
     constEvalInt32(node: ExprNode | undefined): bigint | undefined {
         const value = this.constEvalExpect(node, mkIntType(32));
         return value?.kind === ConstValueKind.Int ? value.value : undefined;
+    }
+
+    getConstValue(node: ExprNode): ConstValue | undefined {
+        const constEvaluator = new ConstEvaluator(
+            node => {
+                const qnames = this.nodeSymMap.get(node.identifierToken!);
+                const syms = qnames?.map(qname => this.symbols.get(qname));
+                return syms?.length === 1 ? syms[0] : undefined;
+            },
+            node => this.getType(node),
+        );
+        return constEvaluator.evaluate(node);
     }
 
     //==============================================================================
@@ -1110,12 +1120,12 @@ export class Elaborator {
                 return this.elabLiteralExpr(node, typeHint);
             } else if (node instanceof ArrayExprNode) {
                 return this.elabArrayExpr(node, typeHint);
+            } else if (node instanceof UnaryExprNode) {
+                return this.elabUnaryExpr(node, typeHint);
             } else if (node instanceof BinaryExprNode) {
                 return this.elabBinaryExpr(node, typeHint);
             } else if (node instanceof TernaryExprNode) {
                 return this.elabTernaryExpr(node, typeHint);
-            } else if (node instanceof UnaryExprNode) {
-                return this.elabUnaryExpr(node, typeHint);
             } else if (node instanceof CallExprNode) {
                 return this.elabCallExpr(node);
             } else if (node instanceof IndexExprNode) {
@@ -1133,9 +1143,7 @@ export class Elaborator {
     }
 
     private elabGroupedExpr(node: GroupedExprNode, typeHint: Type | undefined): Type {
-        const type = this.elabExprInfer(node.exprNode, { typeHint });
-        this.computeConstantValue(node, [node.exprNode], ([value]) => value);
-        return type;
+        return this.elabExprInfer(node.exprNode, { typeHint });
     }
 
     private elabNameExpr(nameExpr: NameExprNode): Type {
@@ -1147,9 +1155,6 @@ export class Elaborator {
 
         switch (sym.kind) {
             case SymKind.Const:
-                if (sym.value) {
-                    this.setConstValue(nameExpr, sym.value);
-                }
                 return sym.value?.type ?? mkErrorType();
             case SymKind.Global:
             case SymKind.Local:
@@ -1169,11 +1174,10 @@ export class Elaborator {
 
     private elabSizeofExpr(node: SizeofExprNode): Type {
         const resultType = mkIntType(64);
-        const evaluatedType = this.typeEval(node.type);
 
-        const size = typeLayout(evaluatedType)?.size;
-        if (size) {
-            this.setConstValue(node, mkIntConstValue(size, resultType));
+        const evaluatedType = this.typeEval(node.type);
+        if (this.isUnsizedType(evaluatedType)) {
+            this.reportError(node, `Type has incomplete type.`);
         }
 
         return resultType;
@@ -1181,34 +1185,14 @@ export class Elaborator {
 
     private elabLiteralExpr(node: LiteralExprNode, typeHint: Type | undefined): Type {
         const literal = node.literalNode!;
-        const text = literal.syntax.text;
         if (literal instanceof BoolLiteralNode) {
-            const type = mkBoolType();
-            this.setConstValue(node, mkBoolConstValue(text === 'true'));
-            return type;
+            return mkBoolType();
         } else if (literal instanceof IntLiteralNode) {
-            const type = typeHint?.kind === TypeKind.Int ? typeHint : mkIntType(64);
-
-            const value = parseInt(text);
-            if (Number.isSafeInteger(value)) {
-                this.setConstValue(node, mkIntConstValue(value, type));
-            }
-
-            return type;
+            return typeHint?.kind === TypeKind.Int ? typeHint : mkIntType(64);
         } else if (literal instanceof CharLiteralNode) {
-            const type = mkIntType(8);
-            const value = parseChar(text)?.charCodeAt(0);
-            if (value !== undefined) {
-                this.setConstValue(node, mkIntConstValue(value, type));
-            }
-            return type;
+            return mkIntType(8);
         } else if (literal instanceof StringLiteralNode) {
-            const type = mkPointerType(mkIntType(8));
-            const value = parseString(text);
-            if (typeof value === 'string') {
-                this.setConstValue(node, mkStringConstValue(value));
-            }
-            return type;
+            return mkPointerType(mkIntType(8));
         } else if (literal instanceof NullLiteralNode) {
             return mkPointerType(mkVoidType());
         } else {
@@ -1237,123 +1221,107 @@ export class Elaborator {
         const op = node.op!.text;
         const operandNode = node.right;
 
-        const type = (() => {
-            switch (op) {
-                case '!':
-                    return this.elabExprBool(operandNode);
-                case '-':
-                    return this.elabExprInferInt(operandNode, { typeHint });
-                case '~':
-                    return this.elabExprInferInt(operandNode, { typeHint });
-                case '&': {
-                    const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint.pointeeType : undefined;
-                    const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
-                    return mkPointerType(operandType);
-                }
-                case '*': {
-                    const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
-                    const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
-                    if (operandType.kind !== TypeKind.Ptr) {
-                        if (operandNode && operandType.kind !== TypeKind.Err) {
-                            this.reportError(operandNode, `Expected pointer type.`);
-                        }
-                        return mkErrorType();
-                    }
-                    return operandType.pointeeType;
-                }
-                default:
-                    return mkErrorType();
+        switch (op) {
+            case '!':
+                return this.elabExprBool(operandNode);
+            case '-':
+                return this.elabExprInferInt(operandNode, { typeHint });
+            case '~':
+                return this.elabExprInferInt(operandNode, { typeHint });
+            case '&': {
+                const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint.pointeeType : undefined;
+                const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
+                return mkPointerType(operandType);
             }
-        })();
-
-        this.computeConstantValue(node, [operandNode], ([operandValue]) =>
-            constValueUnop(op, operandValue),
-        );
-
-        return type;
+            case '*': {
+                const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
+                const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
+                if (operandType.kind !== TypeKind.Ptr) {
+                    if (operandNode && operandType.kind !== TypeKind.Err) {
+                        this.reportError(operandNode, `Expected pointer type.`);
+                    }
+                    return mkErrorType();
+                }
+                return operandType.pointeeType;
+            }
+            default:
+                return mkErrorType();
+        }
     }
 
     private elabBinaryExpr(node: BinaryExprNode, typeHint: Type | undefined): Type {
         const op = node.op!.text;
 
-        const type = (() => {
-            switch (op) {
-                case '=':
-                case '|=':
-                case '&=':
-                case '^=':
-                case '<<=':
-                case '>>=':
-                case '+=':
-                case '-=':
-                case '*=':
-                case '/=':
-                case '%=': {
-                    const leftNode = node.left;
-                    const rightNode = node.right;
+        switch (op) {
+            case '=':
+            case '|=':
+            case '&=':
+            case '^=':
+            case '<<=':
+            case '>>=':
+            case '+=':
+            case '-=':
+            case '*=':
+            case '/=':
+            case '%=': {
+                const leftNode = node.left;
+                const rightNode = node.right;
 
-                    if (!isLvalue(leftNode)) {
-                        this.reportError(leftNode ?? node, `L-value expected.`);
-                    }
-                    const leftType = op !== '='
-                        ? this.elabExprInferInt(leftNode, { typeHint })
-                        : this.elabExprInfer(leftNode, { typeHint: undefined });
+                if (!isLvalue(leftNode)) {
+                    this.reportError(leftNode ?? node, `L-value expected.`);
+                }
+                const leftType = op !== '='
+                    ? this.elabExprInferInt(leftNode, { typeHint })
+                    : this.elabExprInfer(leftNode, { typeHint: undefined });
 
-                    if (rightNode) {
-                        this.elabExpr(rightNode, leftType);
-                    }
-                    return mkVoidType();
+                if (rightNode) {
+                    this.elabExpr(rightNode, leftType);
                 }
-                case '+':
-                case '-':
-                case '*':
-                case '/':
-                case '%':
-                case '<<':
-                case '>>':
-                case '&':
-                case '|':
-                case '^': {
-                    const leftNode = node.left;
-                    const rightNode = node.right;
-                    const leftType = this.elabExprInferInt(leftNode, { typeHint });
-                    const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
-                    return this.unifyTypes(node, leftNode, rightNode);
-                }
-                case '==':
-                case '!=':
-                case '<':
-                case '<=':
-                case '>':
-                case '>=': {
-                    const leftNode = node.left;
-                    const rightNode = node.right;
-                    const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
-                    const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
-                    const cmpType = this.unifyTypes(node, leftNode, rightNode);
-                    if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
-                        this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
-                    }
-                    return mkBoolType();
-                }
-                case '&&':
-                case '||': {
-                    const leftNode = node.left;
-                    const rightNode = node.right;
-                    this.elabExprBool(leftNode);
-                    this.elabExprBool(rightNode);
-                    return mkBoolType();
-                }
-                default:
-                    return mkErrorType();
+                return mkVoidType();
             }
-        })();
-
-        this.computeConstantValue(node, [node.left, node.right], ([leftValue, rightValue]) =>
-            constValueBinop(op, leftValue, rightValue),
-        );
-
-        return type;
+            case '+':
+            case '-':
+            case '*':
+            case '/':
+            case '%':
+            case '<<':
+            case '>>':
+            case '&':
+            case '|':
+            case '^': {
+                const leftNode = node.left;
+                const rightNode = node.right;
+                const leftType = this.elabExprInferInt(leftNode, { typeHint });
+                const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
+                return this.unifyTypes(node, leftNode, rightNode);
+            }
+            case '==':
+            case '!=':
+            case '<':
+            case '<=':
+            case '>':
+            case '>=': {
+                const leftNode = node.left;
+                const rightNode = node.right;
+                const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
+                const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
+                const cmpType = this.unifyTypes(node, leftNode, rightNode);
+                if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
+                    this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
+                }
+                return mkBoolType();
+            }
+            case '&&':
+            case '||': {
+                const leftNode = node.left;
+                const rightNode = node.right;
+                this.elabExprBool(leftNode);
+                this.elabExprBool(rightNode);
+                return mkBoolType();
+            }
+            default:
+                return mkErrorType();
+        }
     }
 
     private elabTernaryExpr(node: TernaryExprNode, typeHint: Type | undefined): Type {
@@ -1362,13 +1330,7 @@ export class Elaborator {
         const elseNode = node.else;
         const thenType = this.elabExprInfer(thenNode, { typeHint });
         const _elseType = this.elabExprInfer(elseNode, { typeHint: thenType });
-        const type = this.unifyTypes(node, thenNode, elseNode);
-
-        this.computeConstantValue(node, [node.cond, node.then, node.else], ([condValue, thenValue, elseValue]) =>
-            constValueTernop(condValue, thenValue, elseValue),
-        );
-
-        return type;
+        return this.unifyTypes(node, thenNode, elseNode);
     }
 
     private elabCallExpr(node: CallExprNode): Type {
@@ -1543,10 +1505,6 @@ export class Elaborator {
             this.reportWarning(keywordNode, `Redundant cast.`);
         }
 
-        this.computeConstantValue(node, [exprNode], ([value]) => {
-            return constValueCast(value, castType);
-        });
-
         return castType;
     }
 
@@ -1707,33 +1665,10 @@ export class Elaborator {
         return type;
     }
 
-    private setConstValue(node: ExprNode, value: ConstValue) {
-        this.nodeValueMap.set(node.syntax, value);
-    }
-
-    private getConstValue(node: ExprNode): ConstValue | undefined {
-        return this.nodeValueMap.get(node.syntax);
-    }
-
     private trackTyping(node: ExprNode | TypeNode, f: () => Type): Type {
         const type = f();
         this.setType(node, type);
         return type;
-    }
-
-    private computeConstantValue(node: ExprNode | undefined, children: (ExprNode | undefined)[], f: (childValues: ConstValue[]) => ConstValue | undefined) {
-        if (!node) {
-            return;
-        }
-        const childValues = stream(children).filterMap(child => child && this.getConstValue(child)).toArray();
-        if (childValues.length !== children.length) {
-            return;
-        }
-        const value = f(childValues);
-        if (!value) {
-            return;
-        }
-        this.setConstValue(node, value);
     }
 
     private reportDiagnostic(range: PointRange, severity: Severity, message: string) {

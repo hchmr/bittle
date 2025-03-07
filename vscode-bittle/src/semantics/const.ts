@@ -140,12 +140,15 @@ export function constValueBinop(op: string, a: ConstValue, b: ConstValue): Const
     return undefined;
 }
 
-export function constValueTernop(a: ConstValue, b: ConstValue, c: ConstValue): ConstValue | undefined {
-    if (a.kind !== ConstValueKind.Bool) {
+export function constValueTernop(cond: ConstValue, t: () => ConstValue | undefined, f: () => ConstValue | undefined): ConstValue | undefined {
+    if (cond.kind !== ConstValueKind.Bool) {
         return undefined;
     }
-
-    return a.value ? b : c;
+    if (cond.value) {
+        return t();
+    } else {
+        return f();
+    }
 }
 
 export function constValueCast(value: ConstValue, target: Type): ConstValue | undefined {
