@@ -1,5 +1,6 @@
 import path from 'path';
 import { SyntaxNode } from '../syntax';
+import { parseString } from '../utils/literalParsing';
 import { VirtualFileSystem } from './vfs';
 
 export class IncludeResolver {
@@ -9,7 +10,7 @@ export class IncludeResolver {
         const pathValue =
             typeof arg === 'string'
                 ? arg
-                : tryParseString(arg.text);
+                : parseString(arg.text);
         if (!pathValue) {
             return;
         }
@@ -18,16 +19,5 @@ export class IncludeResolver {
             return;
         }
         return includePath;
-    }
-}
-
-function tryParseString(text: string): string | undefined {
-    if (!text.startsWith('"')) {
-        return;
-    }
-    try {
-        return JSON.parse(text) as string;
-    } catch {
-        return;
     }
 }

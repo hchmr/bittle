@@ -9,6 +9,7 @@ import { VirtualFileSystem } from '../services/vfs';
 import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
 import { interceptExceptions } from '../utils/interceptExceptions';
+import { parseString } from '../utils/literalParsing';
 import { stream } from '../utils/stream';
 import { fromVscPosition, toVscRange } from '../utils/vscode';
 
@@ -29,7 +30,10 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
         return stream(tree.rootNode.descendantsForPosition(position))
             .filter(node => node.type === NodeTypes.StringLiteral && node.parent?.type === NodeTypes.IncludeDecl)
             .filterMap(node => {
-                const stringValue = JSON.parse(node.text) as string;
+                const stringValue = parseString(node.text);
+                if (!stringValue) {
+                    return;
+                }
                 const includePath = this.resolveInclude(document.uri.fsPath, stringValue);
                 if (!includePath) {
                     return;
