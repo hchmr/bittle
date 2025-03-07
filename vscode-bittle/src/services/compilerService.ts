@@ -1,5 +1,4 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
 import * as vscode from 'vscode';
 import { log } from '../log';
 
@@ -8,11 +7,6 @@ export class CompilerService {
         log.log(`Invoking compiler for ${filePath}`);
 
         const bittlec = vscode.workspace.getConfiguration().get<string>('bittle.compilerPath', 'bittlec');
-
-        if (!fs.existsSync(bittlec)) {
-            log.log(`Compiler not found at ${bittlec}`);
-            return { ok: false, stderr: `Compiler not found at ${bittlec}` };
-        }
 
         const process = spawn(
             bittlec,
