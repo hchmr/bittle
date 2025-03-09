@@ -246,9 +246,7 @@ export function typeLayout(type: Type): TypeLayout | undefined {
 //= Type merging
 
 export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
-    if (typeEq(t1, t2) || typeImplicitlyConvertible(t1, t2)) {
-        return t2;
-    } else if (typeImplicitlyConvertible(t2, t1)) {
+    if (typeEq(t1, t2)) {
         return t1;
     }
 
