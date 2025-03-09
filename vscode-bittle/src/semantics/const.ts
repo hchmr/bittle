@@ -1,4 +1,3 @@
-import assert from 'assert';
 import { BoolType, mkBoolType, mkIntType, mkPointerType, Type, typeEq, TypeKind, typeLayout } from './type';
 
 export enum ConstValueKind {
@@ -54,101 +53,26 @@ export function mkStringConstValue(value: string): StringConstValue {
     return { kind: ConstValueKind.String, type: mkPointerType(mkIntType(8)), value };
 }
 
-const compareOps = {
-    '==': <T>(a: T, b: T) => a === b,
-    '!=': <T>(a: T, b: T) => a !== b,
-    '<': <T>(a: T, b: T) => a < b,
-    '<=': <T>(a: T, b: T) => a <= b,
-    '>': <T>(a: T, b: T) => a > b,
-    '>=': <T>(a: T, b: T) => a >= b,
-} as const;
+export function constCoerce(value: ConstValue, target: Type): ConstValue | undefined {
+    if (typeEq(value.type, target)) {
+        return value;
+    }
 
-function compare<T>(op: keyof typeof compareOps, a: T, b: T): boolean {
-    return compareOps[op](a, b);
-}
-
-export function constValueUnop(op: string, a: ConstValue): ConstValue | undefined {
-    switch (a.kind) {
-        case ConstValueKind.Bool:
-            switch (op) {
-                case '!':
-                    return mkBoolConstValue(!a.value);
+    switch (target.kind) {
+        case TypeKind.Bool:
+            if (value.kind === ConstValueKind.Int) {
+                return mkBoolConstValue(!!value.value);
             }
             break;
-        case ConstValueKind.Int:
-            switch (op) {
-                case '-':
-                    return mkIntConstValue(-a.value, a.type);
-                case '~':
-                    return mkIntConstValue(~a.value, a.type);
+        case TypeKind.Int:
+            if (value.kind === ConstValueKind.Bool) {
+                return mkIntConstValue(value.value ? 1 : 0, target);
+            } else if (value.kind === ConstValueKind.Int) {
+                return mkIntConstValue(value.value, target);
             }
             break;
     }
     return undefined;
-}
-
-export function constValueBinop(op: string, a: ConstValue, b: ConstValue): ConstValue | undefined {
-    if (a.kind !== b.kind) {
-        return undefined;
-    }
-    switch (a.kind) {
-        case ConstValueKind.Bool:
-            assert(b.kind === ConstValueKind.Bool);
-            switch (op) {
-                case '||':
-                    return mkBoolConstValue(a.value || b.value);
-                case '&&':
-                    return mkBoolConstValue(a.value && b.value);
-                case '==':
-                case '!=':
-                case '<':
-                case '<=':
-                case '>':
-                case '>=':
-                    return mkBoolConstValue(compare(op, a.value, b.value));
-            }
-            break;
-        case ConstValueKind.Int:
-            assert(b.kind === ConstValueKind.Int);
-            switch (op) {
-                case '+':
-                    return checkedMkIntConstValue(a.value + b.value, a.type);
-                case '-':
-                    return checkedMkIntConstValue(a.value - b.value, a.type);
-                case '*':
-                    return checkedMkIntConstValue(a.value * b.value, a.type);
-                case '/':
-                    if (b.value === 0n) {
-                        return undefined;
-                    }
-                    return checkedMkIntConstValue(a.value / b.value, a.type);
-                case '%':
-                    if (b.value === 0n) {
-                        return undefined;
-                    }
-                    return checkedMkIntConstValue(a.value % b.value, a.type);
-                case '==':
-                case '!=':
-                case '<':
-                case '<=':
-                case '>':
-                case '>=':
-                    return mkBoolConstValue(compare(op, a.value, b.value));
-            }
-            break;
-    }
-    return undefined;
-}
-
-export function constValueTernop(cond: ConstValue, t: () => ConstValue | undefined, f: () => ConstValue | undefined): ConstValue | undefined {
-    if (cond.kind !== ConstValueKind.Bool) {
-        return undefined;
-    }
-    if (cond.value) {
-        return t();
-    } else {
-        return f();
-    }
 }
 
 export function constValueCast(value: ConstValue, target: Type): ConstValue | undefined {

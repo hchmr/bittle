@@ -10,7 +10,7 @@ import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
 import { ConstEvaluator } from './constEvaluator';
 import { Scope } from './scope';
 import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
-import { isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout } from './type';
+import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypesWithCoercion, Type, typeConvertible, typeEq, TypeKind, typeLayout } from './type';
 
 export type ErrorLocation = {
     file: string;
@@ -582,7 +582,7 @@ export class Elaborator {
             },
             node => this.getType(node),
         );
-        return constEvaluator.evaluate(node);
+        return constEvaluator.eval(node);
     }
 
     //==============================================================================
@@ -1587,41 +1587,14 @@ export class Elaborator {
     //==============================================================================
     //== Type checking
 
-    private canCoerceWithCast(node: ExprNode, target: Type): boolean {
-        return typeImplicitlyConvertible(this.getType(node), target);
-    }
-
-    private canCoerceToUnion(node: ExprNode, target: Type): boolean {
-        if (target.kind !== TypeKind.Record || target.sym.recordKind !== RecordKind.Union) {
-            return false;
-        }
-        const field = target.sym.fields.find(f => typeEq(f.type, this.getType(node)));
-        return !!field;
-    }
-
     private canCoerce(node: ExprNode, expected: Type) {
-        const actual = this.getType(node);
-        return typeEq(actual, expected)
-            || this.canCoerceWithCast(node, expected)
-            || this.canCoerceToUnion(node, expected);
+        return canCoerce(this.getType(node), expected);
     }
 
     private unifyTypes(node: ExprNode, e1: ExprNode | Nullish, e2: ExprNode | Nullish): Type {
-        if (!(e1 && e2)) {
-            return e1 ? this.getType(e1) : e2 ? this.getType(e2) : mkErrorType();
-        }
-
-        let t1 = this.getType(e1);
-        let t2 = this.getType(e2);
-
-        if (this.canCoerce(e1, t2)) {
-            t1 = t2;
-        }
-        if (this.canCoerce(e2, t1)) {
-            t2 = t1;
-        }
-
-        return tryUnifyTypes(t1, t2, () => {
+        const t1 = e1 ? this.getType(e1) : mkErrorType();
+        const t2 = e2 ? this.getType(e2) : mkErrorType();
+        return tryUnifyTypesWithCoercion(t1, t2, () => {
             this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
         });
     }
