@@ -1,18 +1,47 @@
+import assert from 'assert';
 import { ArrayExprNode, BinaryExprNode, BoolLiteralNode, CallExprNode, CastExprNode, CharLiteralNode, ExprNode, FieldExprNode, GroupedExprNode, IndexExprNode, IntLiteralNode, LiteralExprNode, NameExprNode, RecordExprNode, SizeofExprNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode } from '../syntax/generated';
-import { unreachable } from '../utils';
+import { Nullish, unreachable } from '../utils';
 import { parseChar, parseString } from '../utils/literalParsing';
-import { ConstValue, constValueBinop, constValueCast, constValueTernop, constValueUnop, mkBoolConstValue, mkIntConstValue, mkStringConstValue } from './const';
+import { checkedMkIntConstValue, constCoerce, ConstValue, constValueCast, ConstValueKind, mkBoolConstValue, mkIntConstValue, mkStringConstValue } from './const';
 import { Sym, SymKind } from './sym';
-import { Type, typeLayout } from './type';
+import { mkBoolType, mkErrorType, Type, typeLayout, unifyTypesWithCoercion } from './type';
+
+const compareOps = {
+    '==': <T>(a: T, b: T) => a === b,
+    '!=': <T>(a: T, b: T) => a !== b,
+    '<': <T>(a: T, b: T) => a < b,
+    '<=': <T>(a: T, b: T) => a <= b,
+    '>': <T>(a: T, b: T) => a > b,
+    '>=': <T>(a: T, b: T) => a >= b,
+} as const;
+
+const arithmeticOps = {
+    '+': (a: bigint, b: bigint) => a + b,
+    '-': (a: bigint, b: bigint) => a - b,
+    '*': (a: bigint, b: bigint) => a * b,
+    '/': (a: bigint, b: bigint) => b === 0n ? undefined : a / b,
+    '%': (a: bigint, b: bigint) => b === 0n ? undefined : a % b,
+} as const;
+
+function compare<T>(op: keyof typeof compareOps, a: T, b: T): boolean {
+    return compareOps[op](a, b);
+}
 
 export class ConstEvaluator {
+    getType: (node: ExprNode | TypeNode | Nullish) => Type;
+
     constructor(
         private getSym: (node: NameExprNode) => Sym | undefined,
-        private getType: (node: ExprNode | TypeNode) => Type,
+        getType: (node: ExprNode | TypeNode) => Type,
     ) {
+        this.getType = (node) => node ? getType(node) : mkErrorType();
     }
 
-    public evaluate(node: ExprNode): ConstValue | undefined {
+    public eval(node: ExprNode | Nullish): ConstValue | undefined {
+        if (!node) {
+            return undefined;
+        }
+
         if (node instanceof GroupedExprNode) {
             return this.evalGroupedExpr(node);
         } else if (node instanceof NameExprNode) {
@@ -45,24 +74,18 @@ export class ConstEvaluator {
     }
 
     private evalGroupedExpr(node: GroupedExprNode): ConstValue | undefined {
-        if (!node.exprNode) {
-            return undefined;
-        }
-        return this.evaluate(node.exprNode);
+        return this.eval(node.exprNode);
     }
 
     private evalNameExpr(node: NameExprNode): ConstValue | undefined {
         const sym = this.getSym(node);
-        if (!sym || sym.kind !== SymKind.Const) {
+        if (sym?.kind !== SymKind.Const) {
             return undefined;
         }
         return sym.value;
     }
 
     private evalSizeofExpr(node: SizeofExprNode): ConstValue | undefined {
-        if (!node.type) {
-            return undefined;
-        }
         const type = this.getType(node.type);
         const size = typeLayout(type)?.size;
         if (!size) {
@@ -109,55 +132,139 @@ export class ConstEvaluator {
 
     private evalBinaryExpr(node: BinaryExprNode): ConstValue | undefined {
         const op = node.op?.text;
-        if (!op || !node.left || !node.right) {
+        if (!op) {
             return undefined;
         }
-        const leftValue = this.evaluate(node.left);
-        if (!leftValue) {
+
+        if (op === '&&' || op === '||') {
+            return this.evalLogicalExpr(node);
+        }
+
+        let a = this.eval(node.left);
+        let b = this.eval(node.right);
+
+        if (!a || !b) {
             return undefined;
         }
-        const rightValue = this.evaluate(node.right);
-        if (!rightValue) {
+
+        switch (op) {
+            case '+':
+            case '-':
+            case '*':
+            case '/':
+            case '%': {
+                const resultType = this.getType(node);
+                [a, b] = [constCoerce(a, resultType), constCoerce(b, resultType)];
+                if (a?.kind !== ConstValueKind.Int || b?.kind !== ConstValueKind.Int) {
+                    return undefined;
+                }
+                const result = arithmeticOps[op](a.value, b.value);
+                if (result === undefined) {
+                    return undefined;
+                }
+                return checkedMkIntConstValue(result, resultType);
+            }
+            case '==':
+            case '!=':
+            case '<':
+            case '<=':
+            case '>':
+            case '>=': {
+                const resultType = unifyTypesWithCoercion(a.type, b.type);
+                [a, b] = [constCoerce(a, resultType), constCoerce(b, resultType)];
+                if (!a || !b) {
+                    return undefined;
+                }
+                switch (a.kind) {
+                    case ConstValueKind.Bool:
+                        if (b?.kind !== ConstValueKind.Bool) {
+                            return undefined;
+                        }
+                        return mkBoolConstValue(compare(op, a.value, b.value));
+                    case ConstValueKind.Int:
+                        if (b?.kind !== ConstValueKind.Int) {
+                            return undefined;
+                        }
+                        return mkBoolConstValue(compare(op, a.value, b.value));
+                }
+            }
+        }
+        return undefined;
+    }
+
+    private evalLogicalExpr(node: BinaryExprNode): ConstValue | undefined {
+        const op = node.op?.text;
+        assert(op === '&&' || op === '||');
+
+        let a = this.eval(node.left);
+        a = a && constCoerce(a, mkBoolType());
+
+        if (a?.kind !== ConstValueKind.Bool) {
             return undefined;
         }
-        return constValueBinop(op, leftValue, rightValue);
+
+        if (!a.value && op === '&&' || a.value && op === '||') {
+            return a;
+        }
+
+        let b = this.eval(node.right);
+        b = b && constCoerce(b, mkBoolType());
+
+        return b;
     }
 
     private evalUnaryExpr(node: UnaryExprNode): ConstValue | undefined {
         const op = node.op?.text;
-        if (!op || !node.right) {
+        if (!op) {
             return undefined;
         }
-        const rightValue = this.evaluate(node.right);
-        if (!rightValue) {
+
+        let a = this.eval(node.right);
+        if (!a) {
             return undefined;
         }
-        return constValueUnop(op, rightValue);
+
+        const resultType = this.getType(node);
+
+        switch (op) {
+            case '!':
+                a = constCoerce(a, mkBoolType());
+                if (a?.kind !== ConstValueKind.Bool) {
+                    return undefined;
+                }
+                return mkBoolConstValue(!a.value);
+            case '-':
+            case '~':
+                a = constCoerce(a, resultType);
+                if (a?.kind !== ConstValueKind.Int) {
+                    return undefined;
+                }
+                switch (op) {
+                    case '-':
+                        return mkIntConstValue(-a.value, a.type);
+                    case '~':
+                        return mkIntConstValue(~a.value, a.type);
+                }
+        }
     }
 
     private evalTernaryExpr(node: TernaryExprNode): ConstValue | undefined {
-        if (!node.cond) {
+        let a = this.eval(node.cond);
+        a = a && constCoerce(a, mkBoolType());
+
+        if (a?.kind !== ConstValueKind.Bool) {
             return undefined;
         }
-        const condValue = this.evaluate(node.cond);
-        if (!condValue) {
-            return undefined;
+
+        const resultType = this.getType(node);
+
+        if (a.value) {
+            const b = this.eval(node.then);
+            return b && constCoerce(b, resultType);
+        } else {
+            const b = this.eval(node.else);
+            return b && constCoerce(b, resultType);
         }
-        return constValueTernop(
-            condValue,
-            () => {
-                if (!node.then) {
-                    return undefined;
-                }
-                return this.evaluate(node.then);
-            },
-            () => {
-                if (!node.else) {
-                    return undefined;
-                }
-                return this.evaluate(node.else);
-            },
-        );
     }
 
     private evalCallExpr(node: CallExprNode): ConstValue | undefined {
@@ -173,15 +280,13 @@ export class ConstEvaluator {
     }
 
     private evalCastExpr(node: CastExprNode): ConstValue | undefined {
-        if (!node.type || !node.expr) {
+        const value = this.eval(node.expr);
+        if (!value) {
             return undefined;
         }
-        const exprValue = this.evaluate(node.expr);
-        if (!exprValue) {
-            return undefined;
-        }
-        const resultType = this.getType(node.type);
-        return constValueCast(exprValue, resultType);
+        const target = this.getType(node.type);
+
+        return constValueCast(value, target);
     }
 
     private evalRecordExpr(node: RecordExprNode): ConstValue | undefined {

@@ -1,6 +1,6 @@
 import { unreachable } from '../utils';
 import { stream } from '../utils/stream';
-import { EnumSym, RecordSym } from './sym';
+import { EnumSym, RecordKind, RecordSym } from './sym';
 
 export type Type =
     | VoidType
@@ -292,6 +292,22 @@ export function unifyTypes(t1: Type, t2: Type): Type {
     });
 }
 
+export function tryUnifyTypesWithCoercion(t1: Type, t2: Type, onError: () => void): Type {
+    if (canCoerce(t2, t1)) {
+        return t1;
+    }
+    if (canCoerce(t1, t2)) {
+        return t2;
+    }
+    return tryUnifyTypes(t1, t2, onError);
+}
+
+export function unifyTypesWithCoercion(t1: Type, t2: Type): Type {
+    return tryUnifyTypesWithCoercion(t1, t2, () => {
+        // Ignore errors
+    });
+}
+
 export function typeEq(t1: Type, t2: Type): boolean {
     if (t1 === t2) {
         return true;
@@ -331,6 +347,23 @@ export function isValidReturnType(type: Type): boolean {
     return type.kind === TypeKind.Void
         || type.kind === TypeKind.Never
         || isSizedType(type);
+}
+
+export function canCoerce(src: Type, dst: Type): boolean {
+    return typeEq(src, dst)
+        || canCoerceWithCast(src, dst)
+        || canCoerceToUnion(src, dst);
+}
+
+function canCoerceWithCast(src: Type, dst: Type): boolean {
+    return typeImplicitlyConvertible(src, dst);
+}
+
+function canCoerceToUnion(src: Type, dst: Type): boolean {
+    if (dst.kind !== TypeKind.Record || dst.sym.recordKind !== RecordKind.Union) {
+        return false;
+    }
+    return dst.sym.fields.some(f => typeEq(f.type, src));
 }
 
 export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
