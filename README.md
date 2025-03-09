@@ -68,7 +68,6 @@ The host platform for the bootstrapping process is Linux on Arm64. A minimal set
 
 - No floating-point support
 - No support for control flow labels
-- No include guards preventing multiple inclusion of header files
 
 **Planned Enhancements:**
 
