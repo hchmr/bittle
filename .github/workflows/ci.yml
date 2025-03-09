@@ -16,7 +16,7 @@ jobs:
         fetch-depth: 0 # Fetch all history
 
     - name: Bootstrap
-      run: ./scripts/bootstrap
+      run: ./scripts/bootstrap --head
 
   vscode:
     name: CI for VS Code extension
