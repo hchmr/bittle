@@ -1,17 +1,5 @@
 include "bittle.btls";
 
-func sym_is_defined(sym: *Sym): Bool {
-    if (sym.kind == Sym_Record) {
-        return (sym as *RecordSym).is_defined;
-    } else if (sym.kind == Sym_Global) {
-        return (sym as *GlobalSym).is_defined;
-    } else if (sym.kind == Sym_Func) {
-        return (sym as *FuncSym).is_defined;
-    } else {
-        return true;
-    }
-}
-
 func find_record_field_by_name(sym: *Sym, name: *Char): Int {
     var fields = (sym as *RecordSym).fields;
     if (!fields) {

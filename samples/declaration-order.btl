@@ -1,0 +1,69 @@
+// This example uses a top-down declaration style to test
+// the compiler's ability to resolve forward references.
+
+func main(): Int32 {
+    var leaf1: Tree = Leaf { value: 11 };
+    var leaf2: Tree = Leaf { value: 22 };
+    var leaf3: Tree = Leaf { value: 33 };
+    var leaf4: Tree = Leaf { value: 44 };
+    var branch1: Tree = Branch {
+        left: &leaf1,
+        right: &leaf2,
+    };
+    var branch2: Tree = Branch {
+        left: &leaf3,
+        right: &leaf4,
+    };
+    var root: Tree = Branch {
+        left: &branch1,
+        right: &branch2,
+    };
+
+    printf("Sum: %d\n", sum(&root));
+    return 0;
+}
+
+func sum(tree: *Tree): Int {
+    if (tree.kind == Tree_Leaf) {
+        return leaf_sum(&tree.as_leaf);
+    } else if (tree.kind == Tree_Branch) {
+        return branch_sum(&tree.as_branch);
+    } else {
+        return 0;
+    }
+}
+
+func leaf_sum(leaf: *Leaf): Int {
+    return leaf.value;
+}
+
+func branch_sum(branch: *Branch): Int {
+    return sum(branch.left) + sum(branch.right);
+}
+
+enum TreeKind {
+    Tree_Leaf,
+    Tree_Branch,
+}
+
+struct TreeBase {
+    kind: TreeKind,
+}
+
+struct Leaf: TreeBase {
+    kind = Tree_Leaf,
+    value: Int,
+}
+
+struct Branch: TreeBase {
+    kind = Tree_Branch,
+    left: *Tree,
+    right: *Tree,
+}
+
+union Tree: TreeBase {
+    as_leaf: Leaf,
+    as_branch: Branch,
+}
+
+func printf(fmt: *Char, ...): Int32;

@@ -59,7 +59,7 @@ func is_word_start(c: Int32): Bool;
 func is_word_part(c: Int32): Bool;
 func is_print(c: Int32): Bool;
 
-func parse_char(c: *Char): Char;
+func parse_char(s: *Char): Char;
 func parse_string(s: *Char): *StringBuffer;
 
 //==============================================================================
@@ -168,7 +168,7 @@ struct StringConstValue: ConstValue {
 func const_value_unop(op: Int32, a: *ConstValue): *ConstValue;
 func const_value_binop(op: Int32, a: *ConstValue, b: *ConstValue): *ConstValue;
 func const_value_ternop(a: *ConstValue, b: *ConstValue, c: *ConstValue): *ConstValue;
-func const_value_cast(value: *ConstValue, type: *Type): *ConstValue;
+func const_value_cast(value: *ConstValue, target: *Type): *ConstValue;
 
 func mk_bool_const_value(value: Bool): *BoolConstValue;
 func mk_int_const_value(value: Int, type: *Type): *IntConstValue;
@@ -192,6 +192,7 @@ enum SymKind {
 struct Sym {
     kind: SymKind,
     name: *Char,
+    is_defined: Bool,
 }
 
 struct RecordField {
@@ -211,12 +212,10 @@ struct RecordSym: Sym {
     fields: *List, // List<RecordField>
     unpadded_size: Int,
     align: Int,
-    is_defined: Bool,
 }
 
 struct GlobalSym: Sym {
     type: *Type,
-    is_defined: Bool,
 }
 
 struct ConstSym: Sym {
@@ -234,7 +233,6 @@ struct FuncSym: Sym {
     return_type: *Type,
     is_variadic: Bool,
     rest_param_name: *Char,
-    is_defined: Bool,
     locals: *List, // List<Sym>
     temps: *List, // List<HirTemp>
     body: *Stmt,
@@ -246,7 +244,6 @@ struct LocalSym: Sym {
     is_indirect: Bool,
 }
 
-func sym_is_defined(sym: *Sym): Bool;
 func find_record_field_by_name(sym: *Sym, name: *Char): Int;
 func find_record_field_by_type(sym: *Sym, type: *Type): Int;
 func find_param_by_name(sym: *FuncSym, name: *Char): Int;
@@ -586,6 +583,7 @@ struct RecordDecl: Decl {
     name: *Char,
     base: *TypeExpr,
     fields: *List, // List<RecordFieldDecl>
+    sym: *RecordSym,
 }
 
 struct FuncParamDecl {
@@ -607,29 +605,34 @@ struct FuncDecl: Decl {
     rest_param: *RestParamDecl,
     return_type: *TypeExpr,
     body: *Stmt,
+    sym: *FuncSym,
 }
 
 struct EnumMember {
     pos: Pos,
     name: *Char,
     value: *Expr,
+    sym: *ConstSym,
 }
 
 struct EnumDecl: Decl {
     name: *Char,
     members: *List, // List<EnumMember>
+    sym: *EnumSym,
 }
 
 struct ConstDecl: Decl {
     name: *Char,
     type: *TypeExpr,
     value: *Expr,
+    sym: *ConstSym,
 }
 
 struct GlobalDecl: Decl {
     is_extern: Bool,
     name: *Char,
     type: *TypeExpr,
+    sym: *GlobalSym,
 }
 
 struct Ast {

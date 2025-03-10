@@ -1,6 +1,6 @@
 BITTLEC ?= bittlec
-SRC_DIR ?= ./src
-BUILD_DIR ?= ./out/build
+SRC_DIR ?= $(abspath ./src)
+BUILD_DIR ?= $(abspath ./out/build)
 
 BITTLE_HEADERS = $(wildcard $(SRC_DIR)/*.btls)
 BITTLE_FILES = $(wildcard $(SRC_DIR)/*.btl)

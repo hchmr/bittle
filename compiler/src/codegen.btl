@@ -1040,7 +1040,7 @@ func emit_global(ctx: *CodegenCtx, sym: *GlobalSym) {
 }
 
 func emit_sym(ctx: *CodegenCtx, sym: *Sym) {
-    if (!sym_is_defined(sym)) {
+    if (!sym.is_defined) {
         return;
     }
     if (sym.kind == Sym_Func) {

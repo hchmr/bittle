@@ -911,6 +911,7 @@ func p_record_decl(self: *Parser): *Decl {
         name,
         base,
         fields: body,
+        sym: null,
     };
     return result;
 }
@@ -990,6 +991,7 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
         rest_param,
         return_type,
         body,
+        sym: null,
     };
     return result;
 }
@@ -1007,6 +1009,7 @@ func p_enum_member(self: *Parser): *EnumMember {
         pos,
         name,
         value,
+        sym: null,
     };
     return result;
 }
@@ -1034,6 +1037,7 @@ func p_enum_decl(self: *Parser): *Decl {
         pos,
         name,
         members,
+        sym: null,
     };
     return result;
 }
@@ -1057,6 +1061,7 @@ func p_const_decl(self: *Parser): *Decl {
         name,
         type,
         value,
+        sym: null,
     };
     return result;
 }
@@ -1076,6 +1081,7 @@ func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
         is_extern,
         name,
         type,
+        sym: null,
     };
     return result;
 }

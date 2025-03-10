@@ -323,7 +323,7 @@ func lower_const_value(value: *ConstValue, pos: *Pos): *HirExpr {
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
 
-func lower_assign_expr(ctx: *Context, dest: *HirExpr, src: *Expr, pos: *Pos): *HirExpr;
+func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr;
 
 func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
     var sym = expr.sym;

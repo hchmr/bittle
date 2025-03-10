@@ -83,16 +83,32 @@ func add_sym(ctx: *ElabCtx, sym: *Sym) {
     list_push(ctx.scope.entries, entry);
 }
 
-func define_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
+func declare_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
-        die_at(pos, "Symbol is already defined");
+        if (existing.kind != Sym_Enum) {
+            die_at(pos, "Another symbol with the same name already exists");
+        }
+        return existing as *EnumSym;
     }
 
-    var sym = calloc(1, sizeof(EnumSym)) as *EnumSym;
-    *sym = EnumSym { kind: Sym_Enum, name, size: 4 };
+    var sym: *EnumSym = calloc(1, sizeof(EnumSym));
+    *sym = EnumSym {
+        kind: Sym_Enum,
+        name,
+        is_defined: false,
+        size: -1,
+    };
     add_sym(ctx, sym);
     return sym;
+}
+
+func define_enum(ctx: *ElabCtx, pos: *Pos, sym: *EnumSym, size: Int) {
+    if (sym.is_defined) {
+        die_at(pos, "Symbol is already defined");
+    }
+    sym.size = size;
+    sym.is_defined = true;
 }
 
 func declare_record(
@@ -100,31 +116,64 @@ func declare_record(
     pos: *Pos,
     is_union: Bool,
     name: *Char,
-    is_definition: Bool
 ): *RecordSym {
-    var sym = try_get_existing(ctx, name);
-    if (sym) {
-        if (sym.kind != Sym_Record) {
-            die_at(pos, "redeclared as different kind of symbol");
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        if (existing.kind != Sym_Record) {
+            die_at(pos, "Another symbol with the same name already exists");
         }
-        if (sym_is_defined(sym) && is_definition) {
-            die_at(pos, "redefinition of existing symbol");
-        }
-    } else {
-        sym = calloc(1, sizeof(RecordSym)) as *RecordSym;
-        *(sym as *RecordSym) = RecordSym {
-            kind: Sym_Record,
-            is_union,
-            name,
-            base: null,
-            fields: null,
-            unpadded_size: 0,
-            align: 0,
-            is_defined: false,
-        };
-        add_sym(ctx, sym);
+        return existing as *RecordSym;
     }
-    return sym as *RecordSym;
+
+    var sym: *RecordSym = calloc(1, sizeof(RecordSym));
+    *sym = RecordSym {
+        kind: Sym_Record,
+        name,
+        is_defined: false,
+        is_union,
+        base: null,
+        fields: null,
+        unpadded_size: 0,
+        align: 0,
+    };
+    add_sym(ctx, sym);
+    return sym;
+}
+
+func define_record(ctx: *ElabCtx, pos: *Pos, sym: *RecordSym) {
+    if (sym.is_defined) {
+        die_at(pos, "Symbol is already defined");
+    }
+
+    sym.is_defined = true;
+}
+
+func declare_const(ctx: *ElabCtx, pos: *Pos, name: *Char): *ConstSym {
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        if (existing.kind != Sym_Const) {
+            die_at(pos, "Another symbol with the same name already exists");
+        }
+        return existing as *ConstSym;
+    }
+
+    var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
+    *sym = ConstSym {
+        kind: Sym_Const,
+        is_defined: false,
+        name,
+        value: null,
+    };
+    add_sym(ctx, sym);
+    return sym;
+}
+
+func define_const(ctx: *ElabCtx, pos: *Pos, sym: *ConstSym, value: *ConstValue) {
+    if (sym.is_defined) {
+        die_at(pos, "Symbol is already defined");
+    }
+    sym.is_defined = true;
+    sym.value = value;
 }
 
 func params_eq(xs: *List, ys: *List): Bool {
@@ -134,6 +183,9 @@ func params_eq(xs: *List, ys: *List): Bool {
     for (var i = 0; i < list_len(xs); i += 1) {
         var param1: *FuncParam = list_get(xs, i);
         var param2: *FuncParam = list_get(ys, i);
+        if (!str_eq(param1.name, param2.name)) {
+            return false;
+        }
         if (!type_eq(param1.type, param2.type)) {
             return false;
         }
@@ -147,92 +199,115 @@ func declare_func(
     name: *Char,
     params: *List,
     rest_param: *RestParamDecl,
-    return_type: *Type,
-    is_definition: Bool
+    return_type: *Type
 ): *FuncSym {
-    var is_variadic = rest_param != null;
+    var is_variadic = !!rest_param;
 
-    var sym = try_get_existing(ctx, name);
-    if (sym) {
-        if (sym.kind != Sym_Func) {
-            die_at(pos, "Another symbol with the same name already exists");
-        }
-        var sym = sym as *FuncSym;
-        if (!params_eq(sym.params, params)) {
-            die_at(pos, "Symbol redeclared with different parameters");
-        }
-        if (!type_eq(sym.return_type, return_type)) {
-            die_at(pos, "Symbol redeclared with different return type");
-        }
-        if (sym.is_variadic != is_variadic) {
-            die_at(pos, "Symbol redeclared with different variadicity");
-        }
-        if (sym_is_defined(sym) && is_definition) {
-            die_at(pos, "Symbol is already defined");
-        }
-    } else {
-        sym = calloc(1, sizeof(FuncSym)) as *FuncSym;
-        *(sym as *FuncSym) = FuncSym {
-            kind: Sym_Func,
-            name,
-            params: params,
-            return_type: return_type,
-            is_variadic: is_variadic,
-            rest_param_name: rest_param ? rest_param.name : null,
-            is_defined: is_definition,
-            locals: list_new(),
-            temps: list_new(),
-            body: null
-        };
-        add_sym(ctx, sym);
-    }
-    return sym as *FuncSym;
-}
-
-func define_const(ctx: *ElabCtx, pos: *Pos, name: *Char, value: *ConstValue) {
     var existing = try_get_existing(ctx, name);
     if (existing) {
-        die_at(pos, "Symbol is already defined");
-    }
-
-    var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
-    *sym = ConstSym { kind: Sym_Const, name, value };
-    add_sym(ctx, sym);
-}
-
-func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type, is_definition: Bool): *GlobalSym {
-    var sym = try_get_existing(ctx, name);
-    if (sym) {
-        if (sym.kind != Sym_Global) {
+        if (existing.kind != Sym_Func) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        if (!type_eq((sym as *GlobalSym).type, type)) {
+        var existing = existing as *FuncSym;
+        if (!params_eq(existing.params, params)) {
+            die_at(pos, "Symbol redeclared with different parameters");
+        }
+        if (is_variadic != existing.is_variadic) {
+            die_at(pos, "Symbol redeclared with different variadicity");
+        }
+        if (
+            is_variadic
+            && !(
+                !rest_param.name && !existing.rest_param_name
+                || rest_param.name && existing.rest_param_name && str_eq(rest_param.name, existing.rest_param_name)
+            )
+        ) {
+            die_at(pos, "Symbol redeclared with different rest parameter");
+        }
+        if (!type_eq(existing.return_type, return_type)) {
+            die_at(pos, "Symbol redeclared with different return type");
+        }
+        return existing;
+    }
+
+    var sym: *FuncSym = calloc(1, sizeof(FuncSym));
+    *sym = FuncSym {
+        kind: Sym_Func,
+        name,
+        is_defined: false,
+        params,
+        return_type,
+        is_variadic,
+        rest_param_name: rest_param ? rest_param.name : null,
+        locals: list_new(),
+        temps: list_new(),
+        body: null
+    };
+    add_sym(ctx, sym);
+    return sym;
+}
+
+func define_func(ctx: *ElabCtx, pos: *Pos, sym: *FuncSym, body: *Stmt) {
+    if (sym.is_defined) {
+        die_at(pos, "Symbol is already defined");
+    }
+    sym.is_defined = true;
+    sym.body = body;
+}
+
+func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *GlobalSym {
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        if (existing.kind != Sym_Global) {
+            die_at(pos, "Another symbol with the same name already exists");
+        }
+        var existing = existing as *GlobalSym;
+        if (!type_eq(existing.type, type)) {
             die_at(pos, "Symbol redeclared with different type");
         }
-        if (sym_is_defined(sym) && is_definition) {
-            die_at(pos, "Symbol is already defined");
-        }
-    } else {
-        sym = calloc(1, sizeof(GlobalSym)) as *GlobalSym;
-        *(sym as *GlobalSym) = GlobalSym { kind: Sym_Global, name, type, is_defined: false };
-        add_sym(ctx, sym);
+        return existing;
     }
-    return sym as *GlobalSym;
+
+    var sym = calloc(1, sizeof(GlobalSym)) as *GlobalSym;
+    *sym = GlobalSym {
+        kind: Sym_Global,
+        name,
+        type,
+        is_defined: false,
+    };
+    add_sym(ctx, sym);
+    return sym;
+}
+
+func define_global(ctx: *ElabCtx, pos: *Pos, sym: *GlobalSym) {
+    if (sym.is_defined) {
+        die_at(pos, "Symbol is already defined");
+    }
+    sym.is_defined = true;
 }
 
 func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym {
     var existing = try_get_existing(ctx, name);
-    var is_conflicting_redefinition = existing && existing.kind != Sym_Local;
-    if (is_conflicting_redefinition) {
-        die_at(pos, "Symbol is already defined");
+    if (existing) {
+        if (existing.kind != Sym_Local) {
+            die_at(pos, "Another symbol with the same name already exists");
+        } else {
+            // Shadowing an existing local variable is allowed
+        }
     }
 
     var slot_id = list_len(ctx.current_func.locals);
 
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
-    *sym = LocalSym { kind: Sym_Local, name, type, slot_id, is_indirect: false };
+    *sym = LocalSym {
+        kind: Sym_Local,
+        name,
+        is_defined: true,
+        type,
+        slot_id,
+        is_indirect: false,
+    };
     add_sym(ctx, sym);
-
     list_push(ctx.current_func.locals, sym);
 
     return sym;
@@ -271,10 +346,10 @@ func try_coerce_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
 }
 
 /*
-    Desugar
-        x: MyUnion = 123
-    to
-        x: MyUnion = MyUnion { field: 123 }
+Desugar
+x: MyUnion = 123
+to
+x: MyUnion = MyUnion { field: 123 }
 */
 func try_coerce_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
     if (target.kind != Type_Record) {
@@ -321,8 +396,8 @@ func try_coerce_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
 
 func try_coerce(e: *Expr, target: *Type, out: **Expr): Bool {
     return type_eq(e.type, target)
-        || try_coerce_with_cast(e, target, out)
-        || try_coerce_to_union(e, target, out);
+    || try_coerce_with_cast(e, target, out)
+    || try_coerce_to_union(e, target, out);
 }
 
 func try_coerce_to_int(e: *Expr, out: **Expr): Bool {
@@ -551,8 +626,6 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
     expr.type = mk_array_type(elem_type, elem_count);
 }
 
-
-
 func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     var callee = expr.callee;
     var args = expr.args;
@@ -635,8 +708,8 @@ func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
     }
 
     var elem_type = indexee_type.kind == Type_Arr
-        ? (indexee_type as *ArrType).elem
-        : (indexee_type as *PtrType).pointee;
+    ? (indexee_type as *ArrType).elem
+    : (indexee_type as *PtrType).pointee;
 
     check_type_int(&index);
     expr.type = elem_type;
@@ -1052,30 +1125,45 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
 //==============================================================================
 //== Top-level declarations
 
-func elab_enum_member(ctx: *ElabCtx, member_decl: *EnumMember, type: *Type, next_value: Int32): Int32 {
-    var name = member_decl.name;
+func seed_enum_member(ctx: *ElabCtx, decl: *EnumMember) {
+    decl.sym = declare_const(ctx, &decl.pos, decl.name);
+}
+
+func elab_enum_member(ctx: *ElabCtx, decl: *EnumMember, type: *Type, next_value: Int32): Int32 {
     var value = next_value;
-    if (member_decl.value) {
-        value = const_eval_int32(ctx, member_decl.value);
+    if (decl.value) {
+        value = const_eval_int32(ctx, decl.value);
     }
 
     var const_value = mk_int_const_value(value, type);
-    define_const(ctx, &member_decl.pos, name, const_value);
+    define_const(ctx, &decl.pos, decl.sym, const_value);
     return value;
 }
 
+func seed_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
+    if (decl.name) {
+        decl.sym = declare_enum(ctx, &decl.pos, decl.name);
+    }
+    var member_decls = decl.members;
+    for (var i = 0; i < list_len(member_decls); i += 1) {
+        seed_enum_member(ctx, list_get(member_decls, i));
+    }
+}
+
 func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
+    if (decl.name) {
+        define_enum(ctx, &decl.pos, decl.sym, size: 4);
+    }
+
     var type: *Type;
     if (decl.name) {
-        var sym = define_enum(ctx, &decl.pos, decl.name);
-        type = mk_enum_type(sym);
+        type = mk_enum_type(decl.sym);
     } else {
         type = mk_int_type(4);
     }
 
-    var member_decls = decl.members;
-
     var next_value: Int32 = 0;
+    var member_decls = decl.members;
     for (var i = 0; i < list_len(member_decls); i += 1) {
         var member_decl: *EnumMember = list_get(member_decls, i);
         var value = elab_enum_member(ctx, member_decl, type, next_value);
@@ -1100,8 +1188,8 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
     var field_size = type_size(field_type);
     var field_align = type_align(field_type);
     var field_offset = sym.is_union
-        ? 0
-        : align_up(sym.unpadded_size, field_align);
+    ? 0
+    : align_up(sym.unpadded_size, field_align);
 
     var field: *RecordField = calloc(1, sizeof(RecordField));
     *field = RecordField {
@@ -1150,15 +1238,15 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
         die_at(&base.pos, "Expected a record type");
     }
     var baseSym = (base_type as *RecordType).sym;
-    var base_fields = baseSym.fields;
-    if (baseSym.is_union != record_sym.is_union && list_len(base_fields) != 1) {
-        die_at(&base.pos, "Base type must be the same kind of record or have exactly one field");
+    if (!baseSym.is_defined) {
+        die_at(&base.pos, "Base has incomplete type");
     }
     if (baseSym == record_sym) {
         die_at(&base.pos, "Record cannot inherit from itself");
     }
-    if (!baseSym.is_defined) {
-        die_at(&base.pos, "Base has incomplete type");
+    var base_fields = baseSym.fields;
+    if (baseSym.is_union != record_sym.is_union && list_len(base_fields) != 1) {
+        die_at(&base.pos, "Base type must be the same kind of record or have exactly one field");
     }
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
@@ -1172,45 +1260,40 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
         kind: Sym_Record,
         is_union: record_sym.is_union,
         name: record_sym.name,
+        is_defined: record_sym.is_defined,
         base: baseSym,
         fields: fields,
         unpadded_size: baseSym.unpadded_size,
         align: baseSym.align,
-        is_defined: false,
     };
 }
 
+func seed_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
+    decl.sym = declare_record(ctx, &decl.pos, decl.is_union, decl.name);
+}
+
 func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
-    var name = decl.name;
+    var sym = decl.sym;
     var base = decl.base;
-    var field_decls = decl.fields;
-
-    var is_definition = field_decls != null;
-
-    var sym = declare_record(ctx, &decl.pos, decl.is_union, name, is_definition);
 
     if (base) {
         elab_record_base(ctx, base, sym);
     }
 
-    if (field_decls) {
+    if (decl.fields) {
         if (!sym.fields) {
             sym.fields = list_new();
         }
-        var fields = sym.fields;
-
-        for (var i = 0; i < list_len(field_decls); i += 1) {
-            var field_decl: *RecordFieldDecl = list_get(field_decls, i);
-            elab_record_field_decl(ctx, field_decl, sym);
+        for (var i = 0; i < list_len(decl.fields); i += 1) {
+            elab_record_field_decl(ctx, list_get(decl.fields, i), sym);
         }
-
-        if (list_len(fields) == 0) {
+        if (list_len(sym.fields) == 0) {
             die_at(&decl.pos, "Empty record");
         }
     }
 
-    if (sym.fields) {
-        sym.is_defined = true;
+    if (base || decl.fields) {
+        define_record(ctx, &decl.pos, sym);
     }
 }
 
@@ -1224,15 +1307,19 @@ func string_list_contains(list: *List, value: *Char): Bool {
     return false;
 }
 
-func ensure_unique_params(ctx: *ElabCtx, params_decls: *List) {
+func ensure_unique_params(ctx: *ElabCtx, decl: *FuncDecl) {
     var seen = list_new();
-    for (var i = 0; i < list_len(params_decls); i += 1) {
-        var param_decl: *FuncParamDecl = list_get(params_decls, i);
-        var name = param_decl.name;
-        if (string_list_contains(seen, name)) {
+    for (var i = 0; i < list_len(decl.params); i += 1) {
+        var param_decl: *FuncParamDecl = list_get(decl.params, i);
+        if (string_list_contains(seen, param_decl.name)) {
             die_at(&param_decl.pos, "Duplicate parameter name");
         }
-        list_push(seen, name);
+        list_push(seen, param_decl.name);
+    }
+    if (decl.rest_param && decl.rest_param.name) {
+        if (string_list_contains(seen, decl.rest_param.name)) {
+            die_at(&decl.rest_param.pos, "Duplicate parameter name");
+        }
     }
 }
 
@@ -1301,20 +1388,16 @@ func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
     }
 }
 
-func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
-    var name = decl.name;
-
-    var param_decls = decl.params;
-
-    var n_params = list_len(param_decls);
+func seed_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
+    var n_params = list_len(decl.params);
     var params = list_new();
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl = list_get(param_decls, i);
+        var param_decl = list_get(decl.params, i);
         var param = elab_param(ctx, param_decl);
         list_push(params, param);
     }
 
-    check_default_params_order(param_decls, decl.rest_param);
+    check_default_params_order(decl.params, decl.rest_param);
 
     var return_type = decl.return_type
         ? eval_type(ctx, decl.return_type)
@@ -1324,39 +1407,45 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
         die_at(&decl.pos, "Function return type must have known size");
     }
 
-    var is_definition = decl.body != null;
-    var is_variadic = decl.rest_param != null;
+    decl.sym = declare_func(ctx, &decl.pos, decl.name, params, decl.rest_param, return_type);
 
-    var sym = declare_func(ctx, &decl.pos, name, params, decl.rest_param, return_type, is_definition);
-
-    if (str_eq(name, "main")) {
-       verify_main_signature(decl, sym);
+    if (str_eq(decl.name, "main")) {
+        verify_main_signature(decl, decl.sym);
     }
 
-    if (decl.body) {
-        enter_scope(ctx);
-        ctx.current_func = sym;
+    ensure_unique_params(ctx, decl);
+}
 
-        define_params(ctx, param_decls, params);
-
-        if (decl.rest_param) {
-            define_local(ctx, &decl.rest_param.pos, decl.rest_param.name, mk_rest_param_type());
-        }
-
-        elab_stmt(ctx, decl.body);
-
-        ctx.current_func = null;
-        exit_scope(ctx);
-
-        sym.body = decl.body;
-        sym.is_defined = true;
-    } else {
-        ensure_unique_params(ctx, param_decls);
+func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
+    if (!decl.body) {
+        return;
     }
+
+    var sym = decl.sym;
+
+    enter_scope(ctx);
+    ctx.current_func = sym;
+
+    define_params(ctx, decl.params, sym.params);
+
+    if (decl.rest_param) {
+        define_local(ctx, &decl.rest_param.pos, decl.rest_param.name, mk_rest_param_type());
+    }
+
+    elab_stmt(ctx, decl.body);
+
+    ctx.current_func = null;
+    exit_scope(ctx);
+
+    define_func(ctx, &decl.pos, sym, decl.body);
+}
+
+func seed_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
+    decl.sym = declare_const(ctx, &decl.pos, decl.name);
 }
 
 func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
-    var name = decl.name;
+    var sym = decl.sym;
     var value_expr = decl.value;
     var type: *Type = null;
     if (decl.type) {
@@ -1371,27 +1460,51 @@ func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
     } else {
         value = const_eval_infer(ctx, value_expr, type_hint: null);
     }
-    define_const(ctx, &decl.pos, name, value);
+    define_const(ctx, &decl.pos, sym, value);
+}
+
+func seed_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
+    var type = eval_type(ctx, decl.type);
+    if (!is_sized(type)) {
+        die_at(&decl.pos, "Global variable must have known size");
+    }
+
+    decl.sym = declare_global(ctx, &decl.pos, decl.name, type);
 }
 
 func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
-    var is_extern = decl.is_extern;
-    var name = decl.name;
-    var type = eval_type(ctx, decl.type);
+    var sym = decl.sym;
 
-    var sym = declare_global(ctx, &decl.pos, name, type, !is_extern);
-    sym.is_defined = !is_extern;
+    if (!decl.is_extern) {
+        define_global(ctx, &decl.pos, sym);
+    }
+}
+
+func seed_decl(ctx: *ElabCtx, decl: *Decl) {
+    if (decl.kind == Decl_Record) {
+        seed_record_decl(ctx, decl as *RecordDecl);
+    } else if (decl.kind == Decl_Enum) {
+        seed_enum_decl(ctx, decl as *EnumDecl);
+    } else if (decl.kind == Decl_Const) {
+        seed_const_decl(ctx, decl as *ConstDecl);
+    } else if (decl.kind == Decl_Func) {
+        seed_func_decl(ctx, decl as *FuncDecl);
+    } else if (decl.kind == Decl_Global) {
+        seed_global_decl(ctx, decl as *GlobalDecl);
+    } else {
+        unreachable("seed_decl");
+    }
 }
 
 func elab_decl(ctx: *ElabCtx, decl: *Decl) {
     if (decl.kind == Decl_Record) {
         elab_record_decl(ctx, decl as *RecordDecl);
-    } else if (decl.kind == Decl_Func) {
-        elab_func_decl(ctx, decl as *FuncDecl);
     } else if (decl.kind == Decl_Enum) {
         elab_enum_decl(ctx, decl as *EnumDecl);
     } else if (decl.kind == Decl_Const) {
         elab_const_decl(ctx, decl as *ConstDecl);
+    } else if (decl.kind == Decl_Func) {
+        elab_func_decl(ctx, decl as *FuncDecl);
     } else if (decl.kind == Decl_Global) {
         elab_global_decl(ctx, decl as *GlobalDecl);
     } else {
@@ -1408,9 +1521,25 @@ func elab(ast: *Ast): *List { // *List<*Sym>
         loop_depth: 0,
     };
 
-    for (var i = 0; i < list_len(ast.decls); i += 1) {
-        var decl = list_get(ast.decls, i);
-        elab_decl(ctx, decl);
+    for (var pass = 0; pass < 4; pass += 1) {
+        for (var i = 0; i < list_len(ast.decls); i += 1) {
+            var decl: *Decl = list_get(ast.decls, i);
+            if (decl.kind == Decl_Record || decl.kind == Decl_Enum || decl.kind == Decl_Const) {
+                if (pass == 0) {
+                    seed_decl(ctx, decl);
+                } else if (pass == 1) {
+                    elab_decl(ctx, decl);
+                }
+            } else if (decl.kind == Decl_Func || decl.kind == Decl_Global) {
+                if (pass == 2) {
+                    seed_decl(ctx, decl);
+                } else if (pass == 3) {
+                    elab_decl(ctx, decl);
+                }
+            } else {
+                unreachable("elab");
+            }
+        }
     }
 
     return ctx.syms;
