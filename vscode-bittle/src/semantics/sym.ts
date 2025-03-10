@@ -34,6 +34,7 @@ type SymBase = {
     name: string;
     qualifiedName: string;
     origins: Origin[];
+    isDefined: boolean;
 };
 
 export type EnumSym = SymBase & {
@@ -46,7 +47,6 @@ export type RecordSym = SymBase & {
     recordKind: RecordKind;
     base: RecordSym | undefined;
     fields: RecordFieldSym[];
-    isDefined: boolean;
 };
 
 export type RecordFieldSym = SymBase & {
@@ -60,7 +60,7 @@ export type FuncSym = SymBase & {
     params: FuncParamSym[];
     returnType: Type;
     isVariadic: boolean;
-    isDefined: boolean;
+    restParamName: string | undefined;
 };
 
 export type FuncParamSym = SymBase & {
@@ -71,7 +71,6 @@ export type FuncParamSym = SymBase & {
 
 export type GlobalSym = SymBase & {
     kind: SymKind.Global;
-    isDefined: boolean;
     type: Type;
 };
 
@@ -91,14 +90,6 @@ export type Origin = {
     nameNode?: SyntaxNode;
     isForwardDecl: boolean;
 };
-
-export function isDefined(sym: Sym): boolean {
-    if (sym.kind === SymKind.Record || sym.kind === SymKind.Func || sym.kind === SymKind.Global) {
-        return sym.isDefined;
-    } else {
-        return true;
-    }
-}
 
 export function symRelatedType(sym: Sym): Type {
     if (sym.kind === SymKind.Record) {

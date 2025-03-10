@@ -1,4 +1,4 @@
-import assert from 'assert';
+import assert, { AssertionError } from 'assert';
 import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
@@ -9,7 +9,7 @@ import { stream } from '../utils/stream';
 import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
 import { ConstEvaluator } from './constEvaluator';
 import { Scope } from './scope';
-import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, isDefined, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
+import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
 import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypesWithCoercion, Type, typeConvertible, typeEq, TypeKind, typeLayout } from './type';
 
 export type ErrorLocation = {
@@ -44,10 +44,13 @@ export type ElaboratorResult = {
     diagnostics: ElaborationDiag[];
 };
 
+type IncludedDecl = {
+    path: string;
+    node: DeclNode;
+};
+
 export class Elaborator {
     private rootNode: RootNode;
-
-    private includes: Set<string> = new Set();
 
     private scope: Scope;
 
@@ -99,22 +102,18 @@ export class Elaborator {
     //==============================================================================
     //== Scopes and Symbols
 
-    private enterScope(node: AstNode) {
-        this.scope = new Scope(this.path, node.syntax, this.scope);
+    private enterScope(node: AstNode, scope?: Scope) {
+        if (scope) {
+            assert(this.scope === scope.parent);
+            this.scope = scope;
+        } else {
+            this.scope = new Scope(this.path, node.syntax, this.scope);
+        }
     }
 
     private exitScope() {
-        if (!this.scope.parent)
-            throw new Error(`Unreachable: exitScope`);
+        assert(this.scope.parent, `Cannot exit root scope.`);
         this.scope = this.scope.parent;
-    }
-
-    private inOuterScope<T>(fn: () => T): T {
-        const innerScope = this.scope;
-        this.scope = this.scope.parent!;
-        const result = fn();
-        this.scope = innerScope;
-        return result;
     }
 
     private lookupSymbol(name: string) {
@@ -190,9 +189,9 @@ export class Elaborator {
                 name: '',
                 qualifiedName: '',
                 origins: [],
+                isDefined: false,
                 base: undefined,
                 fields: [],
-                isDefined: false,
             };
         }
 
@@ -200,8 +199,6 @@ export class Elaborator {
         if (existing) {
             if (existing.kind !== SymKind.Record) {
                 this.reportError(nameNode, `Another symbol with the same name already exists.`);
-            } else if (isDefined(existing) && isDefinition) {
-                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             } else {
                 this.recordNameIntroduction(existing, nameNode);
                 existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
@@ -214,14 +211,23 @@ export class Elaborator {
             name: nameNode.text,
             qualifiedName: 'record:' + nameNode.text,
             origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
+            isDefined: false,
             base: undefined,
             fields: [],
-            isDefined: false,
         };
-        if (!existing) {
-            this.addSym(sym, nameNode);
-        }
+        this.addSym(sym, nameNode);
         return sym;
+    }
+
+    private defineRecordSym(sym: RecordSym, nameNode: TokenNode | Nullish) {
+        if (!nameNode) {
+            return;
+        }
+        if (sym.isDefined) {
+            this.reportError(nameNode, `Redefinition of '${sym.name}'.`);
+            return;
+        }
+        sym.isDefined = true;
     }
 
     private defineRecordFieldSym(declNode: FieldNode, nameNode: TokenNode | Nullish, type: Type, recordSym: RecordSym, defaultValue: ConstValue | undefined): RecordFieldSym {
@@ -231,6 +237,7 @@ export class Elaborator {
                 name: '',
                 qualifiedName: '',
                 origins: [],
+                isDefined: true,
                 type,
                 defaultValue,
             };
@@ -249,6 +256,7 @@ export class Elaborator {
             name: nameNode.text,
             qualifiedName: `${recordSym.name}.${nameNode.text}`,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
+            isDefined: true,
             type,
             defaultValue,
         };
@@ -258,13 +266,26 @@ export class Elaborator {
         return sym;
     }
 
-    private defineEnumSym(declNode: EnumDeclNode, nameNode: TokenNode): EnumSym {
+    private declareEnumSym(declNode: EnumDeclNode, nameNode: TokenNode | Nullish): EnumSym {
+        if (!nameNode) {
+            return {
+                kind: SymKind.Enum,
+                name: '',
+                qualifiedName: '',
+                origins: [],
+                isDefined: false,
+                size: 32,
+            };
+        }
+
         const existing = this.lookupExistingSymbol(nameNode.text);
         if (existing) {
             if (existing.kind !== SymKind.Enum) {
                 this.reportError(nameNode, `Another symbol with the same name already exists.`);
             } else {
-                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
+                this.recordNameIntroduction(existing, nameNode);
+                existing.origins.push(this.createOrigin(declNode.syntax, nameNode));
+                return existing;
             }
         }
         const sym: EnumSym = {
@@ -272,25 +293,40 @@ export class Elaborator {
             name: nameNode.text,
             qualifiedName: 'enum:' + nameNode.text,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
+            isDefined: false,
             size: 32,
         };
-        if (!existing) {
-            this.addSym(sym, nameNode);
-        }
+        this.addSym(sym, nameNode);
         return sym;
     }
 
-    private declareFuncSym(declNode: FuncDeclNode, nameNode: TokenNode | Nullish, params: FuncParamSym[], returnType: Type, isVariadic: boolean, isDefinition: boolean): FuncSym {
+    private defineEnumSym(sym: EnumSym, nameNode: TokenNode | Nullish) {
+        if (!nameNode) {
+            return;
+        }
+        if (sym.isDefined) {
+            this.reportError(nameNode, `Redefinition of '${sym.name}'.`);
+            return;
+        }
+        sym.isDefined = true;
+        return;
+    }
+
+    private declareFuncSym(declNode: FuncDeclNode, nameNode: TokenNode | Nullish, params: FuncParamSym[], returnType: Type, restParamNode: RestFuncParamNode | undefined): FuncSym {
+        const isVariadic = !!restParamNode;
+        const restParamName = restParamNode?.name?.text;
+
         if (!nameNode) {
             return {
                 kind: SymKind.Func,
                 name: '',
                 qualifiedName: '',
                 origins: [],
+                isDefined: false,
                 params,
                 returnType,
                 isVariadic,
-                isDefined: false,
+                restParamName,
             };
         }
 
@@ -298,13 +334,11 @@ export class Elaborator {
         if (existing) {
             if (existing.kind !== SymKind.Func) {
                 this.reportError(nameNode, `Another symbol with the same name already exists.`);
-            } else if (!paramsLooseEq(existing.params, params) || !typeLooseEq(existing.returnType, returnType) || existing.isVariadic !== isVariadic) {
+            } else if (!paramsLooseEq(existing.params, params) || !typeLooseEq(existing.returnType, returnType) || existing.isVariadic !== isVariadic || existing.restParamName !== restParamName) {
                 this.reportError(nameNode, `Redefinition of '${existing.name}' with different signature.`);
-            } else if (isDefined(existing) && isDefinition) {
-                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             } else {
                 this.recordNameIntroduction(existing, nameNode);
-                existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
+                existing.origins.push(this.createOrigin(declNode.syntax, nameNode));
                 return existing;
             }
         }
@@ -312,16 +346,26 @@ export class Elaborator {
             kind: SymKind.Func,
             name: nameNode.text,
             qualifiedName: 'func:' + nameNode.text,
-            origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
+            origins: [this.createOrigin(declNode.syntax, nameNode)],
+            isDefined: false,
             params,
             returnType,
             isVariadic,
-            isDefined: false,
+            restParamName,
         };
-        if (!existing) {
-            this.addSym(sym, nameNode);
-        }
+        this.addSym(sym, nameNode);
         return sym;
+    }
+
+    private defineFuncSym(sym: FuncSym, nameNode: TokenNode | Nullish) {
+        if (!nameNode) {
+            return;
+        }
+        if (sym.isDefined) {
+            this.reportError(nameNode, `Redefinition of '${sym.name}'.`);
+            return;
+        }
+        sym.isDefined = true;
     }
 
     private defineFuncParamSym(declNode: FuncParamNode, nameNode: TokenNode | Nullish, funcName: string, paramIndex: number, type: Type, defaultValue: ConstValue | undefined): FuncParamSym {
@@ -331,6 +375,7 @@ export class Elaborator {
                 name: '',
                 qualifiedName: '',
                 origins: [],
+                isDefined: true,
                 type,
                 defaultValue,
             };
@@ -350,6 +395,7 @@ export class Elaborator {
             name: nameNode.text,
             qualifiedName: `func:${funcName}.param:${paramIndex}`,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
+            isDefined: true,
             type,
             defaultValue,
         };
@@ -378,8 +424,6 @@ export class Elaborator {
                 this.reportError(nameNode, `Another symbol with the same name already exists.`);
             } else if (!typeLooseEq(existing.type, type)) {
                 this.reportError(nameNode, `Redefinition of '${existing.name}' with different type.`);
-            } else if (isDefined(existing) && isDefinition) {
-                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
             } else {
                 this.recordNameIntroduction(existing, nameNode);
                 existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
@@ -394,46 +438,55 @@ export class Elaborator {
             isDefined: false,
             type,
         };
-
-        if (!existing) {
-            this.addSym(sym, nameNode);
-        }
+        this.addSym(sym, nameNode);
         return sym;
     }
 
-    private defineConstSym(declNode: ConstDeclNode | EnumMemberNode, nameNode: TokenNode | Nullish, type: Type, value: ConstValue | undefined): ConstSym {
-        assert(type.kind == TypeKind.Err || isScalarType(type), `Type must be a scalar type.`);
+    private defineGlobalSym(sym: GlobalSym, nameNode: TokenNode | Nullish) {
+        if (!nameNode) {
+            return;
+        }
+        if (sym.isDefined) {
+            this.reportError(nameNode, `Redefinition of '${sym.name}'.`);
+            return;
+        }
+        sym.isDefined = true;
+    }
 
+    private declareConstSym(nameNode: TokenNode | Nullish): ConstSym {
         if (!nameNode) {
             return {
                 kind: SymKind.Const,
                 name: '',
                 qualifiedName: '',
                 origins: [],
+                isDefined: false,
                 value: undefined,
             };
         }
 
-        const existing = this.lookupExistingSymbol(nameNode.text);
-        if (existing) {
-            if (existing.kind !== SymKind.Const) {
-                this.reportError(nameNode, `Another symbol with the same name already exists.`);
-            } else {
-                this.reportError(nameNode, `Redefinition of '${existing.name}'.`);
-            }
-        }
         const sym: ConstSym = {
             kind: SymKind.Const,
             name: nameNode.text,
             qualifiedName: 'const:' + nameNode.text,
-            origins: [this.createOrigin(declNode.syntax, nameNode)],
-            value,
+            origins: [this.createOrigin(nameNode, nameNode)],
+            isDefined: false,
+            value: undefined,
         };
-
-        if (!existing) {
-            this.addSym(sym, nameNode);
-        }
+        this.addSym(sym, nameNode);
         return sym;
+    }
+
+    private defineConstSym(sym: ConstSym, nameNode: TokenNode | Nullish, value: ConstValue | undefined) {
+        if (!nameNode) {
+            return;
+        }
+        if (sym.isDefined) {
+            this.reportError(nameNode, `Redefinition of '${sym.name}'.`);
+            return;
+        }
+        sym.isDefined = true;
+        sym.value = value;
     }
 
     private defineLocalSym(declNode: LocalDeclNode | FuncParamNode, nameNode: TokenNode | Nullish, type: Type): LocalSym {
@@ -443,6 +496,7 @@ export class Elaborator {
                 name: '',
                 qualifiedName: '',
                 origins: [],
+                isDefined: true,
                 type,
             };
         }
@@ -458,6 +512,7 @@ export class Elaborator {
             name: nameNode.text,
             qualifiedName: `${this.currentFunc!.name}.local:${this.nextLocalIndex++}`,
             origins: [this.createOrigin(declNode.syntax, nameNode)],
+            isDefined: true,
             type,
         };
 
@@ -589,50 +644,77 @@ export class Elaborator {
     //== Top-level
 
     private elabRoot(rootNode: RootNode) {
-        for (const node of rootNode.declNodes) {
-            this.elabTopLevelDecl(node);
-        }
+        const declNodes = this.expandIncludes(rootNode.declNodes, new Set());
+
+        const typesAndConsts = declNodes.filter(({ node }) =>
+            node instanceof RecordDeclNode
+            || node instanceof EnumDeclNode
+            || node instanceof ConstDeclNode,
+        );
+
+        const funcsAndGlobals = declNodes.filter(({ node }) =>
+            node instanceof FuncDeclNode
+            || node instanceof GlobalDeclNode,
+        );
+
+        this.elabDecls(typesAndConsts);
+        this.elabDecls(funcsAndGlobals);
     }
 
-    private elabTopLevelDecl(node: DeclNode) {
+    private elabDecls(includedDecls: IncludedDecl[]) {
+        const completionCallbacks = includedDecls.map(({ path, node }) => {
+            const complete = this.withPath(path, () => this.elabDecl(node));
+            return () => this.withPath(path, complete);
+        });
+
+        completionCallbacks.forEach((complete) => complete());
+    }
+
+    private expandIncludes(declNodes: DeclNode[], seenPaths: Set<string>): IncludedDecl[] {
+        return declNodes.flatMap(node => {
+            if (node instanceof IncludeDeclNode) {
+                return this.processInclude(node, seenPaths);
+            }
+            return [{ path: this.path, node }];
+        });
+    }
+
+    private processInclude(node: IncludeDeclNode, seenPaths: Set<string>): IncludedDecl[] {
+        if (!node.path) {
+            return [];
+        }
+
+        const resolvedPath = this.includeResolver.resolveInclude(this.path, node.path);
+        if (!resolvedPath) {
+            this.reportError(node, `Cannot resolve include.`);
+            return [];
+        }
+
+        if (seenPaths.has(resolvedPath)) {
+            return [];
+        }
+        seenPaths.add(resolvedPath);
+
+        const tree = this.parsingService.parseAsAst(resolvedPath);
+        return this.expandIncludes(tree.declNodes, seenPaths);
+    }
+
+    private elabDecl(node: DeclNode): () => void {
         if (node instanceof IncludeDeclNode) {
-            this.elabInclude(node);
+            throw new AssertionError({ message: `IncludeDeclNode should have been processed in expandIncludes.` });
         } else if (node instanceof RecordDeclNode) {
-            this.elabRecord(node);
+            return this.elabRecord(node);
         } else if (node instanceof FuncDeclNode) {
-            this.elabFunc(node);
+            return this.elabFunc(node);
         } else if (node instanceof GlobalDeclNode) {
-            this.elabGlobal(node);
+            return this.elabGlobal(node);
         } else if (node instanceof ConstDeclNode) {
-            this.elabConst(node);
+            return this.elabConst(node);
         } else if (node instanceof EnumDeclNode) {
-            this.elabEnum(node);
+            return this.elabEnum(node);
         } else {
             unreachable(node);
         }
-    }
-
-    private elabInclude(node: IncludeDeclNode) {
-        if (!node.path)
-            return;
-
-        const path = this.includeResolver.resolveInclude(this.path, node.path);
-        if (!path) {
-            this.reportError(node, `Cannot resolve include.`);
-            return;
-        }
-
-        if (this.includes.has(path)) {
-            return;
-        }
-        this.includes.add(path);
-
-        const tree = this.parsingService.parseAsAst(path);
-
-        const oldPath = this.path;
-        this.path = path;
-        this.elabRoot(tree);
-        this.path = oldPath;
     }
 
     private elabRecord(node: RecordDeclNode) {
@@ -640,28 +722,33 @@ export class Elaborator {
         const baseTypeNode = node.base;
         const bodyNode = node.body;
 
-        const sym = this.declareRecordSym(node, nameNode, !!bodyNode);
-        this.enterScope(node);
+        const isDefinition = !!(bodyNode || baseTypeNode);
 
-        if (baseTypeNode) {
-            this.elabRecordBase(baseTypeNode, sym);
-        }
+        const sym = this.declareRecordSym(node, nameNode, isDefinition);
 
-        if (bodyNode) {
-            for (const fieldNode of bodyNode.fieldNodes) {
-                this.elabRecordField(fieldNode, sym);
+        return () => {
+            this.enterScope(node);
+
+            if (baseTypeNode) {
+                this.elabRecordBase(baseTypeNode, sym);
             }
 
-            if (sym.fields.length === 0) {
-                this.reportError(bodyNode, `Record must have at least one field.`);
+            if (bodyNode) {
+                for (const fieldNode of bodyNode.fieldNodes) {
+                    this.elabRecordField(fieldNode, sym);
+                }
+
+                if (sym.fields.length === 0) {
+                    this.reportError(bodyNode, `Record must have at least one field.`);
+                }
             }
-        }
 
-        if (bodyNode) {
-            sym.isDefined = true;
-        }
+            this.exitScope();
 
-        this.exitScope();
+            if (isDefinition) {
+                this.defineRecordSym(sym, nameNode);
+            }
+        };
     }
 
     private elabRecordBase(
@@ -676,16 +763,16 @@ export class Elaborator {
             this.reportError(baseTypeNode, `Base type must be a record.`);
             return;
         }
+        if (this.isUnsizedType(baseType)) {
+            this.reportError(baseTypeNode, `Base type has incomplete type.`);
+            return;
+        }
         if (baseType.sym.recordKind !== recordSym.recordKind && baseType.sym.fields.length !== 1) {
             this.reportError(baseTypeNode, `Base type must be the same kind of record or have exactly one field.`);
             return;
         }
         if (baseType.sym.qualifiedName === recordSym.qualifiedName) {
             this.reportError(baseTypeNode, `Record cannot inherit from itself.`);
-            return;
-        }
-        if (this.isUnsizedType(baseType)) {
-            this.reportError(baseTypeNode, `Base type has incomplete type.`);
             return;
         }
         const baseSym = this.symbols.get(baseType.sym.qualifiedName);
@@ -763,28 +850,39 @@ export class Elaborator {
     }
 
     private elabEnum(node: EnumDeclNode) {
-        let enumSym: EnumSym | undefined = undefined;
+        let sym: EnumSym | undefined = undefined;
         if (node.name) {
-            enumSym = this.defineEnumSym(node, node.name);
+            sym = this.declareEnumSym(node, node.name);
+        }
+        const memberSyms: ConstSym[] = [];
+        for (const memberNode of node.body?.enumMemberNodes ?? []) {
+            memberSyms.push(this.declareConstSym(memberNode.name));
         }
 
-        const type = enumSym ? mkEnumType(enumSym) : mkIntType(32);
-
-        if (node.body) {
-            let nextValue = 0n;
-            for (const memberNode of node.body.enumMemberNodes) {
-                nextValue = this.elabEnumMember(memberNode, type, nextValue);
+        return () => {
+            if (sym) {
+                this.defineEnumSym(sym, node.name);
             }
-        }
+
+            const type = sym ? mkEnumType(sym) : mkIntType(32);
+
+            if (node.body) {
+                let nextValue = 0n;
+                const memberNodes = node.body.enumMemberNodes;
+                for (const [memberNode, memberSym] of stream(memberNodes).zip(memberSyms)) {
+                    nextValue = this.elabEnumMember(memberNode, memberSym, type, nextValue);
+                }
+            }
+        };
     }
 
-    private elabEnumMember(memberNode: EnumMemberNode, type: Type, nextValue: bigint): bigint {
-        const nameNode = memberNode.name;
-        const valueNode = memberNode.value;
+    private elabEnumMember(node: EnumMemberNode, sym: ConstSym, type: Type, nextValue: bigint): bigint {
+        const nameNode = node.name;
+        const valueNode = node.value;
 
         const value = valueNode ? this.constEvalInt32(valueNode) : nextValue;
         const constValue = value !== undefined ? mkIntConstValue(value, type) : undefined;
-        this.defineConstSym(memberNode, nameNode, type, constValue);
+        this.defineConstSym(sym, nameNode, constValue);
         return (value ?? nextValue) + 1n;
     }
 
@@ -793,9 +891,9 @@ export class Elaborator {
         const paramNodes = node.params?.funcParamNodes ?? [];
         const bodyNode = node.body;
 
-        this.enterScope(node);
-
         const name = nameNode?.text ?? '';
+
+        this.enterScope(node);
 
         const params = stream(paramNodes)
             .filter(paramNode => paramNode instanceof NormalFuncParamNode)
@@ -812,31 +910,35 @@ export class Elaborator {
             this.reportError(node.returnType!, `Function return type must have known size.`);
         }
 
-        const sym = this.inOuterScope(() => {
-            return this.declareFuncSym(node, nameNode, params, returnType, !!restParamNode, !!bodyNode);
-        });
+        const innerScope = this.scope;
+        this.exitScope();
+
+        const sym = this.declareFuncSym(node, nameNode, params, returnType, restParamNode);
 
         if (name === 'main') {
             this.verify_main_signature(node, sym);
         }
 
-        this.currentFunc = sym;
-        this.nextLocalIndex = 0;
+        return () => {
+            this.currentFunc = sym;
+            this.nextLocalIndex = 0;
 
-        if (restParamNode) {
-            this.defineLocalSym(restParamNode, restParamNode.name, mkRestParamType());
-        }
+            this.enterScope(node, innerScope);
 
-        if (bodyNode) {
-            this.elabBlockStmt(bodyNode);
-        }
+            if (restParamNode) {
+                this.defineLocalSym(restParamNode, restParamNode.name, mkRestParamType());
+            }
 
-        this.currentFunc = undefined;
-        this.nextLocalIndex = undefined!;
+            if (bodyNode) {
+                this.elabBlockStmt(bodyNode);
+                this.defineFuncSym(sym, node.name);
+            }
 
-        this.exitScope();
+            this.exitScope();
 
-        sym.isDefined = !!bodyNode;
+            this.currentFunc = undefined;
+            this.nextLocalIndex = undefined!;
+        };
     }
 
     private checkDefaultParamsOrder(paramNodes: FuncParamNode[]) {
@@ -920,47 +1022,52 @@ export class Elaborator {
     }
 
     private elabGlobal(node: GlobalDeclNode) {
-        const externNode = node.externToken;
         const nameNode = node.name;
         const typeNode = node.type;
 
-        const isExtern = !!externNode;
+        const isDefinition = !node.externToken;
 
         const type = this.typeEval(typeNode);
         if (this.isUnsizedType(type)) {
             this.reportError(node, `Variable must have a known size.`);
         }
 
-        const sym = this.declareGlobalSym(node, nameNode, type, !isExtern);
-        sym.isDefined = !isExtern;
+        const sym = this.declareGlobalSym(node, nameNode, type, isDefinition);
+
+        return () => {
+            if (isDefinition) {
+                this.defineGlobalSym(sym, node.name);
+            }
+        };
     }
 
     private elabConst(node: ConstDeclNode) {
         const nameNode = node.name;
         const typeNode = node.type;
         const valueNode = node.value;
+        const sym = this.declareConstSym(nameNode);
 
-        let type: Type | undefined = undefined;
-        if (typeNode) {
-            type = this.typeEval(typeNode);
-            if (type.kind != TypeKind.Err && !isScalarType(type)) {
-                this.reportError(typeNode, `Constant must have a scalar type.`);
-                type = mkErrorType();
+        return () => {
+            let type: Type | undefined = undefined;
+            if (typeNode) {
+                type = this.typeEval(typeNode);
+                if (type.kind != TypeKind.Err && !isScalarType(type)) {
+                    this.reportError(typeNode, `Constant must have a scalar type.`);
+                    type = mkErrorType();
+                }
             }
-        }
 
-        let value: ConstValue | undefined = undefined;
-        if (valueNode) {
-            if (type) {
-                value = this.constEvalExpect(valueNode, type);
-            } else {
-                value = this.constEvalInfer(valueNode, { typeHint: type });
+            let value: ConstValue | undefined = undefined;
+            if (valueNode) {
+                if (type) {
+                    value = this.constEvalExpect(valueNode, type);
+                } else {
+                    value = this.constEvalInfer(valueNode, { typeHint: type });
+                }
             }
-        }
 
-        type ??= value?.type ?? mkErrorType();
-
-        this.defineConstSym(node, nameNode, type, value);
+            this.defineConstSym(sym, nameNode, value);
+        };
     }
 
     //==============================================================================
@@ -1642,6 +1749,14 @@ export class Elaborator {
         const type = f();
         this.setType(node, type);
         return type;
+    }
+
+    private withPath<T>(path: string, callback: () => T): T {
+        const oldPath = this.path;
+        this.path = path;
+        const result = callback();
+        this.path = oldPath;
+        return result;
     }
 
     private reportDiagnostic(range: PointRange, severity: Severity, message: string) {

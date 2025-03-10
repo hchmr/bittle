@@ -1,7 +1,7 @@
 import assert from 'assert';
 import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
-import { FuncParamSym, isDefined, prettySym, RecordFieldSym, RecordKind, Sym, SymKind } from '../semantics/sym';
+import { FuncParamSym, prettySym, RecordFieldSym, RecordKind, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
@@ -245,7 +245,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         return this.semanticsService
             .getSymbolsAtNode(filePath, nameNode)
-            .filter(sym => !isDefined(sym) && !isCurrentDeclaration(sym, nameNode.parent!))
+            .filter(sym => !sym.isDefined && !isCurrentDeclaration(sym, nameNode.parent!))
             .map(toDefinitionCompletionItem)
             .toArray();
 
