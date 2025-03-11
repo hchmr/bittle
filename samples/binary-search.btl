@@ -1,4 +1,9 @@
-//# exit = 8
+//# exit = 0
+//# stdout = binary_search(xs, 11, 0) = -1
+//# stdout = binary_search(xs, 11, 1) = 0
+//# stdout = binary_search(xs, 11, 2) = 5
+//# stdout = binary_search(xs, 11, 3) = 10
+//# stdout = binary_search(xs, 11, 4) = -12
 
 func printf(fmt: *Char, ...);
 

@@ -1,3 +1,5 @@
+//# args = -lwc samples/*
+
 //= Imports
 
 // stdio.h

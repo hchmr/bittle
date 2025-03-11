@@ -1,3 +1,11 @@
+//# args = 42 0xbabe -42 foo #!@#$%^&*()_+
+//# stdout = "42" => Ok(42)
+//# stdout = "0xbabe" => Err("Invalid integer")
+//# stdout = "-42" => Ok(-42)
+//# stdout = "foo" => Err("Invalid integer")
+//# stdout = "#!@#$%^&*()_+" => Err("Invalid integer")
+//# stdout = 2/5 values parsed successfully.
+
 extern func printf(fmt: *Char, ...): Int32;
 
 struct IntResultBase {

@@ -18,6 +18,12 @@ jobs:
     - name: Bootstrap
       run: ./scripts/bootstrap --head
 
+    - name: Add bootstrap bin to PATH
+      run: echo "$(pwd)/compiler/out/bootstrap/bin" >> $GITHUB_PATH
+
+    - name: Test
+      run: ./scripts/test-samples
+
   vscode:
     name: CI for VS Code extension
 

@@ -1,0 +1,131 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Constants
+ROOT_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")
+readonly ROOT_DIR
+readonly SAMPLES_DIR="${ROOT_DIR}/samples"
+readonly RUN_SCRIPT="${ROOT_DIR}/scripts/run"
+
+# Colors
+readonly CYAN='\033[1;36m'
+readonly GREEN='\033[1;32m'
+readonly RED='\033[1;31m'
+readonly BOLD='\033[1m'
+readonly RESET='\033[0m'
+
+# Global failures array
+failures=()
+
+usage() {
+    cat <<EOF
+Usage: $0 [options]
+Tests the Bittle compiler with sample programs.
+
+Options:
+  -h, --help    Show this help message
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Error: Unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+        esac
+        shift
+    done
+}
+
+print_header() {
+    printf "\n${CYAN}==>${RESET} ${BOLD}%s${RESET}\n\n" "$*"
+}
+
+print_failure() {
+    printf "\n${RED}${BOLD}FAIL:${RESET} %s\n" "$*"
+}
+
+print_comparison() {
+    local label="$1" content="$2"
+    printf "${BOLD}%s:${RESET}\n" "$label"
+    sed 's/^/    /' <<<"$content"
+}
+
+test_file() {
+    local file="$1"
+
+    local failed=false
+
+    local expected_exit has_expected_out=false expected_out args
+    expected_exit=$(grep -oP '^//# exit = \K[0-9]+$' "$file" || echo 0)
+    expected_out=$(grep -oP '^//# stdout = \K.*$' "$file") && has_expected_out=true
+    args=$(grep -oP '^//# args = \K.*$' "$file" || echo "")
+
+    print_header "Testing: "$file" "$args""
+
+    local actual_out actual_exit=0
+    actual_out=$("$RUN_SCRIPT" "$file" -- $args) || actual_exit=$?
+
+    if [[ $actual_exit -ne $expected_exit ]]; then
+        print_failure "Exit code mismatch: expected $expected_exit, got $actual_exit"
+        failed=true
+    fi
+
+    if [[ "$has_expected_out" == true && "$actual_out" != "$expected_out" ]]; then
+        print_failure "Output mismatch"
+        print_comparison "Expected" "$expected_out"
+        print_comparison "Got" "$actual_out"
+        failed=true
+    fi
+
+    if [[ "$failed" == true ]]; then
+        failures+=("$file $args")
+    fi
+}
+
+print_summary() {
+    local n_tests=$1
+    local n_failed=${#failures[@]}
+    local passed=$((n_tests - n_failed))
+    local status_color status_text
+    if [[ $n_failed -eq 0 ]]; then
+        status_color="$GREEN"
+        status_text="PASSED"
+    else
+        status_color="$RED"
+        status_text="FAILED"
+    fi
+
+    print_header "Test Summary"
+    printf "${status_color}${BOLD}%s${RESET}: " "$status_text"
+    printf "Passed: %d, Failed: %d, Total: %d\n" "$passed" "$n_failed" "$n_tests"
+}
+
+main() {
+    parse_args "$@"
+
+    local -a test_files
+    readarray -t test_files < <(grep -rl '^func main' "$SAMPLES_DIR" --include '*.btl')
+
+    local n_tests=${#test_files[@]}
+
+    for file in "${test_files[@]}"; do
+        test_file "$file"
+    done
+
+    print_summary "$n_tests"
+
+    for failure in "${failures[@]}"; do
+        echo -e "${RED}${BOLD}✗${RESET} $failure"
+    done
+}
+
+main "$@"
