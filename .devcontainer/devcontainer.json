@@ -8,7 +8,8 @@
         "vscode": {
             "extensions": [
                 "${containerWorkspaceFolder}/vscode-bittle/out/bittle.vsix",
-                "EditorConfig.EditorConfig"
+                "EditorConfig.EditorConfig",
+                "dbaeumer.vscode-eslint"
             ]
         }
     },
