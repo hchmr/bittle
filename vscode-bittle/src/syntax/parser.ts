@@ -939,6 +939,8 @@ export class Parser extends ParserBase {
             this.pointerType();
         } else if (this.match('[')) {
             this.arrayType();
+        } else if (this.match('typeof')) {
+            this.typeofType();
         } else if (this.match('!')) {
             this.neverType();
         } else if (this.match('...')) {
@@ -985,6 +987,17 @@ export class Parser extends ParserBase {
         this.finishField('size');
         this.expect(']');
         this.finishNode(CompositeNodeTypes.ArrayType);
+    }
+
+    typeofType() {
+        this.beginNode(CompositeNodeTypes.TypeofType);
+        this.bump('typeof');
+        this.expect('(');
+        this.beginField('expr');
+        this.expr();
+        this.finishField('expr');
+        this.expect(')');
+        this.finishNode(CompositeNodeTypes.TypeofType);
     }
 
     neverType() {

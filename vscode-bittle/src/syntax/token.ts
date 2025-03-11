@@ -83,6 +83,7 @@ export const keywords = [
     'sizeof',
     'struct',
     'true',
+    'typeof',
     'union',
     'var',
     'while',

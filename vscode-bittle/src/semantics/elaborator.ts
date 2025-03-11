@@ -3,7 +3,7 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
@@ -581,6 +581,8 @@ export class Elaborator {
 
                 const size = this.evalArraySize(typeNode.size);
                 return mkArrayType(elemType, size);
+            } else if (typeNode instanceof TypeofTypeNode) {
+                return this.elabExprInfer(typeNode.expr, { typeHint: undefined });
             } else if (typeNode instanceof NeverTypeNode) {
                 return mkNeverType();
             } else if (typeNode instanceof RestParamTypeNode) {

@@ -145,6 +145,7 @@ export const grammar = createGrammar({
         $.NameType,
         $.PointerType,
         $.ArrayType,
+        $.TypeofType,
         $.NeverType,
         $.RestParamType,
     ),
@@ -168,6 +169,13 @@ export const grammar = createGrammar({
         ';',
         label('type', $.Type),
         ']',
+    ),
+
+    TypeofType: $ => seq(
+        'typeof',
+        '(',
+        label('expr', $.Expr),
+        ')',
     ),
 
     NeverType: $ => terminal('!'),

@@ -24,6 +24,7 @@ export enum AstNodeTypes {
     NameType = 'NameType',
     PointerType = 'PointerType',
     ArrayType = 'ArrayType',
+    TypeofType = 'TypeofType',
     NeverType = 'NeverType',
     RestParamType = 'RestParamType',
     BlockStmt = 'BlockStmt',
@@ -127,7 +128,7 @@ export class RecordDeclNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get base(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('base', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('base', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get body(): RecordBodyNode | undefined {
         return this.getAstNodeOfType<RecordBodyNode>('body', ['RecordBody']);
@@ -152,7 +153,7 @@ export class FieldNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get eqToken(): TokenNode<'='> | undefined {
         return this.getTokenOfType(undefined, ['=']);
@@ -175,7 +176,7 @@ export class FuncDeclNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get returnType(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('returnType', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('returnType', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get body(): BlockStmtNode | undefined {
         return this.getAstNodeOfType<BlockStmtNode>('body', ['BlockStmt']);
@@ -203,7 +204,7 @@ export class NormalFuncParamNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get eqToken(): TokenNode<'='> | undefined {
         return this.getTokenOfType(undefined, ['=']);
@@ -234,7 +235,7 @@ export class GlobalDeclNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -251,7 +252,7 @@ export class ConstDeclNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get eqToken(): TokenNode<'='> | undefined {
         return this.getTokenOfType(undefined, ['=']);
@@ -268,7 +269,7 @@ export class GroupedTypeNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -284,7 +285,7 @@ export class PointerTypeNode extends AstNode {
         return this.getTokenOfType(undefined, ['*']);
     }
     get pointee(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('pointee', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('pointee', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
 }
 export class ArrayTypeNode extends AstNode {
@@ -298,10 +299,24 @@ export class ArrayTypeNode extends AstNode {
         return this.getTokenOfType(undefined, [';']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get rBracketToken(): TokenNode<']'> | undefined {
         return this.getTokenOfType(undefined, [']']);
+    }
+}
+export class TypeofTypeNode extends AstNode {
+    get typeofToken(): TokenNode<'typeof'> | undefined {
+        return this.getTokenOfType(undefined, ['typeof']);
+    }
+    get lParToken(): TokenNode<'('> | undefined {
+        return this.getTokenOfType(undefined, ['(']);
+    }
+    get expr(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('expr', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
+    get rParToken(): TokenNode<')'> | undefined {
+        return this.getTokenOfType(undefined, [')']);
     }
 }
 export class NeverTypeNode extends AstNode {
@@ -336,7 +351,7 @@ export class LocalDeclNode extends AstNode {
         return this.getTokenOfType(undefined, [':']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get eqToken(): TokenNode<'='> | undefined {
         return this.getTokenOfType(undefined, ['=']);
@@ -473,7 +488,7 @@ export class SizeofExprNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -594,7 +609,7 @@ export class CastExprNode extends AstNode {
         return this.getTokenOfType(undefined, ['as']);
     }
     get type(): TypeNode | undefined {
-        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'NeverType', 'RestParamType']);
+        return this.getAstNodeOfType<TypeNode>('type', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }
 }
 export class RecordExprNode extends AstNode {
@@ -689,6 +704,7 @@ export enum TypeNodeTypes {
     NameType = 'NameType',
     PointerType = 'PointerType',
     ArrayType = 'ArrayType',
+    TypeofType = 'TypeofType',
     NeverType = 'NeverType',
     RestParamType = 'RestParamType',
 };
@@ -698,6 +714,7 @@ export type TypeNode =
     | NameTypeNode
     | PointerTypeNode
     | ArrayTypeNode
+    | TypeofTypeNode
     | NeverTypeNode
     | RestParamTypeNode;
 
@@ -792,6 +809,7 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.NameType: return new NameTypeNode(syntax);
         case AstNodeTypes.PointerType: return new PointerTypeNode(syntax);
         case AstNodeTypes.ArrayType: return new ArrayTypeNode(syntax);
+        case AstNodeTypes.TypeofType: return new TypeofTypeNode(syntax);
         case AstNodeTypes.NeverType: return new NeverTypeNode(syntax);
         case AstNodeTypes.RestParamType: return new RestParamTypeNode(syntax);
         case AstNodeTypes.BlockStmt: return new BlockStmtNode(syntax);
