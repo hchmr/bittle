@@ -1079,6 +1079,8 @@ export class Elaborator {
 
         if (node instanceof BlockStmtNode) {
             this.elabBlockStmt(node);
+        } else if (node instanceof ConstDeclNode) {
+            this.elabConst(node)();
         } else if (node instanceof LocalDeclNode) {
             this.elabLocalDecl(node);
         } else if (node instanceof IfStmtNode) {

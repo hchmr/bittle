@@ -319,7 +319,7 @@ export class BlockStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['{']);
     }
     get stmtNodes(): StmtNode[] {
-        return this.getAstNodesOfType<StmtNode>(undefined, ['BlockStmt', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodesOfType<StmtNode>(undefined, ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
     get rBraceToken(): TokenNode<'}'> | undefined {
         return this.getTokenOfType(undefined, ['}']);
@@ -362,13 +362,13 @@ export class IfStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [')']);
     }
     get then(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('then', ['BlockStmt', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('then', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
     get elseToken(): TokenNode<'else'> | undefined {
         return this.getTokenOfType(undefined, ['else']);
     }
     get else(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('else', ['BlockStmt', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('else', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
 }
 export class WhileStmtNode extends AstNode {
@@ -385,7 +385,7 @@ export class WhileStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [')']);
     }
     get body(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
 }
 export class ForStmtNode extends AstNode {
@@ -396,7 +396,7 @@ export class ForStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get init(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('init', ['BlockStmt', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('init', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -411,7 +411,7 @@ export class ForStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [')']);
     }
     get body(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
 }
 export class ReturnStmtNode extends AstNode {
@@ -703,6 +703,7 @@ export type TypeNode =
 
 export enum StmtNodeTypes {
     BlockStmt = 'BlockStmt',
+    ConstDecl = 'ConstDecl',
     LocalDecl = 'LocalDecl',
     IfStmt = 'IfStmt',
     WhileStmt = 'WhileStmt',
@@ -715,6 +716,7 @@ export enum StmtNodeTypes {
 
 export type StmtNode =
     | BlockStmtNode
+    | ConstDeclNode
     | LocalDeclNode
     | IfStmtNode
     | WhileStmtNode

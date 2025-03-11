@@ -564,7 +564,9 @@ export class Parser extends ParserBase {
     // Statements
 
     stmt() {
-        if (this.match('var')) {
+        if (this.match('const')) {
+            this.constDecl();
+        } else if (this.match('var')) {
             this.varStmt();
         } else if (this.match('{')) {
             this.blockStmt();

@@ -178,6 +178,7 @@ export const grammar = createGrammar({
 
     Stmt: $ => choice(
         $.BlockStmt,
+        $.ConstDecl,
         $.LocalDecl,
         $.IfStmt,
         $.WhileStmt,
