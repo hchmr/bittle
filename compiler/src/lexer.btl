@@ -30,6 +30,7 @@ func lookup_keyword(lexeme: *Char, out: *TokKind): Bool {
         || try_keyword(lexeme, "sizeof", out, Tok_Sizeof)
         || try_keyword(lexeme, "struct", out, Tok_Struct)
         || try_keyword(lexeme, "true", out, Tok_True)
+        || try_keyword(lexeme, "typeof", out, Tok_Typeof)
         || try_keyword(lexeme, "union", out, Tok_Union)
         || try_keyword(lexeme, "var", out, Tok_Var)
         || try_keyword(lexeme, "while", out, Tok_While);

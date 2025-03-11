@@ -278,6 +278,7 @@ enum TokKind {
     Tok_Sizeof,
     Tok_Struct,
     Tok_True,
+    Tok_Typeof,
     Tok_Union,
     Tok_Var,
     Tok_While,
@@ -350,6 +351,7 @@ enum TypeExprKind {
     TypeExpr_Ptr,
     TypeExpr_Arr,
     TypeExpr_Never,
+    TypeExpr_Typeof,
     TypeExpr_RestParam,
 }
 
@@ -371,6 +373,10 @@ struct PtrTypeExpr: TypeExpr {
 struct ArrTypeExpr: TypeExpr {
     elem: *TypeExpr,
     size: *Expr,
+}
+
+struct TypeofTypeExpr: TypeExpr {
+    expr: *Expr,
 }
 
 // Literal

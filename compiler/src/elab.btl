@@ -438,6 +438,7 @@ func unify_types(e1: **Expr, e2: **Expr) {
 //==============================================================================
 //== Types
 
+func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
 func const_eval_int64(ctx: *ElabCtx, expr: *Expr): Int;
 
 func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
@@ -478,6 +479,10 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
         return mk_array_type(elem, size);
     } else if (type_expr.kind == TypeExpr_Never) {
         return mk_never_type();
+    } else if (type_expr.kind == TypeExpr_Typeof) {
+        var type_expr = type_expr as *TypeofTypeExpr;
+        elab_expr_infer(ctx, type_expr.expr, type_hint: null);
+        return type_expr.expr.type;
     } else if (type_expr.kind == TypeExpr_RestParam) {
         return mk_rest_param_type();
     } else {

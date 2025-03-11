@@ -146,6 +146,22 @@ func p_never_type(self: *Parser): *TypeExpr {
     return result;
 }
 
+func p_typeof_type(self: *Parser): *TypeExpr {
+    var pos = self.tok.pos;
+    expect(self, Tok_Typeof);
+    expect(self, Tok_LParen);
+    var expr = p_expr(self, 0);
+    expect(self, Tok_RParen);
+
+    var result: *TypeofTypeExpr = calloc(1, sizeof(TypeofTypeExpr));
+    *result = TypeofTypeExpr {
+        kind: TypeExpr_Typeof,
+        pos,
+        expr,
+    };
+    return result;
+}
+
 func p_rest_param_type(self: *Parser): *TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_DotDotDot);
@@ -167,6 +183,8 @@ func p_type(self: *Parser): *TypeExpr {
         return p_ptr_type(self);
     } else if (at(self, Tok_LBracket)) {
         return p_arr_type(self);
+    } else if (at(self, Tok_Typeof)) {
+        return p_typeof_type(self);
     } else if (at(self, Tok_Bang)) {
         return p_never_type(self);
     } else if (at(self, Tok_DotDotDot)) {

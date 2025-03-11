@@ -24,11 +24,11 @@ func binary_search(xs: *Int, n: Int, key: Int): Int {
 }
 
 func main(): Int32 {
-    const N_VALS = 11;
-    var vals: [Int; N_VALS] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    var vals = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const N_VALS = sizeof(typeof(vals)) / sizeof(Int);
 
-    const N_KEYS = 5;
-    var keys: [Int; N_KEYS] = [-1, 0, 5, 10, 11];
+    var keys = [-1, 0, 5, 10, 11];
+    const N_KEYS = sizeof(typeof(keys)) / sizeof(Int);
 
     for (var i = 0; i < N_KEYS; i += 1) {
         var key = keys[i];
