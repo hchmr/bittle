@@ -646,7 +646,7 @@ export class Elaborator {
     //== Top-level
 
     private elabRoot(rootNode: RootNode) {
-        const declNodes = this.expandIncludes(rootNode.declNodes, new Set());
+        const declNodes = this.expandIncludes(this.path, rootNode.declNodes, new Set());
 
         const typesAndConsts = declNodes.filter(({ node }) =>
             node instanceof RecordDeclNode
@@ -672,12 +672,12 @@ export class Elaborator {
         completionCallbacks.forEach((complete) => complete());
     }
 
-    private expandIncludes(declNodes: DeclNode[], seenPaths: Set<string>): IncludedDecl[] {
+    private expandIncludes(path: string, declNodes: DeclNode[], seenPaths: Set<string>): IncludedDecl[] {
         return declNodes.flatMap(node => {
             if (node instanceof IncludeDeclNode) {
                 return this.processInclude(node, seenPaths);
             }
-            return [{ path: this.path, node }];
+            return [{ path, node }];
         });
     }
 
@@ -698,7 +698,7 @@ export class Elaborator {
         seenPaths.add(resolvedPath);
 
         const tree = this.parsingService.parseAsAst(resolvedPath);
-        return this.expandIncludes(tree.declNodes, seenPaths);
+        return this.expandIncludes(resolvedPath, tree.declNodes, seenPaths);
     }
 
     private elabDecl(node: DeclNode): () => void {
