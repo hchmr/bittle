@@ -334,13 +334,14 @@ func p_array_expr(self: *Parser): *Expr {
 
     expect(self, Tok_LBracket);
     var elems: *List = list_new();
-    while (!at_eof(self) && !eat(self, Tok_RBracket)) {
+    while (!at_eof(self) && !at(self, Tok_RBracket)) {
         var element = p_expr(self, 0);
         list_push(elems, element);
         if (!at(self, Tok_RBracket)) {
             expect(self, Tok_Comma);
         }
     }
+    expect(self, Tok_RBracket);
 
     var result: *ArrayExpr = calloc(1, sizeof(ArrayExpr));
     *result = ArrayExpr {
@@ -392,13 +393,14 @@ func p_call_expr(self: *Parser, callee: *Expr): *Expr {
     var pos = self.tok.pos;
     expect(self, Tok_LParen);
     var args: *List = list_new();
-    while (!at_eof(self) && !eat(self, Tok_RParen)) {
+    while (!at_eof(self) && !at(self, Tok_RParen)) {
         var arg = p_call_arg(self, 0);
         list_push(args, arg);
         if (!at(self, Tok_RParen)) {
             expect(self, Tok_Comma);
         }
     }
+    expect(self, Tok_RParen);
 
     var result: *CallExpr = calloc(1, sizeof(CallExpr));
     *result = CallExpr {
@@ -529,13 +531,14 @@ func p_record_expr(self: *Parser): *Expr {
     var name = p_ident(self);
     var field_initializers: *List = list_new();
     expect(self, Tok_LBrace);
-    while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+    while (!at_eof(self) && !at(self, Tok_RBrace)) {
         var field_initializer = p_field_initializer(self);
         list_push(field_initializers, field_initializer);
         if (!at(self, Tok_RBrace)) {
             expect(self, Tok_Comma);
         }
     }
+    expect(self, Tok_RBrace);
 
     var result: *RecordExpr = calloc(1, sizeof(RecordExpr));
     *result = RecordExpr {
@@ -671,10 +674,12 @@ func p_block(self: *Parser): *Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_LBrace);
     var stmts: *List = list_new();
-    while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+    while (!at_eof(self) && !at(self, Tok_RBrace)) {
         var stmt = p_stmt(self);
         list_push(stmts, stmt);
     }
+    expect(self, Tok_RBrace);
+
     var result: *BlockStmt = calloc(1, sizeof(BlockStmt));
     *result = BlockStmt {
         kind: Stmt_Block,
@@ -924,13 +929,14 @@ func p_record_decl(self: *Parser): *Decl {
     var body: *List;
     if (eat(self, Tok_LBrace)) {
         body = list_new();
-        while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+        while (!at_eof(self) && !at(self, Tok_RBrace)) {
             var field = p_record_field(self);
             list_push(body, field);
             if (!at(self, Tok_RBrace)) {
                 expect(self, Tok_Comma);
             }
         }
+        expect(self, Tok_RBrace);
     } else {
         body = null;
         expect(self, Tok_Semicolon);
@@ -1056,13 +1062,14 @@ func p_enum_decl(self: *Parser): *Decl {
     }
     expect(self, Tok_LBrace);
     var members = list_new();
-    while (!at_eof(self) && !eat(self, Tok_RBrace)) {
+    while (!at_eof(self) && !at(self, Tok_RBrace)) {
         var member = p_enum_member(self);
         list_push(members, member);
         if (!at(self, Tok_RBrace)) {
             expect(self, Tok_Comma);
         }
     }
+    expect(self, Tok_RBrace);
 
     var result: *EnumDecl = calloc(1, sizeof(EnumDecl));
     *result = EnumDecl {
