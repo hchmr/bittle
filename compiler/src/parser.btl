@@ -40,12 +40,20 @@ func parser_new(lexer: *Lexer): *Parser {
     return self;
 }
 
-func at_eof(self: *Parser): Bool {
-    return self.tok.kind == Tok_Eof;
-}
-
 func at(self: *Parser, kind: Int32): Bool {
     return self.tok.kind == kind;
+}
+
+func at_eof(self: *Parser): Bool {
+    return at(self, Tok_Eof);
+}
+
+func at_literal_tok(self: *Parser): Bool {
+    return at(self, Tok_Null) || at(self, Tok_True) || at(self, Tok_False) || at(self, Tok_Int) || at(self, Tok_Char) || at(self, Tok_String);
+}
+
+func at_pattern_const_tok(self: *Parser): Bool {
+    return at_literal_tok(self) || at(self, Tok_Ident);
 }
 
 func next_is(self: *Parser, kind: Int32): Bool {
@@ -247,6 +255,147 @@ func p_literal(self: *Parser): *Literal {
 
     advance(self);
     return result;
+}
+
+//==============================================================================
+//== Patterns
+
+func p_literal_expr(self: *Parser): *Expr;
+func p_name_expr(self: *Parser): *Expr;
+func p_pattern(self: *Parser): *Pattern;
+
+//==============================================================================
+//== Patterns
+
+func p_pattern_const(self: *Parser): *Expr {
+    if (at_literal_tok(self)) {
+        return p_literal_expr(self);
+    } else {
+        return p_name_expr(self);
+    }
+}
+
+func p_grouped_pattern(self: *Parser): *Pattern {
+    var pos = self.tok.pos;
+    expect(self, Tok_LParen);
+    var pattern = p_pattern(self);
+    expect(self, Tok_RParen);
+
+    var result: *GroupedPattern = calloc(1, sizeof(GroupedPattern));
+    *result = GroupedPattern {
+        kind: Pattern_Grouped,
+        pos,
+        type: null,
+        pattern,
+    };
+    return result;
+}
+
+func p_literal_pattern(self: *Parser): *Pattern {
+    var pos = self.tok.pos;
+    var literal = p_literal(self);
+
+    var result: *LiteralPattern = calloc(1, sizeof(LiteralPattern));
+    *result = LiteralPattern {
+        kind: Pattern_Literal,
+        pos,
+        type: null,
+        literal,
+        value: null,
+    };
+    return result;
+}
+
+func p_name_pattern(self: *Parser): *Pattern {
+    var pos = self.tok.pos;
+    var name = p_ident(self);
+
+    var result: *NamePattern = calloc(1, sizeof(NamePattern));
+    *result = NamePattern {
+        kind: Pattern_Name,
+        pos,
+        type: null,
+        name,
+        sym: null,
+    };
+    return result;
+}
+
+func p_wildcard_pattern(self: *Parser): *Pattern {
+    var pos = self.tok.pos;
+    expect(self, Tok_Underscore);
+
+    var result: *Pattern = calloc(1, sizeof(Pattern));
+    *result = Pattern {
+        kind: Pattern_Wildcard,
+        pos,
+        type: null,
+    };
+    return result;
+}
+
+func p_var_pattern(self: *Parser): *Pattern {
+    var pos = self.tok.pos;
+    var name = p_ident(self);
+    expect(self, Tok_At);
+    var pattern = p_pattern(self);
+
+    var result: *VarPattern = calloc(1, sizeof(VarPattern));
+    *result = VarPattern {
+        kind: Pattern_Var,
+        pos,
+        type: null,
+        name,
+        pattern,
+        sym: null,
+    };
+    return result;
+}
+
+func p_range_pattern(self: *Parser): *Pattern {
+    var pos = self.tok.pos;
+    var lower: *Expr = null;
+
+    if (!at(self, Tok_DotDotDot)) {
+        lower = p_pattern_const(self);
+    }
+
+    expect(self, Tok_DotDotDot);
+
+    var upper: *Expr = null;
+    if (at_pattern_const_tok(self)) {
+        upper = p_pattern_const(self);
+    }
+
+    var result: *RangePattern = calloc(1, sizeof(RangePattern));
+    *result = RangePattern {
+        kind: Pattern_Range,
+        pos,
+        type: null,
+        lower,
+        upper,
+        lower_value: null,
+        upper_value: null,
+    };
+    return result;
+}
+
+func p_pattern(self: *Parser): *Pattern {
+    if (at(self, Tok_LParen)) {
+        return p_grouped_pattern(self);
+    } else if (at(self, Tok_DotDotDot) || (at_pattern_const_tok(self) && next_is(self, Tok_DotDotDot))) {
+        return p_range_pattern(self);
+    } else if (at_literal_tok(self)) {
+        return p_literal_pattern(self);
+    } else if (at(self, Tok_Ident) && next_is(self, Tok_At)) {
+        return p_var_pattern(self);
+    } else if (at(self, Tok_Ident)) {
+        return p_name_pattern(self);
+    } else if (at(self, Tok_Underscore)) {
+        return p_wildcard_pattern(self);
+    } else {
+        die_at(&self.tok.pos, "Unexpected start of pattern.");
+    }
 }
 
 //==============================================================================
@@ -751,6 +900,43 @@ func p_if_stmt(self: *Parser): *Stmt {
     return result;
 }
 
+func p_match_case(self: *Parser): *MatchCase {
+    expect(self, Tok_Case);
+    var pattern = p_pattern(self);
+    expect(self, Tok_Colon);
+    var body = p_stmt(self);
+
+    var result: *MatchCase = calloc(1, sizeof(MatchCase));
+    *result = MatchCase {
+        pattern,
+        body,
+    };
+    return result;
+}
+
+func p_match_stmt(self: *Parser): *Stmt {
+    var pos = self.tok.pos;
+    expect(self, Tok_Match);
+    expect(self, Tok_LParen);
+    var scrutinee = p_expr(self, 0);
+    expect(self, Tok_RParen);
+    expect(self, Tok_LBrace);
+    var cases: *List = list_new();
+    while (!eat(self, Tok_RBrace)) {
+        var match_case = p_match_case(self);
+        list_push(cases, match_case);
+    }
+
+    var result: *MatchStmt = calloc(1, sizeof(MatchStmt));
+    *result = MatchStmt {
+        kind: Stmt_Match,
+        pos,
+        scrutinee,
+        cases,
+    };
+    return result;
+}
+
 func p_while_stmt(self: *Parser): *Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_While);
@@ -873,6 +1059,8 @@ func p_stmt(self: *Parser): *Stmt {
         return p_local_stmt(self);
     } else if (at(self, Tok_If)) {
         return p_if_stmt(self);
+    } else if (at(self, Tok_Match)) {
+        return p_match_stmt(self);
     } else if (at(self, Tok_While)) {
         return p_while_stmt(self);
     } else if (at(self, Tok_For)) {

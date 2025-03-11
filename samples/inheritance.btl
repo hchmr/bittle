@@ -21,14 +21,18 @@ struct Circle: Shape {
 }
 
 func area(shape: *Shape): Int {
-    if (shape.kind == Shape_Rectangle) {
-        var rect = shape as *Rectangle;
-        return rect.width * rect.height;
-    } else if (shape.kind == Shape_Circle) {
-        var circle = shape as *Circle;
-        return 3 * circle.radius * circle.radius; // Approximation
-    } else {
-        return -1;
+    match (shape.kind) {
+        case Shape_Rectangle: {
+            var rect = shape as *Rectangle;
+            return rect.width * rect.height;
+        }
+        case Shape_Circle: {
+            var circle = shape as *Circle;
+            return 3 * circle.radius * circle.radius; // Approximation
+        }
+        case _: {
+            return -1;
+        }
     }
 }
 

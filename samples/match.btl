@@ -1,0 +1,77 @@
+//# stdout = x is exactly 42
+//# stdout = x is 10 (using grouped pattern)
+//# stdout = x matches the constant 'ZERO' (0)
+//# stdout = x is <= 20 and >= 32, bound to n = 26
+//# stdout = x is <= 100 and >= 200
+//# stdout = x is >= 1000
+//# stdout = x is <= 5
+//# stdout = x = 6 didn't match any specific case
+//# stdout = x = 7 didn't match any specific case
+//# stdout = x = 8 didn't match any specific case
+//# stdout = x = 9 didn't match any specific case
+//# stdout = x is >= 1000
+//# stdout = x is true
+//# stdout = x is false
+
+extern func printf(format: *Char, ...): Int32;
+
+const ZERO = 0;
+
+func matchIntegerTest(x: Int) {
+    match (x) {
+        case 42: {
+            printf("x is exactly 42\n");
+        }
+        case (10): {
+            printf("x is 10 (using grouped pattern)\n");
+        }
+        case ZERO: {
+            printf("x matches the constant 'ZERO' (%d)\n", ZERO);
+        }
+        case n @ 20...32: {
+            printf("x is <= 20 and >= 32, bound to n = %d\n", n);
+        }
+        case 100...200: {
+            printf("x is <= 100 and >= 200\n");
+        }
+        case 1000...: {
+            printf("x is >= 1000\n");
+        }
+        case ...5: {
+            printf("x is <= 5\n");
+        }
+        case other @ _: {
+            printf("x = %d didn't match any specific case\n", other);
+        }
+    }
+}
+
+func matchBoolTest(x: Bool) {
+    match (x) {
+        case true: {
+            printf("x is true\n");
+        }
+        case false: {
+            printf("x is false\n");
+        }
+    }
+}
+
+func main(): Int32 {
+    matchIntegerTest(42);
+    matchIntegerTest(10);
+    matchIntegerTest(0);
+    matchIntegerTest(26);
+    matchIntegerTest(100);
+    matchIntegerTest(1000);
+    matchIntegerTest(5);
+    matchIntegerTest(6);
+    matchIntegerTest(7);
+    matchIntegerTest(8);
+    matchIntegerTest(9);
+    matchIntegerTest(10000);
+    matchBoolTest(true);
+    matchBoolTest(false);
+
+    return 0;
+}

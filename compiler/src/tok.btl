@@ -16,6 +16,7 @@ func pretty_tok_kind(kind: Int32): *Char {
         // Keywords
         : kind == Tok_As ? "'as'"
         : kind == Tok_Break ? "'break'"
+        : kind == Tok_Case ? "'case'"
         : kind == Tok_Const ? "'const'"
         : kind == Tok_Continue ? "'continue'"
         : kind == Tok_Else ? "'else'"
@@ -26,6 +27,7 @@ func pretty_tok_kind(kind: Int32): *Char {
         : kind == Tok_Func ? "'func'"
         : kind == Tok_If ? "'if'"
         : kind == Tok_Include ? "'include'"
+        : kind == Tok_Match ? "'match'"
         : kind == Tok_Null ? "'null'"
         : kind == Tok_Return ? "'return'"
         : kind == Tok_Sizeof ? "'sizeof'"
@@ -35,6 +37,7 @@ func pretty_tok_kind(kind: Int32): *Char {
         : kind == Tok_Union ? "'union'"
         : kind == Tok_Var ? "'var'"
         : kind == Tok_While ? "'while'"
+        : kind == Tok_Underscore ? "'_'"
         // Symbols
         : kind == Tok_LParen ? "'('"
         : kind == Tok_RParen ? "')'"
@@ -49,6 +52,7 @@ func pretty_tok_kind(kind: Int32): *Char {
         : kind == Tok_DotDotDot ? "'...'"
         : kind == Tok_Colon ? "':'"
         : kind == Tok_ColonColon ? "'::'"
+        : kind == Tok_At ? "'@'"
         : kind == Tok_Arrow ? "'->'"
         : kind == Tok_Plus ? "'+'"
         : kind == Tok_PlusEq ? "'+='"

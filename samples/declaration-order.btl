@@ -1,3 +1,4 @@
+//# stdout = Sum: 110
 // This example uses a top-down declaration style to test
 // the compiler's ability to resolve forward references.
 
@@ -24,21 +25,17 @@ func main(): Int32 {
 }
 
 func sum(tree: *Tree): Int {
-    if (tree.kind == Tree_Leaf) {
-        return leaf_sum(&tree.as_leaf);
-    } else if (tree.kind == Tree_Branch) {
-        return branch_sum(&tree.as_branch);
-    } else {
-        return 0;
+    match (tree.kind) {
+        case Tree_Leaf: {
+            return tree.as_leaf.value;
+        }
+        case Tree_Branch: {
+            return sum(tree.as_branch.left) + sum(tree.as_branch.right);
+        }
+        case _: {
+            return 0;
+        }
     }
-}
-
-func leaf_sum(leaf: *Leaf): Int {
-    return leaf.value;
-}
-
-func branch_sum(branch: *Branch): Int {
-    return sum(branch.left) + sum(branch.right);
 }
 
 enum TreeKind {

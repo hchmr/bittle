@@ -74,7 +74,7 @@ The host platform for the bootstrapping process is Linux on Arm64. A minimal set
 - Initialization of global variables
 - Module system with export/import (replacing header files)
 - A small standard library
-- Switch statements
+- More ergonomic pattern matching
 - Basic generics with type parameters
 
 ### Compiler

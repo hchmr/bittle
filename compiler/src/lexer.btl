@@ -15,6 +15,7 @@ func try_keyword(lexeme: *Char, keyword: *Char, out: *TokKind, kind: TokKind): B
 func lookup_keyword(lexeme: *Char, out: *TokKind): Bool {
     return try_keyword(lexeme, "as", out, Tok_As)
         || try_keyword(lexeme, "break", out, Tok_Break)
+        || try_keyword(lexeme, "case", out, Tok_Case)
         || try_keyword(lexeme, "const", out, Tok_Const)
         || try_keyword(lexeme, "continue", out, Tok_Continue)
         || try_keyword(lexeme, "else", out, Tok_Else)
@@ -25,6 +26,7 @@ func lookup_keyword(lexeme: *Char, out: *TokKind): Bool {
         || try_keyword(lexeme, "func", out, Tok_Func)
         || try_keyword(lexeme, "if", out, Tok_If)
         || try_keyword(lexeme, "include", out, Tok_Include)
+        || try_keyword(lexeme, "match", out, Tok_Match)
         || try_keyword(lexeme, "null", out, Tok_Null)
         || try_keyword(lexeme, "return", out, Tok_Return)
         || try_keyword(lexeme, "sizeof", out, Tok_Sizeof)
@@ -33,7 +35,8 @@ func lookup_keyword(lexeme: *Char, out: *TokKind): Bool {
         || try_keyword(lexeme, "typeof", out, Tok_Typeof)
         || try_keyword(lexeme, "union", out, Tok_Union)
         || try_keyword(lexeme, "var", out, Tok_Var)
-        || try_keyword(lexeme, "while", out, Tok_While);
+        || try_keyword(lexeme, "while", out, Tok_While)
+        || try_keyword(lexeme, "_", out, Tok_Underscore);
 }
 
 //==============================================================================
@@ -394,6 +397,8 @@ func lexer_next(self: *Lexer): Tok {
             } else {
                 finish_token(self, Tok_Dot, ".");
             }
+        } else if (eat_char(self, '@')) {
+            finish_token(self, Tok_At, "@");
         } else {
             die_at(&self.pos, "Unexpected character: '%c'.\n", curr_char(self));
         }

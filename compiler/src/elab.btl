@@ -324,7 +324,23 @@ func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
 //==============================================================================
 //== Type checking
 
-func try_coerce_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
+func types_compatible(t1: *Type, t2: *Type): Bool {
+    if (type_eq(t1, t2)) {
+        return true;
+    }
+    if (t1.kind == Type_Ptr && t2.kind == Type_Ptr) {
+        var p1 = t1 as *PtrType;
+        var p2 = t2 as *PtrType;
+        return p1.pointee.kind == Type_Void || p2.pointee.kind == Type_Void;
+    }
+    return false;
+}
+
+func report_type_mismatch(pos: *Pos, expected: *Type, actual: *Type) {
+    die_at(pos, "Type mismatch: %s != %s.\n", pretty_type(expected), pretty_type(actual));
+}
+
+func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
     if (!type_implicitly_convertible(e.type, target)) {
         return false;
     }
@@ -347,11 +363,11 @@ func try_coerce_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
 
 /*
 Desugar
-x: MyUnion = 123
+    x: MyUnion = 123
 to
-x: MyUnion = MyUnion { field: 123 }
+    x: MyUnion = MyUnion { field: 123 }
 */
-func try_coerce_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
+func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
     if (target.kind != Type_Record) {
         return false;
     }
@@ -390,49 +406,59 @@ func try_coerce_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
         fields: field_inits,
     };
     *out = record_expr;
-
     return true;
 }
 
-func try_coerce(e: *Expr, target: *Type, out: **Expr): Bool {
-    return type_eq(e.type, target)
-    || try_coerce_with_cast(e, target, out)
-    || try_coerce_to_union(e, target, out);
+func try_coerce_expr(e: *Expr, target: *Type, out: **Expr): Bool {
+    return types_compatible(e.type, target)
+        || try_coerce_expr_with_cast(e, target, out)
+        || try_coerce_expr_to_union(e, target, out);
 }
 
-func try_coerce_to_int(e: *Expr, out: **Expr): Bool {
+func try_coerce_expr_to_int(e: *Expr, out: **Expr): Bool {
+    var target_type: *Type = null;
     for (var size = 1; size <= 8; size *= 2) {
-        if (try_coerce_with_cast(e, mk_int_type(size), out)) {
+        target_type = mk_int_type(size);
+        if (try_coerce_expr_with_cast(e, target_type, out)) {
             return true;
         }
     }
     return false;
 }
 
-func check_type(e: **Expr, expected: *Type) {
-    try_coerce((*e), expected, e);
-    if (expected.kind == Type_Ptr && (expected as *PtrType).pointee.kind == Type_Void && (*e).type.kind == Type_Ptr) {
-        return;
-    }
-    if (!type_eq((*e).type, expected)) {
-        die_at(&(*e).pos, "Type mismatch: %s != %s.\n", pretty_type(expected), pretty_type((*e).type));
+func check_expr_type(e: **Expr, expected: *Type) {
+    try_coerce_expr(*e, expected, e);
+    if (!types_compatible((*e).type, expected)) {
+        report_type_mismatch(&(*e).pos, expected, (*e).type);
     }
 }
 
-func check_type_int(e: **Expr) {
-    if (!try_coerce_to_int(*e, e)) {
+func check_expr_type_int(e: **Expr) {
+    if (!try_coerce_expr_to_int(*e, e)) {
         die_at(&(*e).pos, "Integer expression expected");
     }
 }
 
-func check_type_bool(e: **Expr) {
-    check_type(e, mk_bool_type());
+func check_expr_type_bool(e: **Expr) {
+    check_expr_type(e, mk_bool_type());
 }
 
-func unify_types(e1: **Expr, e2: **Expr) {
-    try_coerce(*e2, (*e1).type, e2);
-    try_coerce(*e1, (*e2).type, e1);
-    check_type(e2, (*e1).type);
+func unify_expr_types(e1: **Expr, e2: **Expr) {
+    try_coerce_expr(*e2, (*e1).type, e2);
+    try_coerce_expr(*e1, (*e2).type, e1);
+    check_expr_type(e2, (*e1).type);
+}
+
+func check_pattern_type(p: **Pattern, expected: *Type) {
+    if (!types_compatible((*p).type, expected)) {
+        report_type_mismatch(&(*p).pos, expected, (*p).type);
+    }
+}
+
+func check_pattern_type_int(p: **Pattern) {
+    if ((*p).type.kind != Type_Int) {
+        die_at(&(*p).pos, "Integer pattern expected");
+    }
 }
 
 //==============================================================================
@@ -521,13 +547,131 @@ func const_eval_int32(ctx: *ElabCtx, expr: *Expr): Int32 {
 }
 
 //==============================================================================
+//== Literals
+
+func elab_literal(ctx: *ElabCtx, literal: *Literal, type_hint: *Type): *ConstValue {
+    if (literal.kind == Literal_Null) {
+        var type = type_hint && type_hint.kind == Type_Ptr ? type_hint : mk_ptr_type(mk_void_type());
+        return mk_null_const_value(type);
+    } else if (literal.kind == Literal_Bool) {
+        var literal = literal as *BoolLiteral;
+        return mk_bool_const_value(literal.value);
+    } else if (literal.kind == Literal_Int) {
+        var literal = literal as *IntLiteral;
+        var type = type_hint && type_hint.kind == Type_Int ? type_hint : mk_int_type(8);
+        return mk_int_const_value(literal.value, type);
+    } else if (literal.kind == Literal_Char) {
+        var literal = literal as *CharLiteral;
+        return mk_int_const_value(literal.value, mk_int_type(1));
+    } else if (literal.kind == Literal_String) {
+        var literal = literal as *StringLiteral;
+        return mk_string_const_value(literal.value);
+    } else {
+        unreachable("elab_literal");
+    }
+}
+
+//==============================================================================
+//== Patterns
+
+func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type);
+
+func elab_pattern_expect(ctx: *ElabCtx, pattern: **Pattern, expected: *Type) {
+    elab_pattern_infer(ctx, *pattern, expected);
+    check_pattern_type(pattern, expected);
+}
+
+func elab_grouped_pattern(ctx: *ElabCtx, pattern: *GroupedPattern, type_hint: *Type) {
+    elab_pattern_infer(ctx, pattern.pattern, type_hint);
+    pattern.type = pattern.pattern.type;
+}
+
+func elab_literal_pattern(ctx: *ElabCtx, pattern: *LiteralPattern, type_hint: *Type) {
+    var literal = pattern.literal;
+    pattern.value = elab_literal(ctx, literal, type_hint);
+    pattern.type = pattern.value.type;
+}
+
+func elab_name_pattern(ctx: *ElabCtx, pattern: *NamePattern, type_hint: *Type) {
+    var name = pattern.name;
+
+    var sym = lookup(ctx, name);
+    if (!sym) {
+        die_at(&pattern.pos, "Unknown symbol");
+    }
+    if (sym.kind != Sym_Const) {
+        die_at(&pattern.pos, "Expected a constant");
+    }
+
+    pattern.sym = sym as *ConstSym;
+    pattern.type = pattern.sym.value.type;
+}
+
+func elab_wildcard_pattern(ctx: *ElabCtx, pattern: *WildcardPattern, type_hint: *Type) {
+    pattern.type = type_hint;
+}
+
+func elab_var_pattern(ctx: *ElabCtx, pattern: *VarPattern, type_hint: *Type) {
+    var name = pattern.name;
+
+    elab_pattern_infer(ctx, pattern.pattern, type_hint);
+    var sym = define_local(ctx, &pattern.pos, name, type_hint);
+
+    pattern.sym = sym;
+    pattern.type = sym.type;
+}
+
+func elab_range_pattern(ctx: *ElabCtx, pattern: *RangePattern, type_hint: *Type) {
+    if (!pattern.lower && !pattern.upper) {
+        die_at(&pattern.pos, "Range pattern must have at least one bound");
+    }
+
+    var lower_bound = pattern.lower ? const_eval_infer(ctx, pattern.lower, type_hint) : null;
+    var upper_bound = pattern.upper ? const_eval_infer(ctx, pattern.upper, type_hint) : null;
+
+    var lower_type = lower_bound ? lower_bound.type : upper_bound.type;
+    var upper_type = upper_bound ? upper_bound.type : lower_bound.type;
+    if (!type_eq(lower_type, upper_type)) {
+        report_type_mismatch(&pattern.pos, lower_type, upper_type);
+    }
+
+    var type = lower_bound ? lower_bound.type : upper_bound.type;
+    if (type.kind != Type_Int) {
+        die_at(&pattern.pos, "Integer range pattern expected");
+    }
+
+    pattern.lower_value = lower_bound;
+    pattern.upper_value = upper_bound;
+    pattern.type = type;
+}
+
+func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type) {
+    if (pattern.kind == Pattern_Grouped) {
+        elab_grouped_pattern(ctx, pattern as *GroupedPattern, type_hint);
+    } else if (pattern.kind == Pattern_Literal) {
+        elab_literal_pattern(ctx, pattern as *LiteralPattern, type_hint);
+    } else if (pattern.kind == Pattern_Name) {
+        elab_name_pattern(ctx, pattern as *NamePattern, type_hint);
+    } else if (pattern.kind == Pattern_Wildcard) {
+        elab_wildcard_pattern(ctx, pattern as *WildcardPattern, type_hint);
+    } else if (pattern.kind == Pattern_Var) {
+        elab_var_pattern(ctx, pattern as *VarPattern, type_hint);
+    } else if (pattern.kind == Pattern_Range) {
+        elab_range_pattern(ctx, pattern as *RangePattern, type_hint);
+    } else {
+        unreachable("elab_pattern_infer");
+    }
+    assert(pattern.type, "elab_pattern_infer");
+}
+
+//==============================================================================
 //== Expressions
 
 func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
 
 func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type) {
     elab_expr_infer(ctx, *expr, type_hint: expected);
-    check_type(expr, expected);
+    check_expr_type(expr, expected);
 }
 
 func elab_expr_bool(ctx: *ElabCtx, expr: **Expr) {
@@ -536,7 +680,7 @@ func elab_expr_bool(ctx: *ElabCtx, expr: **Expr) {
 
 func elab_expr_int(ctx: *ElabCtx, expr: **Expr, type_hint: *Type) {
     elab_expr_infer(ctx, *expr, type_hint);
-    check_type_int(expr);
+    check_expr_type_int(expr);
 }
 
 func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
@@ -568,32 +712,8 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
 
 func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr, type_hint: *Type) {
     var literal = expr.literal;
-
-    if (literal.kind == Literal_Null) {
-        expr.type = mk_ptr_type(mk_void_type());
-    } else if (literal.kind == Literal_Bool) {
-        var literal = literal as *BoolLiteral;
-        expr.type = mk_bool_type();
-        expr.const_value = mk_bool_const_value(literal.value);
-    } else if (literal.kind == Literal_Int) {
-        var literal = literal as *IntLiteral;
-        if (type_hint && type_hint.kind == Type_Int) {
-            expr.type = type_hint;
-        } else {
-            expr.type = mk_int_type(8);
-        }
-        expr.const_value = mk_int_const_value(literal.value, expr.type);
-    } else if (literal.kind == Literal_Char) {
-        var literal = literal as *CharLiteral;
-        expr.type = mk_int_type(1);
-        expr.const_value = mk_int_const_value(literal.value, expr.type);
-    } else if (literal.kind == Literal_String) {
-        var literal = literal as *StringLiteral;
-        expr.type = mk_ptr_type(mk_int_type(1));
-        expr.const_value = mk_string_const_value(literal.value);
-    } else {
-        unreachable("elab_literal_expr");
-    }
+    expr.const_value = elab_literal(ctx, literal, type_hint);
+    expr.type = expr.const_value.type;
 }
 
 func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
@@ -614,7 +734,7 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
             elem_type = elem.type;
         } else {
             var prev_expr: *Expr = list_get(elems, i - 1);
-            check_type(&elem, elem_type);
+            check_expr_type(&elem, elem_type);
             list_set(elems, i, elem);
             list_set(elems, i - 1, prev_expr);
         }
@@ -716,7 +836,7 @@ func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
     ? (indexee_type as *ArrType).elem
     : (indexee_type as *PtrType).pointee;
 
-    check_type_int(&index);
+    check_expr_type_int(&index);
     expr.type = elem_type;
     expr.index = index;
 }
@@ -764,7 +884,7 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
 
     if (op == Tok_Minus || op == Tok_Tilde) {
         elab_expr_infer(ctx, right, type_hint);
-        check_type_int(&right);
+        check_expr_type_int(&right);
         expr.type = right.type;
         expr.right = right;
     } else if (op == Tok_Bang) {
@@ -825,7 +945,7 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
     } else if (op == Tok_EqEq || op == Tok_BangEq || op == Tok_Lt || op == Tok_LtEq || op == Tok_Gt || op == Tok_GtEq) {
         elab_expr_infer(ctx, left, type_hint: null);
         elab_expr_infer(ctx, right, type_hint: left.type);
-        unify_types(&left, &right);
+        unify_expr_types(&left, &right);
         if (!is_scalar(left.type)) {
             die_at(&left.pos, "Operands type is not comparable");
         }
@@ -835,7 +955,7 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
     } else if (op == Tok_Amp || op == Tok_Bar || op == Tok_Caret || op == Tok_LtLt || op == Tok_GtGt || op == Tok_Plus || op == Tok_Minus || op == Tok_Star || op == Tok_Slash || op == Tok_Percent) {
         elab_expr_int(ctx, &left, type_hint);
         elab_expr_int(ctx, &right, left.type);
-        unify_types(&left, &right);
+        unify_expr_types(&left, &right);
         expr.type = left.type;
         expr.left = left;
         expr.right = right;
@@ -856,7 +976,7 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
     elab_expr_infer(ctx, then_expr, type_hint: type_hint);
     elab_expr_infer(ctx, else_expr, type_hint: then_expr.type);
 
-    unify_types(&then_expr, &else_expr);
+    unify_expr_types(&then_expr, &else_expr);
     expr.type = then_expr.type;
     expr.cond = cond;
     expr.then_expr = then_expr;
@@ -1047,6 +1167,28 @@ func elab_if_stmt(ctx: *ElabCtx, stmt: *IfStmt) {
     }
 }
 
+func elab_match_case(ctx: *ElabCtx, match_case: *MatchCase, scrutinee_type: *Type) {
+    var pattern = match_case.pattern;
+    var body = match_case.body;
+
+    enter_scope(ctx);
+    elab_pattern_expect(ctx, &pattern, scrutinee_type);
+    elab_stmt_with_scope(ctx, body);
+    exit_scope(ctx);
+}
+
+func elab_match_stmt(ctx: *ElabCtx, stmt: *MatchStmt) {
+    var scrutinee = stmt.scrutinee;
+    var match_cases = stmt.cases;
+
+    elab_expr_infer(ctx, scrutinee, type_hint: null);
+
+    for (var i = 0; i < list_len(match_cases); i += 1) {
+        var match_case: *MatchCase = list_get(match_cases, i);
+        elab_match_case(ctx, match_case, scrutinee.type);
+    }
+}
+
 func elab_while_stmt(ctx: *ElabCtx, stmt: *WhileStmt) {
     var cond = stmt.cond;
     var body = stmt.body;
@@ -1123,6 +1265,8 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
         elab_local_stmt(ctx, stmt as *LocalStmt);
     } else if (stmt.kind == Stmt_If) {
         elab_if_stmt(ctx, stmt as *IfStmt);
+    } else if (stmt.kind == Stmt_Match) {
+        elab_match_stmt(ctx, stmt as *MatchStmt);
     } else if (stmt.kind == Stmt_While) {
         elab_while_stmt(ctx, stmt as *WhileStmt);
     } else if (stmt.kind == Stmt_For) {

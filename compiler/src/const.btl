@@ -20,6 +20,15 @@ func mk_int_const_value(value: Int, type: *Type): *IntConstValue {
     return result;
 }
 
+func mk_null_const_value(type: *Type): *NullConstValue {
+    var result: *NullConstValue = calloc(1, sizeof(NullConstValue));
+    *result = NullConstValue {
+        kind: ConstValue_Null,
+        type: type,
+    };
+    return result;
+}
+
 func mk_string_const_value(value: *StringBuffer): *StringConstValue {
     var result: *StringConstValue = calloc(1, sizeof(StringConstValue));
     *result = StringConstValue {
@@ -101,6 +110,11 @@ func const_value_binop(op: Int32, a: *ConstValue, b: *ConstValue): *ConstValue {
         } else if (is_cmp_op(op)) {
             return mk_bool_const_value(signed_cmp(op, a.int, b.int));
         }
+    } else if (a.kind == ConstValue_Null || b.kind == ConstValue_Null) {
+        if (op == Tok_Eq || op == Tok_BangEq) {
+            // Equal if both are null
+            return mk_bool_const_value(signed_cmp(op, a.kind, b.kind));
+        }
     }
     return null;
 }
@@ -130,6 +144,14 @@ func const_value_cast(value: *ConstValue, target: *Type): *ConstValue {
             return mk_bool_const_value(value.int);
         } else if (target.kind == Type_Int || target.kind == Type_Enum) {
             return mk_int_const_value(value.int, target);
+        }
+    } else if (value.kind == ConstValue_Null) {
+        if (target.kind == Type_Bool) {
+            return mk_bool_const_value(false);
+        } else if (target.kind == Type_Int) {
+            return mk_int_const_value(0, target);
+        } else if (target.kind == Type_Ptr) {
+            return mk_null_const_value(target);
         }
     } else if (value.kind == ConstValue_String) {
         var value = value as *StringConstValue;

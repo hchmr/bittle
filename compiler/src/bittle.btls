@@ -145,6 +145,7 @@ func pretty_type(type: *Type): *Char;
 enum ValueKind {
     ConstValue_Bool,
     ConstValue_Int,
+    ConstValue_Null,
     ConstValue_String,
 }
 
@@ -161,6 +162,8 @@ struct IntConstValue: ConstValue {
     int: Int,
 }
 
+struct NullConstValue: ConstValue;
+
 struct StringConstValue: ConstValue {
     string: *StringBuffer,
 }
@@ -172,6 +175,7 @@ func const_value_cast(value: *ConstValue, target: *Type): *ConstValue;
 
 func mk_bool_const_value(value: Bool): *BoolConstValue;
 func mk_int_const_value(value: Int, type: *Type): *IntConstValue;
+func mk_null_const_value(type: *Type): *NullConstValue;
 func mk_string_const_value(value: *StringBuffer): *StringConstValue;
 
 //==============================================================================
@@ -263,6 +267,7 @@ enum TokKind {
     // Keywords
     Tok_As,
     Tok_Break,
+    Tok_Case,
     Tok_Const,
     Tok_Continue,
     Tok_Else,
@@ -273,6 +278,7 @@ enum TokKind {
     Tok_Func,
     Tok_If,
     Tok_Include,
+    Tok_Match,
     Tok_Null,
     Tok_Return,
     Tok_Sizeof,
@@ -282,6 +288,7 @@ enum TokKind {
     Tok_Union,
     Tok_Var,
     Tok_While,
+    Tok_Underscore,
     // Symbols
     Tok_LParen,
     Tok_RParen,
@@ -296,6 +303,7 @@ enum TokKind {
     Tok_DotDotDot,
     Tok_Colon,
     Tok_ColonColon,
+    Tok_At,
     Tok_Arrow,
     Tok_Plus,
     Tok_PlusEq,
@@ -408,6 +416,53 @@ struct StringLiteral: Literal {
     value: *StringBuffer,
 }
 
+// Pattern
+
+enum PatternKind {
+    Pattern_Grouped,
+    Pattern_Literal,
+    Pattern_Name,
+    Pattern_Wildcard,
+    Pattern_Var,
+    Pattern_Range,
+}
+
+struct Pattern {
+    kind: PatternKind,
+    pos: Pos,
+    type: *Type,
+}
+
+struct GroupedPattern: Pattern {
+    pattern: *Pattern,
+}
+
+struct LiteralPattern: Pattern {
+    literal: *Literal,
+    value: *ConstValue,
+}
+
+struct NamePattern: Pattern {
+    name: *Char,
+    sym: *ConstSym,
+}
+
+struct WildcardPattern: Pattern {
+}
+
+struct VarPattern: Pattern {
+    name: *Char,
+    pattern: *Pattern,
+    sym: *LocalSym,
+}
+
+struct RangePattern: Pattern {
+    lower: *Expr,
+    upper: *Expr,
+    lower_value: *ConstValue,
+    upper_value: *ConstValue,
+}
+
 // Expr
 
 enum ExprKind {
@@ -515,6 +570,7 @@ enum StmtKind {
     Stmt_Const,
     Stmt_Local,
     Stmt_If,
+    Stmt_Match,
     Stmt_While,
     Stmt_For,
     Stmt_Return,
@@ -547,6 +603,16 @@ struct IfStmt: Stmt {
     cond: *Expr,
     then_stmt: *Stmt,
     else_stmt: *Stmt,
+}
+
+struct MatchCase {
+    pattern: *Pattern,
+    body: *Stmt,
+}
+
+struct MatchStmt: Stmt {
+    scrutinee: *Expr,
+    cases: *List, // List<MatchCase>
 }
 
 struct WhileStmt: Stmt {

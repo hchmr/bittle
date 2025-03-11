@@ -145,18 +145,24 @@ func arg_parse(argc: Int32, argv: **Char): Args {
         if (arg[0] != '-')
             break;
         for (var j = 1; arg[j] != '\0'; j += 1) {
-            if (arg[j] == 'l') {
-                options |= Opt_PrintLines;
-            } else if (arg[j] == 'w') {
-                options |= Opt_PrintWords;
-            } else if (arg[j] == 'c') {
-                options |= Opt_PrintBytes;
-            } else if (arg[j] == 'L') {
-                options |= Opt_PrintMaxLen;
-            } else {
-                fprintf(stderr, "Unknown option: %c\n", arg[j]);
-                print_usage(argv);
-                exit(1);
+            match (arg[j]) {
+                case 'l': {
+                    options |= Opt_PrintLines;
+                }
+                case 'w': {
+                    options |= Opt_PrintWords;
+                }
+                case 'c': {
+                    options |= Opt_PrintBytes;
+                }
+                case 'L': {
+                    options |= Opt_PrintMaxLen;
+                }
+                case _: {
+                    fprintf(stderr, "Unknown option: %c\n", arg[j]);
+                    print_usage(argv);
+                    exit(1);
+                }
             }
         }
     }
