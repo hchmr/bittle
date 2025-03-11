@@ -1,8 +1,8 @@
 import assert from 'assert';
-import { ArrayExprNode, BinaryExprNode, BoolLiteralNode, CallExprNode, CastExprNode, CharLiteralNode, ExprNode, FieldExprNode, GroupedExprNode, IndexExprNode, IntLiteralNode, LiteralExprNode, NameExprNode, RecordExprNode, SizeofExprNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BoolLiteralNode, CallExprNode, CastExprNode, CharLiteralNode, ExprNode, FieldExprNode, GroupedExprNode, IndexExprNode, IntLiteralNode, LiteralExprNode, NameExprNode, NullLiteralNode, RecordExprNode, SizeofExprNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { parseChar, parseString } from '../utils/literalParsing';
-import { checkedMkIntConstValue, constCoerce, ConstValue, constValueCast, ConstValueKind, mkBoolConstValue, mkIntConstValue, mkStringConstValue } from './const';
+import { checkedMkIntConstValue, constCoerce, ConstValue, constValueCast, ConstValueKind, mkBoolConstValue, mkIntConstValue, mkNullConstValue, mkStringConstValue } from './const';
 import { Sym, SymKind } from './sym';
 import { mkBoolType, mkErrorType, Type, typeLayout, unifyTypesWithCoercion } from './type';
 
@@ -101,7 +101,9 @@ export class ConstEvaluator {
 
         const resultType = this.getType(node);
 
-        if (literal instanceof BoolLiteralNode) {
+        if (literal instanceof NullLiteralNode) {
+            return mkNullConstValue(resultType);
+        } else if (literal instanceof BoolLiteralNode) {
             return mkBoolConstValue(text === 'true');
         } else if (literal instanceof IntLiteralNode) {
             const value = parseInt(text);

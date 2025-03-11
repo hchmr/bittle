@@ -1,6 +1,6 @@
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
-import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ConstDeclNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, IfStmtNode, IndexExprNode, LiteralExprNode, LocalDeclNode, NameExprNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ConstDeclNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, GroupedPatternNode, IfStmtNode, IndexExprNode, LiteralExprNode, LiteralPatternNode, LocalDeclNode, MatchStmtNode, NameExprNode, NamePatternNode, PatternNode, RangePatternNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
 import { Nullish, unreachable } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
@@ -77,6 +77,8 @@ class ControlFlowAnalyzer {
             return this.analyzeLocalDecl(node, state);
         } else if (node instanceof IfStmtNode) {
             return this.analyzeIfStmt(node, state);
+        } else if (node instanceof MatchStmtNode) {
+            return this.analyzeMatchStmt(node, state);
         } else if (node instanceof WhileStmtNode) {
             return this.analyzeWhileStmt(node, state);
         } else if (node instanceof ForStmtNode) {
@@ -135,6 +137,50 @@ class ControlFlowAnalyzer {
             const thenState = this.analyzeStmt(thenNode, state);
             const elseState = this.analyzeStmt(elseNode, state);
             return executionStateUnion(thenState, elseState);
+        }
+    }
+
+    analyzeMatchStmt(node: MatchStmtNode, state: ExecutionState): ExecutionState {
+        const valueNode = node.value;
+        const bodyNode = node.body;
+
+        state = this.analyzeExpr(valueNode, state);
+
+        if (!bodyNode?.matchCaseNodes) {
+            return state;
+        }
+
+        let combinedState: ExecutionState | undefined;
+        let isExhausted = false;
+
+        for (const matchCase of bodyNode.matchCaseNodes) {
+            if (isExhausted) {
+                this.reportUnreachableCode(matchCase);
+                continue;
+            }
+
+            const matchState = this.analyzeStmt(matchCase.body, state);
+            combinedState = combinedState ? executionStateUnion(combinedState, matchState) : matchState;
+
+            isExhausted = isMatchCaseDefinitelyExhaustive(matchCase.pattern);
+        }
+
+        return combinedState ?? state;
+
+        function isMatchCaseDefinitelyExhaustive(node: PatternNode | Nullish): boolean {
+            if (!node) {
+                return false;
+            } else if (node instanceof GroupedPatternNode || node instanceof VarPatternNode) {
+                return isMatchCaseDefinitelyExhaustive(node.pattern);
+            } else if (node instanceof LiteralPatternNode || node instanceof NamePatternNode) {
+                return false;
+            } else if (node instanceof WildcardPatternNode) {
+                return true;
+            } else if (node instanceof RangePatternNode) {
+                return !node.lower && !node.upper;
+            } else {
+                unreachable(node);
+            }
         }
     }
 

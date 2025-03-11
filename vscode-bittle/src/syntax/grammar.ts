@@ -189,6 +189,7 @@ export const grammar = createGrammar({
         $.ConstDecl,
         $.LocalDecl,
         $.IfStmt,
+        $.MatchStmt,
         $.WhileStmt,
         $.ForStmt,
         $.ReturnStmt,
@@ -227,6 +228,27 @@ export const grammar = createGrammar({
             'else',
             label('else', $.Stmt),
         )),
+    ),
+
+    MatchStmt: $ => seq(
+        'match',
+        '(',
+        label('value', $.Expr),
+        ')',
+        label('body', $.MatchBody),
+    ),
+
+    MatchBody: $ => seq(
+        '{',
+        repeat($.MatchCase),
+        '}',
+    ),
+
+    MatchCase: $ => seq(
+        'case',
+        label('pattern', $.Pattern),
+        ':',
+        label('body', $.Stmt),
     ),
 
     WhileStmt: $ => seq(
@@ -379,6 +401,43 @@ export const grammar = createGrammar({
             ':',
         )),
         label('value', $.Expr),
+    ),
+
+    Pattern: $ => choice(
+        $.GroupedPattern,
+        $.LiteralPattern,
+        $.NamePattern,
+        $.WildcardPattern,
+        $.VarPattern,
+        $.RangePattern,
+    ),
+
+    GroupedPattern: $ => seq(
+        '(',
+        label('pattern', $.Pattern),
+        ')',
+    ),
+
+    LiteralPattern: $ => $.Literal,
+
+    NamePattern: $ => terminal('identifier'),
+
+    WildcardPattern: $ => terminal('_'),
+
+    VarPattern: $ => seq(
+        label('name', 'identifier'),
+        '@',
+        label('pattern', $.Pattern),
+    ),
+
+    RangePattern: $ => seq(
+        optional(
+            label('lower', $.Expr),
+        ),
+        '...',
+        optional(
+            label('upper', $.Expr),
+        ),
     ),
 
     Literal: $ => choice(

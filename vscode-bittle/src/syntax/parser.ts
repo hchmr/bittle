@@ -1,7 +1,7 @@
 import assert from 'assert';
-import { identity } from '../utils/index.js';
+import { identity, unreachable } from '../utils/index.js';
 import { ErrorSink } from './errorSink.js';
-import { CompositeNodeType, CompositeNodeTypes, NodeTypes } from './nodeTypes.js';
+import { CompositeNodeType, CompositeNodeTypes, ExprNodeType, ExprNodeTypes, NodeTypes } from './nodeTypes.js';
 import { Point, pointEq } from './position';
 import { Token, TokenKind } from './token.js';
 import { Tree } from './tree.js';
@@ -224,7 +224,7 @@ class ParserBase extends NodeBuilder {
 
     bump(assertedToken?: TokenKind) {
         if (assertedToken) {
-            assert(this.tok.kind === assertedToken);
+            assert(this.tok.kind === assertedToken, `${this.tok.kind} should be ${assertedToken}`);
         }
         this.addChild(tokenToSyntaxNode(this.tree, this.tok));
         this.tok = this.tokens.next().value!;
@@ -572,6 +572,8 @@ export class Parser extends ParserBase {
             this.blockStmt();
         } else if (this.match('if')) {
             this.ifStmt();
+        } else if (this.match('match')) {
+            this.matchStmt();
         } else if (this.match('while')) {
             this.whileStmt();
         } else if (this.match('for')) {
@@ -645,6 +647,49 @@ export class Parser extends ParserBase {
             this.finishField('else');
         }
         this.finishNode(CompositeNodeTypes.IfStmt);
+    }
+
+    matchStmt() {
+        this.beginNode(CompositeNodeTypes.MatchStmt);
+        this.bump('match');
+        this.expect('(');
+        this.beginField('value');
+        this.expr();
+        this.finishField('value');
+        this.expect(')');
+        this.beginField('body');
+        this.matchBody();
+        this.finishField('body');
+        this.finishNode(CompositeNodeTypes.MatchStmt);
+    }
+
+    matchBody() {
+        this.beginNode(CompositeNodeTypes.MatchBody);
+        this.expect('{');
+        while (!this.match('}')) {
+            const startIndex = this.index;
+
+            this.matchCase();
+
+            if (this.index === startIndex) {
+                break;
+            }
+        }
+        this.expect('}');
+        this.finishNode(CompositeNodeTypes.MatchBody);
+    }
+
+    matchCase() {
+        this.beginNode(CompositeNodeTypes.MatchCase);
+        this.expect('case');
+        this.beginField('pattern');
+        this.pattern();
+        this.finishField('pattern');
+        this.expect(':');
+        this.beginField('body');
+        this.stmt();
+        this.finishField('body');
+        this.finishNode(CompositeNodeTypes.MatchCase);
     }
 
     whileStmt() {
@@ -925,6 +970,91 @@ export class Parser extends ParserBase {
         this.expr();
         this.finishField('value');
         this.finishNode(CompositeNodeTypes.FieldInit);
+    }
+
+    //=========================================================================
+    // Patterns
+
+    pattern() {
+        if (this.match('(')) {
+            this.groupedPattern();
+        } else if (this.match('...') || this.match(patternConstTokens, '...')) {
+            this.rangePattern();
+        } else if (this.match(literalTokens)) {
+            this.literalPattern();
+        } else if (this.match('identifier', '@')) {
+            this.varPattern();
+        } else if (this.match('identifier')) {
+            this.namePattern();
+        } else if (this.match('_')) {
+            this.wildcardPattern();
+        } else {
+            this.addErrorAndTryBump(`Unexpected start of pattern: '${this.tok.kind}'.`, { set: patternRecovery });
+        }
+    }
+
+    groupedPattern() {
+        this.beginNode(CompositeNodeTypes.GroupedPattern);
+        this.bump('(');
+        this.beginField('pattern');
+        this.pattern();
+        this.finishField('pattern');
+        this.expect(')');
+        this.finishNode(CompositeNodeTypes.GroupedPattern);
+    }
+
+    literalPattern() {
+        this.beginNode(CompositeNodeTypes.LiteralPattern);
+        this.literal();
+        this.finishNode(CompositeNodeTypes.LiteralPattern);
+    }
+
+    namePattern() {
+        this.beginNode(CompositeNodeTypes.NamePattern);
+        this.bump('identifier');
+        this.finishNode(CompositeNodeTypes.NamePattern);
+    }
+
+    varPattern() {
+        this.beginNode(CompositeNodeTypes.VarPattern);
+        this.beginField('name');
+        this.bump('identifier');
+        this.finishField('name');
+        this.expect('@');
+        this.beginField('pattern');
+        this.pattern();
+        this.finishField('pattern');
+        this.finishNode(CompositeNodeTypes.VarPattern);
+    }
+
+    wildcardPattern() {
+        this.beginNode(CompositeNodeTypes.WildcardPattern);
+        this.bump('_');
+        this.finishNode(CompositeNodeTypes.WildcardPattern);
+    }
+
+    rangePattern() {
+        this.beginNode(CompositeNodeTypes.RangePattern);
+        if (!this.match('...')) {
+            this.beginField('lower');
+            this.patternConst();
+            this.finishField('lower');
+        }
+        this.expect('...');
+        if (this.match(patternConstTokens)) {
+            this.beginField('upper');
+            this.patternConst();
+            this.finishField('upper');
+        }
+        this.finishNode(CompositeNodeTypes.RangePattern);
+    }
+
+    patternConst() {
+        if (this.match('identifier')) {
+            this.nameExpr();
+        } else {
+            this.literalExpr();
+        }
     }
 
     //=========================================================================
@@ -1248,6 +1378,10 @@ const exprFirst = new TokenKindSet(...Object.keys(nudTable) as TokenKind[]);
 
 const stmtFirst = new TokenKindSet('var', '{', 'if', 'while', 'return', 'break', 'continue', ...exprFirst);
 
+const literalTokens = new TokenKindSet('number_literal', 'string_literal', 'char_literal', 'null', 'true', 'false');
+
+const patternConstTokens = literalTokens.union('identifier');
+
 // Recovery sets
 
 const onlyTopLevel = topLevelFirst.except('var', 'const');
@@ -1257,5 +1391,7 @@ const emptyRecovery = new TokenKindSet();
 const defaultRecovery = onlyTopLevel.union('{', '}');
 
 const exprRecovery = defaultRecovery.union(')', ']', ';');
+
+const patternRecovery = exprRecovery;
 
 const stmtRecovery = defaultRecovery;

@@ -35,7 +35,7 @@
         },
         {
             "name": "keyword.control.btl",
-            "match": "(?:break|continue|do|else|for|if|return|while)\\b"
+            "match": "(?:break|case|continue|do|else|for|if|match|return|while)\\b"
         },
         {
             "name": "keyword.btl",

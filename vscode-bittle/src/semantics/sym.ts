@@ -170,6 +170,8 @@ function prettyConstValue(value: ConstValue): string {
         return value.value ? 'true' : 'false';
     } else if (value.kind === ConstValueKind.Int) {
         return value.value.toString();
+    } else if (value.kind === ConstValueKind.Null) {
+        return 'null';
     } else if (value.kind === ConstValueKind.String) {
         return JSON.stringify(value.value);
     } else {

@@ -23,6 +23,9 @@ export const symbols = [
     '.',
     ',',
     '...',
+    '..=',
+    '..<',
+    '@',
     '~',
     '|',
     '|=',
@@ -67,6 +70,7 @@ export const symbols = [
 export const keywords = [
     'as',
     'break',
+    'case',
     'const',
     'continue',
     'do',
@@ -78,6 +82,7 @@ export const keywords = [
     'func',
     'if',
     'include',
+    'match',
     'null',
     'return',
     'sizeof',
@@ -87,6 +92,7 @@ export const keywords = [
     'union',
     'var',
     'while',
+    '_',
 ] as const;
 
 export const tokenKinds = [

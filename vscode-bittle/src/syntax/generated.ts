@@ -30,6 +30,9 @@ export enum AstNodeTypes {
     BlockStmt = 'BlockStmt',
     LocalDecl = 'LocalDecl',
     IfStmt = 'IfStmt',
+    MatchStmt = 'MatchStmt',
+    MatchBody = 'MatchBody',
+    MatchCase = 'MatchCase',
     WhileStmt = 'WhileStmt',
     ForStmt = 'ForStmt',
     ReturnStmt = 'ReturnStmt',
@@ -53,6 +56,12 @@ export enum AstNodeTypes {
     RecordExpr = 'RecordExpr',
     FieldInitList = 'FieldInitList',
     FieldInit = 'FieldInit',
+    GroupedPattern = 'GroupedPattern',
+    LiteralPattern = 'LiteralPattern',
+    NamePattern = 'NamePattern',
+    WildcardPattern = 'WildcardPattern',
+    VarPattern = 'VarPattern',
+    RangePattern = 'RangePattern',
     BoolLiteral = 'BoolLiteral',
     NullLiteral = 'NullLiteral',
     IntLiteral = 'IntLiteral',
@@ -334,7 +343,7 @@ export class BlockStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['{']);
     }
     get stmtNodes(): StmtNode[] {
-        return this.getAstNodesOfType<StmtNode>(undefined, ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodesOfType<StmtNode>(undefined, ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
     get rBraceToken(): TokenNode<'}'> | undefined {
         return this.getTokenOfType(undefined, ['}']);
@@ -377,13 +386,55 @@ export class IfStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [')']);
     }
     get then(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('then', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('then', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
     get elseToken(): TokenNode<'else'> | undefined {
         return this.getTokenOfType(undefined, ['else']);
     }
     get else(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('else', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('else', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+    }
+}
+export class MatchStmtNode extends AstNode {
+    get matchToken(): TokenNode<'match'> | undefined {
+        return this.getTokenOfType(undefined, ['match']);
+    }
+    get lParToken(): TokenNode<'('> | undefined {
+        return this.getTokenOfType(undefined, ['(']);
+    }
+    get value(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
+    get rParToken(): TokenNode<')'> | undefined {
+        return this.getTokenOfType(undefined, [')']);
+    }
+    get body(): MatchBodyNode | undefined {
+        return this.getAstNodeOfType<MatchBodyNode>('body', ['MatchBody']);
+    }
+}
+export class MatchBodyNode extends AstNode {
+    get lBraceToken(): TokenNode<'{'> | undefined {
+        return this.getTokenOfType(undefined, ['{']);
+    }
+    get matchCaseNodes(): MatchCaseNode[] {
+        return this.getAstNodesOfType<MatchCaseNode>(undefined, ['MatchCase']);
+    }
+    get rBraceToken(): TokenNode<'}'> | undefined {
+        return this.getTokenOfType(undefined, ['}']);
+    }
+}
+export class MatchCaseNode extends AstNode {
+    get caseToken(): TokenNode<'case'> | undefined {
+        return this.getTokenOfType(undefined, ['case']);
+    }
+    get pattern(): PatternNode | undefined {
+        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern']);
+    }
+    get colonToken(): TokenNode<':'> | undefined {
+        return this.getTokenOfType(undefined, [':']);
+    }
+    get body(): StmtNode | undefined {
+        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
 }
 export class WhileStmtNode extends AstNode {
@@ -400,7 +451,7 @@ export class WhileStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [')']);
     }
     get body(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
 }
 export class ForStmtNode extends AstNode {
@@ -411,7 +462,7 @@ export class ForStmtNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get init(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('init', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('init', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
     get semicolonToken(): TokenNode<';'> | undefined {
         return this.getTokenOfType(undefined, [';']);
@@ -426,7 +477,7 @@ export class ForStmtNode extends AstNode {
         return this.getTokenOfType(undefined, [')']);
     }
     get body(): StmtNode | undefined {
-        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
+        return this.getAstNodeOfType<StmtNode>('body', ['BlockStmt', 'ConstDecl', 'LocalDecl', 'IfStmt', 'MatchStmt', 'WhileStmt', 'ForStmt', 'ReturnStmt', 'BreakStmt', 'ContinueStmt', 'ExprStmt']);
     }
 }
 export class ReturnStmtNode extends AstNode {
@@ -642,6 +693,54 @@ export class FieldInitNode extends AstNode {
         return this.getAstNodeOfType<ExprNode>('value', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
     }
 }
+export class GroupedPatternNode extends AstNode {
+    get lParToken(): TokenNode<'('> | undefined {
+        return this.getTokenOfType(undefined, ['(']);
+    }
+    get pattern(): PatternNode | undefined {
+        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern']);
+    }
+    get rParToken(): TokenNode<')'> | undefined {
+        return this.getTokenOfType(undefined, [')']);
+    }
+}
+export class LiteralPatternNode extends AstNode {
+    get literalNode(): LiteralNode | undefined {
+        return this.getAstNodeOfType<LiteralNode>(undefined, ['BoolLiteral', 'NullLiteral', 'IntLiteral', 'CharLiteral', 'StringLiteral']);
+    }
+}
+export class NamePatternNode extends AstNode {
+    get identifierToken(): TokenNode<'identifier'> | undefined {
+        return this.getTokenOfType(undefined, ['identifier']);
+    }
+}
+export class WildcardPatternNode extends AstNode {
+    get _Token(): TokenNode<'_'> | undefined {
+        return this.getTokenOfType(undefined, ['_']);
+    }
+}
+export class VarPatternNode extends AstNode {
+    get name(): TokenNode<'identifier'> | undefined {
+        return this.getTokenOfType('name', ['identifier']);
+    }
+    get atToken(): TokenNode<'@'> | undefined {
+        return this.getTokenOfType(undefined, ['@']);
+    }
+    get pattern(): PatternNode | undefined {
+        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern']);
+    }
+}
+export class RangePatternNode extends AstNode {
+    get lower(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('lower', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
+    get dotDotDotToken(): TokenNode<'...'> | undefined {
+        return this.getTokenOfType(undefined, ['...']);
+    }
+    get upper(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('upper', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
+}
 export class BoolLiteralNode extends AstNode {
     get trueToken(): TokenNode<'true'> | undefined {
         return this.getTokenOfType(undefined, ['true']);
@@ -723,6 +822,7 @@ export enum StmtNodeTypes {
     ConstDecl = 'ConstDecl',
     LocalDecl = 'LocalDecl',
     IfStmt = 'IfStmt',
+    MatchStmt = 'MatchStmt',
     WhileStmt = 'WhileStmt',
     ForStmt = 'ForStmt',
     ReturnStmt = 'ReturnStmt',
@@ -736,6 +836,7 @@ export type StmtNode =
     | ConstDeclNode
     | LocalDeclNode
     | IfStmtNode
+    | MatchStmtNode
     | WhileStmtNode
     | ForStmtNode
     | ReturnStmtNode
@@ -773,6 +874,23 @@ export type ExprNode =
     | IndexExprNode
     | FieldExprNode
     | CastExprNode;
+
+export enum PatternNodeTypes {
+    GroupedPattern = 'GroupedPattern',
+    LiteralPattern = 'LiteralPattern',
+    NamePattern = 'NamePattern',
+    WildcardPattern = 'WildcardPattern',
+    VarPattern = 'VarPattern',
+    RangePattern = 'RangePattern',
+};
+
+export type PatternNode =
+    | GroupedPatternNode
+    | LiteralPatternNode
+    | NamePatternNode
+    | WildcardPatternNode
+    | VarPatternNode
+    | RangePatternNode;
 
 export enum LiteralNodeTypes {
     BoolLiteral = 'BoolLiteral',
@@ -815,6 +933,9 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.BlockStmt: return new BlockStmtNode(syntax);
         case AstNodeTypes.LocalDecl: return new LocalDeclNode(syntax);
         case AstNodeTypes.IfStmt: return new IfStmtNode(syntax);
+        case AstNodeTypes.MatchStmt: return new MatchStmtNode(syntax);
+        case AstNodeTypes.MatchBody: return new MatchBodyNode(syntax);
+        case AstNodeTypes.MatchCase: return new MatchCaseNode(syntax);
         case AstNodeTypes.WhileStmt: return new WhileStmtNode(syntax);
         case AstNodeTypes.ForStmt: return new ForStmtNode(syntax);
         case AstNodeTypes.ReturnStmt: return new ReturnStmtNode(syntax);
@@ -838,6 +959,12 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.RecordExpr: return new RecordExprNode(syntax);
         case AstNodeTypes.FieldInitList: return new FieldInitListNode(syntax);
         case AstNodeTypes.FieldInit: return new FieldInitNode(syntax);
+        case AstNodeTypes.GroupedPattern: return new GroupedPatternNode(syntax);
+        case AstNodeTypes.LiteralPattern: return new LiteralPatternNode(syntax);
+        case AstNodeTypes.NamePattern: return new NamePatternNode(syntax);
+        case AstNodeTypes.WildcardPattern: return new WildcardPatternNode(syntax);
+        case AstNodeTypes.VarPattern: return new VarPatternNode(syntax);
+        case AstNodeTypes.RangePattern: return new RangePatternNode(syntax);
         case AstNodeTypes.BoolLiteral: return new BoolLiteralNode(syntax);
         case AstNodeTypes.NullLiteral: return new NullLiteralNode(syntax);
         case AstNodeTypes.IntLiteral: return new IntLiteralNode(syntax);

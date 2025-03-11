@@ -3,14 +3,14 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LocalDeclNode, NameExprNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PointerTypeNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, WhileStmtNode } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
 import { ConstEvaluator } from './constEvaluator';
 import { Scope } from './scope';
 import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
-import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypesWithCoercion, Type, typeConvertible, typeEq, TypeKind, typeLayout } from './type';
+import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, tryUnifyTypesWithCoercion, Type, typeConvertible, typeEq, TypeKind, typeLayout, unifyTypes } from './type';
 
 export type ErrorLocation = {
     file: string;
@@ -489,7 +489,7 @@ export class Elaborator {
         sym.value = value;
     }
 
-    private defineLocalSym(declNode: LocalDeclNode | FuncParamNode, nameNode: TokenNode | Nullish, type: Type): LocalSym {
+    private defineLocalSym(declNode: LocalDeclNode | FuncParamNode | VarPatternNode, nameNode: TokenNode | Nullish, type: Type): LocalSym {
         if (!nameNode) {
             return {
                 kind: SymKind.Local,
@@ -618,6 +618,19 @@ export class Elaborator {
             this.reportError(node, `Expected a constant expression.`);
         }
         return value;
+    }
+
+    constEvalInferInt(node: ExprNode | undefined, { typeHint }: { typeHint: Type | undefined }): bigint | undefined {
+        if (!node) {
+            return;
+        }
+        this.elabExprInferInt(node, { typeHint });
+        const value = this.getConstValue(node);
+        if (!value) {
+            this.reportError(node, `Expected a constant expression.`);
+            return undefined;
+        }
+        return value?.kind === ConstValueKind.Int ? value.value : undefined;
     }
 
     constEvalInt64(node: ExprNode | undefined): bigint | undefined {
@@ -1087,6 +1100,8 @@ export class Elaborator {
             this.elabLocalDecl(node);
         } else if (node instanceof IfStmtNode) {
             this.elabIfStmt(node);
+        } else if (node instanceof MatchStmtNode) {
+            this.elabMatchStmt(node);
         } else if (node instanceof WhileStmtNode) {
             this.elabWhileStmt(node);
         } else if (node instanceof ForStmtNode) {
@@ -1129,7 +1144,7 @@ export class Elaborator {
         const inferedType = initNode ? this.elabExprInfer(initNode, { typeHint: declaredType }) : undefined;
 
         if (declaredType && inferedType) {
-            this.checkType(initNode!, declaredType);
+            this.checkExprType(initNode!, declaredType);
         }
         let type = declaredType ?? inferedType;
 
@@ -1152,6 +1167,29 @@ export class Elaborator {
         this.elabExprBool(condNode);
         this.elabStmtWithScope(thenNode);
         this.elabStmtWithScope(elseNode);
+    }
+
+    private elabMatchStmt(node: MatchStmtNode) {
+        const valueNode = node.value;
+        const bodyNode = node.body;
+
+        const valueType = this.elabExprInfer(valueNode, { typeHint: undefined });
+
+        this.enterScope(node);
+        for (const caseNode of bodyNode?.matchCaseNodes ?? []) {
+            this.elabMatchCase(caseNode, valueType);
+        }
+        this.exitScope();
+    }
+
+    private elabMatchCase(caseNode: MatchCaseNode, valueType: Type) {
+        const patternNode = caseNode.pattern;
+        const bodyNode = caseNode.body;
+
+        this.enterScope(caseNode);
+        this.elabPatternExpect(patternNode, valueType);
+        this.elabStmt(bodyNode);
+        this.exitScope();
     }
 
     private elabWhileStmt(node: WhileStmtNode) {
@@ -1200,7 +1238,7 @@ export class Elaborator {
             return mkErrorType();
 
         this.elabExprInfer(node, { typeHint: expectedType });
-        this.checkType(node, expectedType);
+        this.checkExprType(node, expectedType);
     }
 
     private elabExprBool(node: ExprNode | Nullish): Type {
@@ -1213,7 +1251,7 @@ export class Elaborator {
             return mkErrorType();
 
         this.elabExprInfer(node, { typeHint });
-        return this.checkTypeInt(node);
+        return this.checkExprTypeInt(node);
     }
 
     private elabExprInfer(node: ExprNode | Nullish, { typeHint }: { typeHint: Type | undefined }): Type {
@@ -1295,20 +1333,7 @@ export class Elaborator {
     }
 
     private elabLiteralExpr(node: LiteralExprNode, typeHint: Type | undefined): Type {
-        const literal = node.literalNode!;
-        if (literal instanceof BoolLiteralNode) {
-            return mkBoolType();
-        } else if (literal instanceof IntLiteralNode) {
-            return typeHint?.kind === TypeKind.Int ? typeHint : mkIntType(64);
-        } else if (literal instanceof CharLiteralNode) {
-            return mkIntType(8);
-        } else if (literal instanceof StringLiteralNode) {
-            return mkPointerType(mkIntType(8));
-        } else if (literal instanceof NullLiteralNode) {
-            return mkPointerType(mkVoidType());
-        } else {
-            unreachable(literal);
-        }
+        return this.elabLiteral(node.literalNode!, typeHint);
     }
 
     private elabArrayExpr(node: ArrayExprNode, typeHint: Type | undefined): Type {
@@ -1404,7 +1429,7 @@ export class Elaborator {
                 const rightNode = node.right;
                 const leftType = this.elabExprInferInt(leftNode, { typeHint });
                 const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
-                return this.unifyTypes(node, leftNode, rightNode);
+                return this.unifyExprTypes(node, leftNode, rightNode);
             }
             case '==':
             case '!=':
@@ -1416,7 +1441,7 @@ export class Elaborator {
                 const rightNode = node.right;
                 const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
                 const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
-                const cmpType = this.unifyTypes(node, leftNode, rightNode);
+                const cmpType = this.unifyExprTypes(node, leftNode, rightNode);
                 if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
                     this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
                 }
@@ -1441,7 +1466,7 @@ export class Elaborator {
         const elseNode = node.else;
         const thenType = this.elabExprInfer(thenNode, { typeHint });
         const _elseType = this.elabExprInfer(elseNode, { typeHint: thenType });
-        return this.unifyTypes(node, thenNode, elseNode);
+        return this.unifyExprTypes(node, thenNode, elseNode);
     }
 
     private elabCallExpr(node: CallExprNode): Type {
@@ -1696,23 +1721,142 @@ export class Elaborator {
     }
 
     //==============================================================================
-    //== Type checking
+    //== Patterns
 
-    private canCoerce(node: ExprNode, expected: Type) {
-        return canCoerce(this.getType(node), expected);
+    private elabPatternExpect(node: PatternNode | Nullish, expectedType: Type) {
+        if (!node)
+            return;
+        const type = this.elabPatternInfer(node, { typeHint: expectedType });
+        this.checkPatternType(node, expectedType);
+        return type;
     }
 
-    private unifyTypes(node: ExprNode, e1: ExprNode | Nullish, e2: ExprNode | Nullish): Type {
-        const t1 = e1 ? this.getType(e1) : mkErrorType();
-        const t2 = e2 ? this.getType(e2) : mkErrorType();
-        return tryUnifyTypesWithCoercion(t1, t2, () => {
-            this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+    private elabPatternInfer(node: PatternNode | Nullish, { typeHint }: { typeHint: Type }): Type {
+        if (!node)
+            return mkErrorType();
+        return this.trackTyping(node, () => {
+            if (node instanceof GroupedPatternNode) {
+                return this.elabGroupedPattern(node, typeHint);
+            } else if (node instanceof LiteralPatternNode) {
+                return this.elabLiteralPattern(node, typeHint);
+            } else if (node instanceof NamePatternNode) {
+                return this.elabIdentifierPattern(node, typeHint);
+            } else if (node instanceof WildcardPatternNode) {
+                return this.elabWildcardPattern(node, typeHint);
+            } else if (node instanceof VarPatternNode) {
+                return this.elabVarPattern(node, typeHint);
+            } else if (node instanceof RangePatternNode) {
+                return this.elabRangePattern(node, typeHint);
+            } else {
+                unreachable(node);
+            }
         });
     }
 
-    private checkType(node: ExprNode, expected: Type) {
+    private elabGroupedPattern(node: GroupedPatternNode, typeHint: Type): Type {
+        return this.elabPatternInfer(node.pattern, { typeHint });
+    }
+
+    private elabLiteralPattern(node: LiteralPatternNode, typeHint: Type): Type {
+        return this.elabLiteral(node.literalNode!, typeHint);
+    }
+
+    private elabIdentifierPattern(node: NamePatternNode, typeHint: Type): Type {
+        const nameNode = node.identifierToken!;
+        const sym = this.resolveName(nameNode);
+        if (!sym) {
+            return mkErrorType();
+        }
+        if (sym.kind !== SymKind.Const) {
+            this.reportError(nameNode, `Pattern identifier '${nameNode.text}' must refer to a constant.`);
+            return mkErrorType();
+        }
+        const constType = sym.value?.type ?? mkErrorType();
+        return constType;
+    }
+
+    private elabWildcardPattern(node: WildcardPatternNode, typeHint: Type): Type {
+        return typeHint;
+    }
+
+    private elabVarPattern(node: VarPatternNode, typeHint: Type): Type {
+        const nameNode = node.name;
+        const subpattern = node.pattern;
+
+        const patternType = this.elabPatternInfer(subpattern, { typeHint: typeHint });
+
+        const sym = this.defineLocalSym(node, nameNode, patternType);
+        return patternType;
+    }
+
+    private elabRangePattern(node: RangePatternNode, typeHint: Type): Type {
+        const lowerNode = node.lower;
+        const upperNode = node.upper;
+
+        if (!lowerNode && !upperNode) {
+            this.reportError(node, `Range pattern must have at least one bound.`);
+            return mkErrorType();
+        }
+
+        const lowerValue = this.constEvalInfer(lowerNode, { typeHint });
+        const upperValue = this.constEvalInfer(upperNode, { typeHint });
+
+        const lowerType = lowerNode ? this.getType(lowerNode) : mkErrorType();
+        const upperType = upperNode ? this.getType(upperNode) : mkErrorType();
+        const type = tryUnifyTypes(lowerType, upperType, () => {
+            this.reportTypeUnificationError(node, lowerType, upperType);
+        });
+
+        if (isNonIntegerType(type)) {
+            this.reportError(node, `Integer range pattern expected.`);
+        }
+
+        if (lowerValue !== undefined && upperValue !== undefined) {
+            if (lowerValue > upperValue) {
+                this.reportWarning(node, `Range '${lowerValue}..${upperValue}' is empty.`);
+            }
+        }
+
+        return type;
+    }
+
+    //==============================================================================
+    //== Literals
+
+    private elabLiteral(node: LiteralNode, typeHint: Type | undefined): Type {
+        if (node instanceof BoolLiteralNode) {
+            return mkBoolType();
+        } else if (node instanceof IntLiteralNode) {
+            return typeHint?.kind === TypeKind.Int ? typeHint : mkIntType(64);
+        } else if (node instanceof CharLiteralNode) {
+            return mkIntType(8);
+        } else if (node instanceof StringLiteralNode) {
+            return mkPointerType(mkIntType(8));
+        } else if (node instanceof NullLiteralNode) {
+            return mkPointerType(mkVoidType());
+        } else {
+            unreachable(node);
+        }
+    }
+
+    //==============================================================================
+    //== Type checking
+
+    private canCoerceExpr(node: ExprNode, expected: Type) {
+        return canCoerce(this.getType(node), expected);
+    }
+
+    private unifyExprTypes(node: AstNode, e1: ExprNode | Nullish, e2: ExprNode | Nullish): Type {
+        const t1 = e1 ? this.getType(e1) : mkErrorType();
+        const t2 = e2 ? this.getType(e2) : mkErrorType();
+        return tryUnifyTypesWithCoercion(t1, t2, () => {
+            this.reportTypeUnificationError(node, t1, t2);
+        });
+    }
+
+    private checkExprType(node: ExprNode, expected: Type) {
         const actual = this.getType(node);
-        if (this.canCoerce(node, expected)) {
+        if (this.canCoerceExpr(node, expected)) {
             return;
         }
 
@@ -1720,15 +1864,15 @@ export class Elaborator {
             return;
         }
         if (!typeLooseEq(actual, expected)) {
-            this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
+            this.reportTypeError(node, expected, actual);
         }
     }
 
-    private checkTypeInt(node: ExprNode): Type {
+    private checkExprTypeInt(node: ExprNode): Type {
         const actual = this.getType(node);
         for (let i = 1; i <= 8; i *= 2) {
             const target = mkIntType(i * 8);
-            if (this.canCoerce(node, target)) {
+            if (this.canCoerceExpr(node, target)) {
                 return target;
             }
         }
@@ -1736,20 +1880,35 @@ export class Elaborator {
         return mkErrorType();
     }
 
+    private checkPatternType(node: PatternNode, expected: Type) {
+        const actual = this.getType(node);
+        if (!typeLooseEq(actual, expected)) {
+            this.reportTypeError(node, expected, actual);
+        }
+    }
+
+    private reportTypeError(node: AstNode, expected: Type, actual: Type) {
+        this.reportError(node, `Type mismatch. Expected '${prettyType(expected)}', got '${prettyType(actual)}'.`);
+    }
+
+    private reportTypeUnificationError(node: AstNode, t1: Type, t2: Type) {
+        this.reportError(node, `Type mismatch. Cannot unify '${prettyType(t1)}' and '${prettyType(t2)}'.`);
+    }
+
     //==============================================================================
     //== Helper methods
 
-    private setType(node: ExprNode | TypeNode, type: Type) {
+    private setType(node: ExprNode | PatternNode | TypeNode, type: Type) {
         this.nodeTypeMap.set(node.syntax, type);
     }
 
-    private getType(node: ExprNode | TypeNode): Type {
+    private getType(node: ExprNode | PatternNode | TypeNode): Type {
         const type = this.nodeTypeMap.get(node.syntax);
         assert(type, `Missing type for node: ${node.syntax.type}`);
         return type;
     }
 
-    private trackTyping(node: ExprNode | TypeNode, f: () => Type): Type {
+    private trackTyping(node: ExprNode | PatternNode | TypeNode, f: () => Type): Type {
         const type = f();
         this.setType(node, type);
         return type;
@@ -1820,6 +1979,10 @@ function isLvalue(node: ExprNode | Nullish): boolean {
 
 function isInvalidReturnType(type: Type): boolean {
     return type.kind !== TypeKind.Err && !isValidReturnType(type);
+}
+
+function isNonIntegerType(type: Type): boolean {
+    return type.kind !== TypeKind.Err && type.kind !== TypeKind.Int;
 }
 
 function typeLooseEq(t1: Type, t2: Type): boolean {
