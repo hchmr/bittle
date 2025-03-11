@@ -169,6 +169,9 @@ func type_align(type: *Type): Int {
     if (type.kind == Type_Record) {
         var type = type as *RecordType;
         return list_len(type.sym.fields) == 0 ? -1 : type.sym.align;
+    } else if (type.kind == Type_Arr) {
+        var type = type as *ArrType;
+        return type_align(type.elem);
     } else if (type.kind == Type_RestParam) {
         return 8;
     } else {
