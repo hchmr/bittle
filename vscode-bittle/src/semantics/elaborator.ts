@@ -312,7 +312,7 @@ export class Elaborator {
         return;
     }
 
-    private declareFuncSym(declNode: FuncDeclNode, nameNode: TokenNode | Nullish, params: FuncParamSym[], returnType: Type, restParamNode: RestFuncParamNode | undefined): FuncSym {
+    private declareFuncSym(declNode: FuncDeclNode, nameNode: TokenNode | Nullish, params: FuncParamSym[], returnType: Type, restParamNode: RestFuncParamNode | undefined, isDefinition: boolean): FuncSym {
         const isVariadic = !!restParamNode;
         const restParamName = restParamNode?.name?.text;
 
@@ -338,7 +338,7 @@ export class Elaborator {
                 this.reportError(nameNode, `Redefinition of '${existing.name}' with different signature.`);
             } else {
                 this.recordNameIntroduction(existing, nameNode);
-                existing.origins.push(this.createOrigin(declNode.syntax, nameNode));
+                existing.origins.push(this.createOrigin(declNode.syntax, nameNode, !isDefinition));
                 return existing;
             }
         }
@@ -346,7 +346,7 @@ export class Elaborator {
             kind: SymKind.Func,
             name: nameNode.text,
             qualifiedName: 'func:' + nameNode.text,
-            origins: [this.createOrigin(declNode.syntax, nameNode)],
+            origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
             isDefined: false,
             params,
             returnType,
@@ -915,7 +915,7 @@ export class Elaborator {
         const innerScope = this.scope;
         this.exitScope();
 
-        const sym = this.declareFuncSym(node, nameNode, params, returnType, restParamNode);
+        const sym = this.declareFuncSym(node, nameNode, params, returnType, restParamNode, !!bodyNode);
 
         if (name === 'main') {
             this.verify_main_signature(node, sym);
