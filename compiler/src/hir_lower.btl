@@ -860,6 +860,9 @@ func lower_expr_stmt(ctx: *Context, stmt: *ExprStmt): *HirExpr {
 func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
     if (stmt.kind == Stmt_Block) {
         return lower_block_stmt(ctx, stmt as *BlockStmt);
+    } else if (stmt.kind == Stmt_Const) {
+        // Nothing to do for const statements
+        return mk_skip_stmt(&stmt.pos);
     } else if (stmt.kind == Stmt_Local) {
         return lower_local_stmt(ctx, stmt as *LocalStmt);
     } else if (stmt.kind == Stmt_If) {

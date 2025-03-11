@@ -646,7 +646,7 @@ func p_expr(self: *Parser, max_prec: Int32): *Expr {
 //== Statements
 
 func p_stmt(self: *Parser): *Stmt;
-
+func p_const_decl(self: *Parser): *ConstDecl;
 func p_expr_stmt(self: *Parser): *Stmt;
 
 func p_block(self: *Parser): *Stmt {
@@ -666,7 +666,20 @@ func p_block(self: *Parser): *Stmt {
     return result;
 }
 
-func p_local(self: *Parser): *Stmt {
+func p_const_stmt(self: *Parser): *Stmt {
+    var pos = self.tok.pos;
+    var decl = p_const_decl(self);
+
+    var result: *ConstStmt = calloc(1, sizeof(ConstStmt));
+    *result = ConstStmt {
+        kind: Stmt_Const,
+        pos,
+        decl,
+    };
+    return result;
+}
+
+func p_local_stmt(self: *Parser): *Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Var);
     var name = p_ident(self);
@@ -740,7 +753,7 @@ func p_for_stmt(self: *Parser): *Stmt {
     var init: *Stmt = null;
     if (!eat(self, Tok_Semicolon)) {
         if (at(self, Tok_Var)) {
-            init = p_local(self);
+            init = p_local_stmt(self);
         } else {
             init = p_expr_stmt(self);
         }
@@ -831,8 +844,10 @@ func p_expr_stmt(self: *Parser): *Stmt {
 func p_stmt(self: *Parser): *Stmt {
     if (at(self, Tok_LBrace)) {
         return p_block(self);
+    } else if (at(self, Tok_Const)) {
+        return p_const_stmt(self);
     } else if (at(self, Tok_Var)) {
-        return p_local(self);
+        return p_local_stmt(self);
     } else if (at(self, Tok_If)) {
         return p_if_stmt(self);
     } else if (at(self, Tok_While)) {
@@ -1042,7 +1057,7 @@ func p_enum_decl(self: *Parser): *Decl {
     return result;
 }
 
-func p_const_decl(self: *Parser): *Decl {
+func p_const_decl(self: *Parser): *ConstDecl {
     var pos = self.tok.pos;
     expect(self, Tok_Const);
     var name = p_ident(self);

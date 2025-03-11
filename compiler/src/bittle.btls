@@ -502,8 +502,11 @@ struct RecordExpr: Expr {
 
 // Stmt
 
+struct ConstDecl;
+
 enum StmtKind {
     Stmt_Block,
+    Stmt_Const,
     Stmt_Local,
     Stmt_If,
     Stmt_While,
@@ -521,6 +524,10 @@ struct Stmt {
 
 struct BlockStmt: Stmt {
     stmts: *List, // List<Stmt>
+}
+
+struct ConstStmt: Stmt {
+    decl: *ConstDecl,
 }
 
 struct LocalStmt: Stmt {
