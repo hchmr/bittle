@@ -1286,7 +1286,7 @@ export class Elaborator {
 
         const evaluatedType = this.typeEval(node.type);
         if (this.isUnsizedType(evaluatedType)) {
-            this.reportError(node, `Type has incomplete type.`);
+            this.reportError(node, `Size of type cannot be determined.`);
         }
 
         return resultType;

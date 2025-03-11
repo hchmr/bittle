@@ -745,6 +745,9 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
 func elab_sizeof_expr(ctx: *ElabCtx, expr: *SizeofExpr) {
     var type = eval_type(ctx, expr.type_expr);
     var size = type_size(type);
+    if (size == -1) {
+        die_at(&expr.pos, "Size of type cannot be determined");
+    }
     expr.size = size;
     expr.type = mk_int_type(8);
     expr.const_value = mk_int_const_value(size, expr.type);
