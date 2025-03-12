@@ -4,7 +4,7 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, IsExprNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
@@ -70,6 +70,9 @@ export class Elaborator {
     // Current function
     private currentFunc: FuncSym | undefined;
     private nextLocalIndex: number = 0;
+
+    // Current 'in' expression
+    inExprDepth: number = 0;
 
     // Current pattern
     orPatternDepth: number = 0;
@@ -1283,6 +1286,8 @@ export class Elaborator {
                 return this.elabBinaryExpr(node, typeHint);
             } else if (node instanceof TernaryExprNode) {
                 return this.elabTernaryExpr(node, typeHint);
+            } else if (node instanceof IsExprNode) {
+                return this.elabIsExpr(node);
             } else if (node instanceof CallExprNode) {
                 return this.elabCallExpr(node);
             } else if (node instanceof IndexExprNode) {
@@ -1475,6 +1480,21 @@ export class Elaborator {
         const thenType = this.elabExprInfer(thenNode, { typeHint });
         const _elseType = this.elabExprInfer(elseNode, { typeHint: thenType });
         return this.unifyExprTypes(node, thenNode, elseNode);
+    }
+
+    private elabIsExpr(node: IsExprNode): Type {
+        this.inExprDepth++;
+        try {
+            const exprNode = node.expr;
+            const patternNode = node.pattern;
+
+            const exprType = this.elabExprInfer(exprNode, { typeHint: undefined });
+            this.elabPatternExpect(patternNode, exprType);
+
+            return mkBoolType();
+        } finally {
+            this.inExprDepth--;
+        }
     }
 
     private elabCallExpr(node: CallExprNode): Type {

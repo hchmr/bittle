@@ -887,6 +887,16 @@ export class Parser extends ParserBase {
         this.finishNode(CompositeNodeTypes.TernaryExpr);
     }
 
+    isExpr(checkpoint: Checkpoint) {
+        this.beginNodeAt(CompositeNodeTypes.IsExpr, checkpoint);
+        this.groupExistingChildren('expr');
+        this.expect('is');
+        this.beginField('pattern');
+        this.innerPattern();
+        this.finishField('pattern');
+        this.finishNode(CompositeNodeTypes.IsExpr);
+    }
+
     callExpr(checkpoint: Checkpoint) {
         this.beginNodeAt(CompositeNodeTypes.CallExpr, checkpoint);
         this.groupExistingChildren('callee');
@@ -1299,6 +1309,7 @@ const ledTable: Record<TokenKind, Led> = (function () {
         mkRow('?', Prec.Cond, Assoc.Right, (parser, led, checkpoint) => parser.ternaryExpr(led.rbp, checkpoint)),
         mkBinaryOp('||', Prec.CondOr, Assoc.Left),
         mkBinaryOp('&&', Prec.CondAnd, Assoc.Left),
+        mkRow('is', Prec.CondAnd, Assoc.None, (parser, _, checkpoint) => parser.isExpr(checkpoint)),
         mkBinaryOp('|', Prec.BitOr, Assoc.Left),
         mkBinaryOp('^', Prec.BitXor, Assoc.Left),
         mkBinaryOp('&', Prec.BitAnd, Assoc.Left),

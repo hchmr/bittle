@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { ArrayExprNode, BinaryExprNode, BoolLiteralNode, CallExprNode, CastExprNode, CharLiteralNode, ExprNode, FieldExprNode, GroupedExprNode, IndexExprNode, IntLiteralNode, LiteralExprNode, NameExprNode, NullLiteralNode, RecordExprNode, SizeofExprNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BoolLiteralNode, CallExprNode, CastExprNode, CharLiteralNode, ExprNode, FieldExprNode, GroupedExprNode, IndexExprNode, IntLiteralNode, IsExprNode, LiteralExprNode, NameExprNode, NullLiteralNode, RecordExprNode, SizeofExprNode, StringLiteralNode, TernaryExprNode, TypeNode, UnaryExprNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { parseChar, parseString } from '../utils/literalParsing';
 import { checkedMkIntConstValue, constCoerce, ConstValue, constValueCast, ConstValueKind, mkBoolConstValue, mkIntConstValue, mkNullConstValue, mkStringConstValue } from './const';
@@ -58,6 +58,8 @@ export class ConstEvaluator {
             return this.evalBinaryExpr(node);
         } else if (node instanceof TernaryExprNode) {
             return this.evalTernaryExpr(node);
+        } else if (node instanceof IsExprNode) {
+            return this.evalIsExpr(node);
         } else if (node instanceof CallExprNode) {
             return this.evalCallExpr(node);
         } else if (node instanceof IndexExprNode) {
@@ -267,6 +269,10 @@ export class ConstEvaluator {
             const b = this.eval(node.else);
             return b && constCoerce(b, resultType);
         }
+    }
+
+    private evalIsExpr(node: IsExprNode): ConstValue | undefined {
+        return undefined;
     }
 
     private evalCallExpr(node: CallExprNode): ConstValue | undefined {

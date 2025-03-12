@@ -81,6 +81,7 @@ export const keywords = [
     'for',
     'func',
     'if',
+    'is',
     'include',
     'match',
     'null',

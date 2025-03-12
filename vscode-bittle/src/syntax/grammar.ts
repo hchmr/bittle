@@ -302,6 +302,7 @@ export const grammar = createGrammar({
         $.RecordExpr,
         $.BinaryExpr,
         $.TernaryExpr,
+        $.IsExpr,
         $.UnaryExpr,
         $.IndexExpr,
         $.FieldExpr,
@@ -367,6 +368,12 @@ export const grammar = createGrammar({
         label('then', $.Expr),
         ':',
         label('else', $.Expr),
+    ),
+
+    IsExpr: $ => seq(
+        label('expr', $.Expr),
+        'is',
+        label('pattern', $.Pattern),
     ),
 
     IndexExpr: $ => seq(

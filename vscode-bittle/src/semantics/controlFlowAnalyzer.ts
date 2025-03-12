@@ -1,6 +1,6 @@
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
-import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ConstDeclNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, GroupedPatternNode, IfStmtNode, IndexExprNode, LiteralExprNode, LiteralPatternNode, LocalDeclNode, MatchStmtNode, NameExprNode, NamePatternNode, OrPatternNode, PatternNode, RangePatternNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ConstDeclNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, GroupedPatternNode, IfStmtNode, IndexExprNode, IsExprNode, LiteralExprNode, LiteralPatternNode, LocalDeclNode, MatchStmtNode, NameExprNode, NamePatternNode, OrPatternNode, PatternNode, RangePatternNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
 import { Nullish, unreachable } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
@@ -268,12 +268,14 @@ class ControlFlowAnalyzer {
             return this.analyzeLiteralExpr(node, state);
         } else if (node instanceof ArrayExprNode) {
             return this.analyzeArrayExpr(node, state);
+        } else if (node instanceof UnaryExprNode) {
+            return this.analyzeUnaryExpr(node, state);
         } else if (node instanceof BinaryExprNode) {
             return this.analyzeBinaryExpr(node, state);
         } else if (node instanceof TernaryExprNode) {
             return this.analyzeTernaryExpr(node, state);
-        } else if (node instanceof UnaryExprNode) {
-            return this.analyzeUnaryExpr(node, state);
+        } else if (node instanceof IsExprNode) {
+            return this.analyzeIsExpr(node, state);
         } else if (node instanceof CallExprNode) {
             return this.analyzeCallExpr(node, state);
         } else if (node instanceof IndexExprNode) {
@@ -341,6 +343,10 @@ class ControlFlowAnalyzer {
             const elseState = this.analyzeExpr(elseNode, state);
             return executionStateUnion(thenState, elseState);
         }
+    }
+
+    private analyzeIsExpr(node: IsExprNode, state: ExecutionState): ExecutionState {
+        return this.analyzeExpr(node.expr, state);
     }
 
     private analyzeUnaryExpr(node: UnaryExprNode, state: ExecutionState): ExecutionState {
