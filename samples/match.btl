@@ -12,6 +12,8 @@
 //# stdout = x is <= 5 or >= 1000
 //# stdout = x is true
 //# stdout = x is false
+//# stdout = x is null
+//# stdout = x is not null
 
 extern func printf(format: *Char, ...): Int32;
 
@@ -54,6 +56,17 @@ func matchBoolTest(x: Bool) {
     }
 }
 
+func matchPointerTest(x: *Char) {
+    match (x) {
+        case null: {
+            printf("x is null\n");
+        }
+        case other @ _: {
+            printf("x is not null\n");
+        }
+    }
+}
+
 func main(): Int32 {
     matchIntegerTest(42);
     matchIntegerTest(10);
@@ -69,6 +82,7 @@ func main(): Int32 {
     matchIntegerTest(10000);
     matchBoolTest(true);
     matchBoolTest(false);
-
+    matchPointerTest(null);
+    matchPointerTest("hey");
     return 0;
 }

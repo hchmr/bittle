@@ -1868,7 +1868,7 @@ export class Elaborator {
         } else if (node instanceof StringLiteralNode) {
             return mkPointerType(mkIntType(8));
         } else if (node instanceof NullLiteralNode) {
-            return mkPointerType(mkVoidType());
+            return typeHint?.kind === TypeKind.Ptr ? typeHint : mkPointerType(mkVoidType());
         } else {
             unreachable(node);
         }
