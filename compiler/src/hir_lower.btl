@@ -69,6 +69,10 @@ func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
     return result;
 }
 
+func hir_mk_bool_expr(value: Bool, pos: *Pos): *HirIntExpr {
+    return hir_mk_int_expr(value as Int, mk_bool_type(), pos);
+}
+
 func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
     var result: *HirStrExpr = calloc(1, sizeof(HirStrExpr));
     *result = HirStrExpr {
@@ -358,7 +362,7 @@ func lower_wildcard_pattern(ctx: *Context, lhs: *HirExpr, pattern: *WildcardPatt
         to
             1
     */
-    return hir_mk_int_expr(1, mk_bool_type(), &pattern.pos);
+    return hir_mk_bool_expr(true, &pattern.pos);
 }
 
 func lower_var_pattern(ctx: *Context, lhs: *HirExpr, pattern: *VarPattern): *HirExpr {
@@ -390,14 +394,14 @@ func lower_range_pattern(ctx: *Context, lhs: *HirExpr, pattern: *RangePattern): 
     var upper_check = upper ? hir_mk_binary_op_expr(HirOp_Le, lhs, upper, mk_bool_type()) : null;
 
     if (lower_check && upper_check) {
-        var false_ = hir_mk_int_expr(0, mk_bool_type(), &pattern.pos);
+        var false_ = hir_mk_bool_expr(false, &pattern.pos);
         return hir_mk_cond_expr(lower_check, upper_check, false_, &pattern.pos);
     } else if (lower_check) {
         return lower_check;
     } else if (upper_check) {
         return upper_check;
     } else {
-        return hir_mk_int_expr(1, mk_bool_type(), &pattern.pos);
+        return hir_mk_bool_expr(true, &pattern.pos);
     }
 }
 
@@ -411,7 +415,7 @@ func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirEx
 
     var n_patterns = list_len(pattern.patterns);
     if (n_patterns == 0) {
-        return hir_mk_int_expr(0, mk_bool_type(), &pattern.pos);
+        return hir_mk_bool_expr(false, &pattern.pos);
     }
 
     var last_index = n_patterns - 1;
@@ -422,7 +426,7 @@ func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirEx
         var current_pattern: *Pattern = list_get(pattern.patterns, i);
         var current = lower_pattern(ctx, lhs, current_pattern);
 
-        acc = hir_mk_cond_expr(current, hir_mk_int_expr(1, mk_bool_type(), &pattern.pos), acc, &pattern.pos);
+        acc = hir_mk_cond_expr(current, hir_mk_bool_expr(true, &pattern.pos), acc, &pattern.pos);
     }
 
     return acc;
