@@ -425,6 +425,7 @@ enum PatternKind {
     Pattern_Wildcard,
     Pattern_Var,
     Pattern_Range,
+    Pattern_Or,
 }
 
 struct Pattern {
@@ -461,6 +462,10 @@ struct RangePattern: Pattern {
     upper: *Expr,
     lower_value: *ConstValue,
     upper_value: *ConstValue,
+}
+
+struct OrPattern: Pattern {
+    patterns: *List, // List<Pattern>
 }
 
 // Expr

@@ -3,13 +3,13 @@
 //# stdout = x matches the constant 'ZERO' (0)
 //# stdout = x is <= 20 and >= 32, bound to n = 26
 //# stdout = x is <= 100 and >= 200
-//# stdout = x is >= 1000
-//# stdout = x is <= 5
+//# stdout = x is <= 5 or >= 1000
+//# stdout = x is <= 5 or >= 1000
 //# stdout = x = 6 didn't match any specific case
 //# stdout = x = 7 didn't match any specific case
 //# stdout = x = 8 didn't match any specific case
 //# stdout = x = 9 didn't match any specific case
-//# stdout = x is >= 1000
+//# stdout = x is <= 5 or >= 1000
 //# stdout = x is true
 //# stdout = x is false
 
@@ -34,11 +34,8 @@ func matchIntegerTest(x: Int) {
         case 100...200: {
             printf("x is <= 100 and >= 200\n");
         }
-        case 1000...: {
-            printf("x is >= 1000\n");
-        }
-        case ...5: {
-            printf("x is <= 5\n");
+        case 1000... | ...5: {
+            printf("x is <= 5 or >= 1000\n");
         }
         case other @ _: {
             printf("x = %d didn't match any specific case\n", other);

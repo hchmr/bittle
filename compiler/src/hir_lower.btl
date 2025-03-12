@@ -401,6 +401,33 @@ func lower_range_pattern(ctx: *Context, lhs: *HirExpr, pattern: *RangePattern): 
     }
 }
 
+func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirExpr {
+    /*
+        Desugar
+            lhs is p1 | p2 | p3
+        to
+            lhs is p1 ? 1 : (lhs is p2 ? 1 : lhs is p3)
+    */
+
+    var n_patterns = list_len(pattern.patterns);
+    if (n_patterns == 0) {
+        return hir_mk_int_expr(0, mk_bool_type(), &pattern.pos);
+    }
+
+    var last_index = n_patterns - 1;
+    var last_pattern: *Pattern = list_get(pattern.patterns, last_index);
+    var acc = lower_pattern(ctx, lhs, last_pattern);
+
+    for (var i = last_index - 1; i >= 0; i -= 1) {
+        var current_pattern: *Pattern = list_get(pattern.patterns, i);
+        var current = lower_pattern(ctx, lhs, current_pattern);
+
+        acc = hir_mk_cond_expr(current, hir_mk_int_expr(1, mk_bool_type(), &pattern.pos), acc, &pattern.pos);
+    }
+
+    return acc;
+}
+
 func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr {
     if (pattern.kind == Pattern_Grouped) {
         return lower_grouped_pattern(ctx, lhs, pattern as *GroupedPattern);
@@ -414,6 +441,8 @@ func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr {
         return lower_var_pattern(ctx, lhs, pattern as *VarPattern);
     } else if (pattern.kind == Pattern_Range) {
         return lower_range_pattern(ctx, lhs, pattern as *RangePattern);
+    } else if (pattern.kind == Pattern_Or) {
+        return lower_or_pattern(ctx, lhs, (pattern as *OrPattern));
     } else {
         unreachable("lower_pattern_infer");
     }

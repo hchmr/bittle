@@ -45,6 +45,7 @@ struct ElabCtx {
     scope: *Scope,
     current_func: *FuncSym,
     loop_depth: Int,
+    or_pattern_depth: Int,
 }
 
 func enter_scope(ctx: *ElabCtx) {
@@ -615,6 +616,11 @@ func elab_var_pattern(ctx: *ElabCtx, pattern: *VarPattern, type_hint: *Type) {
     var name = pattern.name;
 
     elab_pattern_infer(ctx, pattern.pattern, type_hint);
+
+    if (ctx.or_pattern_depth > 0) {
+        die_at(&pattern.pos, "Variable pattern not allowed in 'or' pattern");
+    }
+
     var sym = define_local(ctx, &pattern.pos, name, type_hint);
 
     pattern.sym = sym;
@@ -645,6 +651,24 @@ func elab_range_pattern(ctx: *ElabCtx, pattern: *RangePattern, type_hint: *Type)
     pattern.type = type;
 }
 
+func elab_or_pattern(ctx: *ElabCtx, pattern: *OrPattern, type_hint: *Type) {
+    ctx.or_pattern_depth += 1;
+
+    var patterns = pattern.patterns;
+
+    var first_pattern: *Pattern = list_get(patterns, 0);
+    elab_pattern_infer(ctx, first_pattern, type_hint);
+
+    for (var i = 1; i < list_len(patterns); i += 1) {
+        var next_pattern: *Pattern = list_get(patterns, i);
+        elab_pattern_expect(ctx, &next_pattern, first_pattern.type);
+    }
+
+    pattern.type = first_pattern.type;
+
+    ctx.or_pattern_depth -= 1;
+}
+
 func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type) {
     if (pattern.kind == Pattern_Grouped) {
         elab_grouped_pattern(ctx, pattern as *GroupedPattern, type_hint);
@@ -658,6 +682,8 @@ func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type) {
         elab_var_pattern(ctx, pattern as *VarPattern, type_hint);
     } else if (pattern.kind == Pattern_Range) {
         elab_range_pattern(ctx, pattern as *RangePattern, type_hint);
+    } else if (pattern.kind == Pattern_Or) {
+        elab_or_pattern(ctx, pattern as *OrPattern, type_hint);
     } else {
         unreachable("elab_pattern_infer");
     }
@@ -1681,6 +1707,7 @@ func elab(ast: *Ast): *List { // *List<*Sym>
         scope: scope_new(null),
         current_func: null,
         loop_depth: 0,
+        or_pattern_depth: 0,
     };
 
     for (var pass = 0; pass < 4; pass += 1) {

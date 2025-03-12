@@ -262,10 +262,8 @@ func p_literal(self: *Parser): *Literal {
 
 func p_literal_expr(self: *Parser): *Expr;
 func p_name_expr(self: *Parser): *Expr;
+func p_inner_pattern(self: *Parser): *Pattern;
 func p_pattern(self: *Parser): *Pattern;
-
-//==============================================================================
-//== Patterns
 
 func p_pattern_const(self: *Parser): *Expr {
     if (at_literal_tok(self)) {
@@ -338,7 +336,7 @@ func p_var_pattern(self: *Parser): *Pattern {
     var pos = self.tok.pos;
     var name = p_ident(self);
     expect(self, Tok_At);
-    var pattern = p_pattern(self);
+    var pattern = p_inner_pattern(self);
 
     var result: *VarPattern = calloc(1, sizeof(VarPattern));
     *result = VarPattern {
@@ -380,7 +378,7 @@ func p_range_pattern(self: *Parser): *Pattern {
     return result;
 }
 
-func p_pattern(self: *Parser): *Pattern {
+func p_inner_pattern(self: *Parser): *Pattern {
     if (at(self, Tok_LParen)) {
         return p_grouped_pattern(self);
     } else if (at(self, Tok_DotDotDot) || (at_pattern_const_tok(self) && next_is(self, Tok_DotDotDot))) {
@@ -396,6 +394,32 @@ func p_pattern(self: *Parser): *Pattern {
     } else {
         die_at(&self.tok.pos, "Unexpected start of pattern.");
     }
+}
+
+func p_or_pattern(self: *Parser, left: *Pattern): *Pattern {
+    var patterns: *List = list_new();
+    list_push(patterns, left);
+    while (eat(self, Tok_Bar)) {
+        var pattern = p_inner_pattern(self);
+        list_push(patterns, pattern);
+    }
+
+    var result: *OrPattern = calloc(1, sizeof(OrPattern));
+    *result = OrPattern {
+        kind: Pattern_Or,
+        pos: left.pos,
+        type: null,
+        patterns,
+    };
+    return result;
+}
+
+func p_pattern(self: *Parser): *Pattern {
+    var result = p_inner_pattern(self);
+    if (at(self, Tok_Bar)) {
+        result = p_or_pattern(self, result);
+    }
+    return result;
 }
 
 //==============================================================================
