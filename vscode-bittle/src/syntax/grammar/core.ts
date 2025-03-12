@@ -83,6 +83,18 @@ export function sepEndBy(rule: Rule, sep: string): Rule {
     return optional(sepEndBy1(rule, sep));
 }
 
+export function sepBy1(rule: Rule, sep: string): Rule {
+    return seq(
+        rule,
+        repeat(
+            seq(
+                sep,
+                rule,
+            ),
+        ),
+    );
+}
+
 export function guardedObject<T extends Record<string, Rule>>(obj: T): T {
     return new Proxy(obj, {
         get(target, prop, receiver) {

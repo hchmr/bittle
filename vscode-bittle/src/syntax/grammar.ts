@@ -1,5 +1,5 @@
 import {
-    choice, createGrammar, label, optional, repeat, Rule, sepEndBy, seq, terminal,
+    choice, createGrammar, label, optional, repeat, Rule, sepBy1, sepEndBy, seq, terminal,
 } from './grammar/core';
 
 function commaSep(rule: Rule): Rule {
@@ -410,6 +410,7 @@ export const grammar = createGrammar({
         $.WildcardPattern,
         $.VarPattern,
         $.RangePattern,
+        $.OrPattern,
     ),
 
     GroupedPattern: $ => seq(
@@ -439,6 +440,8 @@ export const grammar = createGrammar({
             label('upper', $.Expr),
         ),
     ),
+
+    OrPattern: $ => sepBy1($.Pattern, '|'),
 
     Literal: $ => choice(
         $.BoolLiteral,

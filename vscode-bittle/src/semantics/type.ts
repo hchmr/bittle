@@ -249,6 +249,12 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
     if (typeEq(t1, t2)) {
         return t1;
     }
+    if (t1.kind === TypeKind.Err) {
+        return t2;
+    }
+    if (t2.kind === TypeKind.Err) {
+        return t1;
+    }
 
     if (t1.kind !== t2.kind) {
         onError();

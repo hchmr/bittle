@@ -1,6 +1,6 @@
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode } from '../syntax/ast';
-import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ConstDeclNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, GroupedPatternNode, IfStmtNode, IndexExprNode, LiteralExprNode, LiteralPatternNode, LocalDeclNode, MatchStmtNode, NameExprNode, NamePatternNode, PatternNode, RangePatternNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
+import { ArrayExprNode, BinaryExprNode, BlockStmtNode, BreakStmtNode, CallExprNode, CastExprNode, ConstDeclNode, ContinueStmtNode, DeclNode, ExprNode, ExprStmtNode, FieldExprNode, ForStmtNode, FuncDeclNode, GroupedExprNode, GroupedPatternNode, IfStmtNode, IndexExprNode, LiteralExprNode, LiteralPatternNode, LocalDeclNode, MatchStmtNode, NameExprNode, NamePatternNode, OrPatternNode, PatternNode, RangePatternNode, RecordExprNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, TernaryExprNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { LiteralNodeTypes, NodeTypes } from '../syntax/nodeTypes';
 import { Nullish, unreachable } from '../utils';
 import { ElaborationDiag, ElaboratorResult, Severity } from './elaborator';
@@ -178,6 +178,8 @@ class ControlFlowAnalyzer {
                 return true;
             } else if (node instanceof RangePatternNode) {
                 return !node.lower && !node.upper;
+            } else if (node instanceof OrPatternNode) {
+                return node.patternNodes.some(isMatchCaseDefinitelyExhaustive);
             } else {
                 unreachable(node);
             }

@@ -62,6 +62,7 @@ export enum AstNodeTypes {
     WildcardPattern = 'WildcardPattern',
     VarPattern = 'VarPattern',
     RangePattern = 'RangePattern',
+    OrPattern = 'OrPattern',
     BoolLiteral = 'BoolLiteral',
     NullLiteral = 'NullLiteral',
     IntLiteral = 'IntLiteral',
@@ -428,7 +429,7 @@ export class MatchCaseNode extends AstNode {
         return this.getTokenOfType(undefined, ['case']);
     }
     get pattern(): PatternNode | undefined {
-        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern']);
+        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern', 'OrPattern']);
     }
     get colonToken(): TokenNode<':'> | undefined {
         return this.getTokenOfType(undefined, [':']);
@@ -698,7 +699,7 @@ export class GroupedPatternNode extends AstNode {
         return this.getTokenOfType(undefined, ['(']);
     }
     get pattern(): PatternNode | undefined {
-        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern']);
+        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern', 'OrPattern']);
     }
     get rParToken(): TokenNode<')'> | undefined {
         return this.getTokenOfType(undefined, [')']);
@@ -727,7 +728,7 @@ export class VarPatternNode extends AstNode {
         return this.getTokenOfType(undefined, ['@']);
     }
     get pattern(): PatternNode | undefined {
-        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern']);
+        return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern', 'OrPattern']);
     }
 }
 export class RangePatternNode extends AstNode {
@@ -739,6 +740,11 @@ export class RangePatternNode extends AstNode {
     }
     get upper(): ExprNode | undefined {
         return this.getAstNodeOfType<ExprNode>('upper', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
+}
+export class OrPatternNode extends AstNode {
+    get patternNodes(): PatternNode[] {
+        return this.getAstNodesOfType<PatternNode>(undefined, ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern', 'OrPattern']);
     }
 }
 export class BoolLiteralNode extends AstNode {
@@ -882,6 +888,7 @@ export enum PatternNodeTypes {
     WildcardPattern = 'WildcardPattern',
     VarPattern = 'VarPattern',
     RangePattern = 'RangePattern',
+    OrPattern = 'OrPattern',
 };
 
 export type PatternNode =
@@ -890,7 +897,8 @@ export type PatternNode =
     | NamePatternNode
     | WildcardPatternNode
     | VarPatternNode
-    | RangePatternNode;
+    | RangePatternNode
+    | OrPatternNode;
 
 export enum LiteralNodeTypes {
     BoolLiteral = 'BoolLiteral',
@@ -965,6 +973,7 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
         case AstNodeTypes.WildcardPattern: return new WildcardPatternNode(syntax);
         case AstNodeTypes.VarPattern: return new VarPatternNode(syntax);
         case AstNodeTypes.RangePattern: return new RangePatternNode(syntax);
+        case AstNodeTypes.OrPattern: return new OrPatternNode(syntax);
         case AstNodeTypes.BoolLiteral: return new BoolLiteralNode(syntax);
         case AstNodeTypes.NullLiteral: return new NullLiteralNode(syntax);
         case AstNodeTypes.IntLiteral: return new IntLiteralNode(syntax);

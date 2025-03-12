@@ -976,6 +976,23 @@ export class Parser extends ParserBase {
     // Patterns
 
     pattern() {
+        const checkpoint = this.createCheckpoint();
+        this.innerPattern();
+        if (this.match('|')) {
+            this.orPattern(checkpoint);
+        }
+    }
+
+    private orPattern(checkpoint: Checkpoint) {
+        this.beginNodeAt(CompositeNodeTypes.OrPattern, checkpoint);
+        while (this.match('|')) {
+            this.bump('|');
+            this.innerPattern();
+        }
+        this.finishNode(CompositeNodeTypes.OrPattern);
+    }
+
+    innerPattern() {
         if (this.match('(')) {
             this.groupedPattern();
         } else if (this.match('...') || this.match(patternConstTokens, '...')) {
@@ -1022,7 +1039,7 @@ export class Parser extends ParserBase {
         this.finishField('name');
         this.expect('@');
         this.beginField('pattern');
-        this.pattern();
+        this.innerPattern();
         this.finishField('pattern');
         this.finishNode(CompositeNodeTypes.VarPattern);
     }

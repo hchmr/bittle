@@ -3,7 +3,7 @@ import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { stream } from '../utils/stream';
 import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
@@ -69,6 +69,9 @@ export class Elaborator {
     // Current function
     private currentFunc: FuncSym | undefined;
     private nextLocalIndex: number = 0;
+
+    // Current pattern
+    orPatternDepth: number = 0;
 
     private constructor(
         private parsingService: ParsingService,
@@ -1747,6 +1750,8 @@ export class Elaborator {
                 return this.elabVarPattern(node, typeHint);
             } else if (node instanceof RangePatternNode) {
                 return this.elabRangePattern(node, typeHint);
+            } else if (node instanceof OrPatternNode) {
+                return this.elabOrPattern(node, typeHint);
             } else {
                 unreachable(node);
             }
@@ -1785,7 +1790,13 @@ export class Elaborator {
 
         const patternType = this.elabPatternInfer(subpattern, { typeHint: typeHint });
 
-        const sym = this.defineLocalSym(node, nameNode, patternType);
+        if (this.orPatternDepth != 0) {
+            this.reportError(node, `Variable pattern is not allowed in an or-pattern.`);
+            return patternType;
+        }
+
+        this.defineLocalSym(node, nameNode, patternType);
+
         return patternType;
     }
 
@@ -1818,6 +1829,30 @@ export class Elaborator {
         }
 
         return type;
+    }
+
+    private elabOrPattern(node: OrPatternNode, typeHint: Type): Type {
+        const patternNodes = node.patternNodes;
+        assert(patternNodes.length > 0);
+
+        try {
+            this.orPatternDepth++;
+            const firstPattern = patternNodes[0];
+            const firstPatternType = this.elabPatternInfer(firstPattern, { typeHint });
+
+            let type = firstPatternType;
+            for (let i = 1; i < patternNodes.length; i++) {
+                const pattern = patternNodes[i];
+                const patternType = this.elabPatternInfer(pattern, { typeHint });
+                type = tryUnifyTypes(type, patternType, () => {
+                    this.reportTypeUnificationError(node, type, patternType);
+                });
+            }
+
+            return type;
+        } finally {
+            this.orPatternDepth--;
+        }
     }
 
     //==============================================================================
