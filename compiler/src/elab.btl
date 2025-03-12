@@ -1195,12 +1195,18 @@ func elab_if_stmt(ctx: *ElabCtx, stmt: *IfStmt) {
 
 func elab_match_case(ctx: *ElabCtx, match_case: *MatchCase, scrutinee_type: *Type) {
     var pattern = match_case.pattern;
+    var guard = match_case.guard;
     var body = match_case.body;
 
     enter_scope(ctx);
     elab_pattern_expect(ctx, &pattern, scrutinee_type);
+    if (guard) {
+        elab_expr_bool(ctx, &guard);
+    }
     elab_stmt_with_scope(ctx, body);
     exit_scope(ctx);
+
+    match_case.guard = guard;
 }
 
 func elab_match_stmt(ctx: *ElabCtx, stmt: *MatchStmt) {

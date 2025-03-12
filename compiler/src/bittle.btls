@@ -612,6 +612,7 @@ struct IfStmt: Stmt {
 
 struct MatchCase {
     pattern: *Pattern,
+    guard: *Expr,
     body: *Stmt,
 }
 

@@ -1,7 +1,8 @@
 //# stdout = x is exactly 42
 //# stdout = x is 10 (using grouped pattern)
 //# stdout = x matches the constant 'ZERO' (0)
-//# stdout = x is <= 20 and >= 32, bound to n = 26
+//# stdout = x is divisible by 13 and bound to n = 26
+//# stdout = x is <= 20 and >= 32, bound to n = 27
 //# stdout = x is <= 100 and >= 200
 //# stdout = x is <= 5 or >= 1000
 //# stdout = x is <= 5 or >= 1000
@@ -30,6 +31,9 @@ func matchIntegerTest(x: Int) {
         case ZERO: {
             printf("x matches the constant 'ZERO' (%d)\n", ZERO);
         }
+        case n @ _ if n % 13 == 0: {
+            printf("x is divisible by 13 and bound to n = %d\n", n);
+        }
         case n @ 20...32: {
             printf("x is <= 20 and >= 32, bound to n = %d\n", n);
         }
@@ -41,6 +45,14 @@ func matchIntegerTest(x: Int) {
         }
         case other @ _: {
             printf("x = %d didn't match any specific case\n", other);
+        }
+    }
+}
+
+func matchWithConditionTest(x: Int) {
+    match (x) {
+        case n @ 20...32 if n % 2 == 0: {
+            printf("x is <= 20 and >= 32, bound to n = %d\n", n);
         }
     }
 }
@@ -72,6 +84,7 @@ func main(): Int32 {
     matchIntegerTest(10);
     matchIntegerTest(0);
     matchIntegerTest(26);
+    matchIntegerTest(27);
     matchIntegerTest(100);
     matchIntegerTest(1000);
     matchIntegerTest(5);

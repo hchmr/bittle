@@ -932,7 +932,7 @@ func lower_match_stmt(ctx: *Context, stmt: *MatchStmt): *HirExpr {
         Desugar
             match (x) {
                 case 1: { ... }
-                case 2: { ... }
+                case 2 if p: { ... }
                 case _: { ... }
             }
         to
@@ -940,7 +940,7 @@ func lower_match_stmt(ctx: *Context, stmt: *MatchStmt): *HirExpr {
             t1 = x;
             if (t1 is 1) {
                 ...
-            } else if (t1 is 2) {
+            } else if (t1 is 2 && p) {
                 ...
             } else if (1) {
                 ...
@@ -957,13 +957,18 @@ func lower_match_stmt(ctx: *Context, stmt: *MatchStmt): *HirExpr {
     for (var i = list_len(ast_cases) - 1; i >= 0; i -= 1) {
         var ast_case: *MatchCase = list_get(ast_cases, i);
         var ast_pattern = ast_case.pattern;
+        var ast_guard = ast_case.guard;
         var ast_body = ast_case.body;
 
         var temp = hir_mk_temp_expr(temp_var, &ast_pattern.pos);
-        var cond = lower_pattern(ctx, temp, ast_pattern);
+        var test = lower_pattern(ctx, temp, ast_pattern);
+        if (ast_guard) {
+            var guard = lower_expr(ctx, ast_guard);
+            test = hir_mk_cond_expr(test, guard, hir_mk_bool_expr(false, &stmt.pos), &stmt.pos);
+        }
         var body = lower_stmt(ctx, ast_body);
 
-        acc = hir_mk_cond_expr(cond, body, acc, &stmt.pos);
+        acc = hir_mk_cond_expr(test, body, acc, &stmt.pos);
     }
 
     return hir_mk_seq_expr(temp_init, acc);

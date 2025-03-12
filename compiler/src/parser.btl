@@ -927,12 +927,17 @@ func p_if_stmt(self: *Parser): *Stmt {
 func p_match_case(self: *Parser): *MatchCase {
     expect(self, Tok_Case);
     var pattern = p_pattern(self);
+    var guard: *Expr = null;
+    if (eat(self, Tok_If)) {
+        guard = p_expr(self, 0);
+    }
     expect(self, Tok_Colon);
     var body = p_stmt(self);
 
     var result: *MatchCase = calloc(1, sizeof(MatchCase));
     *result = MatchCase {
         pattern,
+        guard,
         body,
     };
     return result;
