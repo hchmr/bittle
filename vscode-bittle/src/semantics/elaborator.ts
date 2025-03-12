@@ -1,4 +1,5 @@
 import assert, { AssertionError } from 'assert';
+import { resolve as resolvePath } from 'path';
 import { IncludeResolver } from '../services/IncludeResolver';
 import { ParsingService } from '../services/parsingService';
 import { PointRange, SyntaxNode } from '../syntax';
@@ -689,11 +690,14 @@ export class Elaborator {
     }
 
     private expandIncludes(path: string, declNodes: DeclNode[], seenPaths: Set<string>): IncludedDecl[] {
+        const resolvedPath = resolvePath(path);
+
+        seenPaths.add(resolvedPath);
         return declNodes.flatMap(node => {
             if (node instanceof IncludeDeclNode) {
                 return this.processInclude(node, seenPaths);
             }
-            return [{ path, node }];
+            return [{ path: path, node }];
         });
     }
 
@@ -711,7 +715,6 @@ export class Elaborator {
         if (seenPaths.has(resolvedPath)) {
             return [];
         }
-        seenPaths.add(resolvedPath);
 
         const tree = this.parsingService.parseAsAst(resolvedPath);
         return this.expandIncludes(resolvedPath, tree.declNodes, seenPaths);
