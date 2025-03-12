@@ -431,6 +431,12 @@ export class MatchCaseNode extends AstNode {
     get pattern(): PatternNode | undefined {
         return this.getAstNodeOfType<PatternNode>('pattern', ['GroupedPattern', 'LiteralPattern', 'NamePattern', 'WildcardPattern', 'VarPattern', 'RangePattern', 'OrPattern']);
     }
+    get ifToken(): TokenNode<'if'> | undefined {
+        return this.getTokenOfType(undefined, ['if']);
+    }
+    get guard(): ExprNode | undefined {
+        return this.getAstNodeOfType<ExprNode>('guard', ['GroupedExpr', 'NameExpr', 'SizeofExpr', 'LiteralExpr', 'ArrayExpr', 'CallExpr', 'RecordExpr', 'BinaryExpr', 'TernaryExpr', 'UnaryExpr', 'IndexExpr', 'FieldExpr', 'CastExpr']);
+    }
     get colonToken(): TokenNode<':'> | undefined {
         return this.getTokenOfType(undefined, [':']);
     }

@@ -159,10 +159,12 @@ class ControlFlowAnalyzer {
                 continue;
             }
 
-            const matchState = this.analyzeStmt(matchCase.body, state);
+            const matchState = this.analyzeStmt(matchCase.body, this.analyzeExpr(matchCase.guard, state));
             combinedState = combinedState ? executionStateUnion(combinedState, matchState) : matchState;
 
-            isExhausted = isMatchCaseDefinitelyExhaustive(matchCase.pattern);
+            isExhausted = (
+                !matchCase.guard || isTriviallyTrue(matchCase.guard)
+            ) && isMatchCaseDefinitelyExhaustive(matchCase.pattern);
         }
 
         return combinedState ?? state;

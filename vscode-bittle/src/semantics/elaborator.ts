@@ -1190,10 +1190,12 @@ export class Elaborator {
 
     private elabMatchCase(caseNode: MatchCaseNode, valueType: Type) {
         const patternNode = caseNode.pattern;
+        const guardNode = caseNode.guard;
         const bodyNode = caseNode.body;
 
         this.enterScope(caseNode);
         this.elabPatternExpect(patternNode, valueType);
+        this.elabExprBool(guardNode);
         this.elabStmt(bodyNode);
         this.exitScope();
     }

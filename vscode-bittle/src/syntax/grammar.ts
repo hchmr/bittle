@@ -247,6 +247,10 @@ export const grammar = createGrammar({
     MatchCase: $ => seq(
         'case',
         label('pattern', $.Pattern),
+        optional(seq(
+            'if',
+            label('guard', $.Expr),
+        )),
         ':',
         label('body', $.Stmt),
     ),
