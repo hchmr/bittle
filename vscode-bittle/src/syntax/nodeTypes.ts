@@ -1,6 +1,6 @@
 import { SyntaxNode } from '../syntax';
 import { isEnumValue } from '../utils';
-import { AstNodeTypes } from './generated';
+import { AstNodeTypes, PatternNodeTypes } from './generated';
 import { TokenKind, tokenKinds } from './token';
 
 export type ValuesOf<T extends Record<string, string>> = T[keyof T];
@@ -98,6 +98,10 @@ export function isStmtNode(node: SyntaxNode): boolean {
 
 export function isExprNode(node: SyntaxNode): boolean {
     return isEnumValue(ExprNodeTypes, node.type);
+}
+
+export function isPatternNode(node: SyntaxNode): boolean {
+    return isEnumValue(PatternNodeTypes, node.type);
 }
 
 export function isArgNode(node: SyntaxNode): boolean {

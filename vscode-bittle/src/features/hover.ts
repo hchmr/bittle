@@ -4,7 +4,7 @@ import { prettyType, Type, typeLayout, TypeLayout } from '../semantics/type';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { SyntaxNode } from '../syntax';
-import { isExprNode, isTypeNode } from '../syntax/nodeTypes';
+import { isExprNode, isPatternNode, isTypeNode } from '../syntax/nodeTypes';
 import { TokenNodeImpl } from '../syntax/treeImpl';
 import { dedent } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
@@ -48,7 +48,7 @@ export class HoverProvider implements vscode.HoverProvider {
                 return this.addLayout({ kind: 'sym', syms, node });
             }
         }
-        if (isExprNode(node)) {
+        if (isExprNode(node) || isPatternNode(node)) {
             const type = this.semanticsService.inferType(document.fileName, node);
             if (type) {
                 return this.addLayout({ kind: 'type', type, node });

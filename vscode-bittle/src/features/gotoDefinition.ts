@@ -7,7 +7,7 @@ import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { VirtualFileSystem } from '../services/vfs';
 import { Point, SyntaxNode } from '../syntax';
-import { isExprNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
+import { isExprNode, isPatternNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { parseString } from '../utils/literalParsing';
 import { stream } from '../utils/stream';
@@ -164,7 +164,7 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
             return syms
                 .map(sym => symRelatedType(sym))
                 .reduce(unifyTypes);
-        } else if (isExprNode(node)) {
+        } else if (isExprNode(node) || isPatternNode(node)) {
             return this.semanticsService.inferType(filePath, node);
         } else if (isTypeNode(node)) {
             return this.semanticsService.evalType(filePath, node);
