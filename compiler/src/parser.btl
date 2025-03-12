@@ -430,6 +430,7 @@ enum {
     Prec_Cond,
     Prec_Or,
     Prec_And,
+    Prec_Is,
     Prec_BitOr,
     Prec_BitXor,
     Prec_BitAnd,
@@ -675,6 +676,21 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
     return result;
 }
 
+func p_is_expr(self: *Parser, left: *Expr): *Expr {
+    var pattern = p_inner_pattern(self);
+
+    var result: *IsExpr = calloc(1, sizeof(IsExpr));
+    *result = IsExpr {
+        kind: Expr_Is,
+        pos: left.pos,
+        type: null,
+        const_value: null,
+        left,
+        pattern,
+    };
+    return result;
+}
+
 func p_field_initializer(self: *Parser): *FieldInitializer {
     var pos = self.tok.pos;
 
@@ -789,6 +805,8 @@ func p_expr(self: *Parser, max_prec: Int32): *Expr {
             lhs = p_binary_expr(self, lhs, Tok_BarBar, Prec_Or + 1);
         } else if (max_prec <= Prec_And && eat(self, Tok_AmpAmp)) {
             lhs = p_binary_expr(self, lhs, Tok_AmpAmp, Prec_And + 1);
+        } else if (max_prec <= Prec_Is && eat(self, Tok_Is)) {
+            lhs = p_is_expr(self, lhs);
         } else if (max_prec <= Prec_BitOr && eat(self, Tok_Bar)) {
             lhs = p_binary_expr(self, lhs, Tok_Bar, Prec_BitOr + 1);
         } else if (max_prec <= Prec_BitXor && eat(self, Tok_Caret)) {

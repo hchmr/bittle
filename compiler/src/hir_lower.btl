@@ -705,6 +705,16 @@ func lower_ternary_expr(ctx: *Context, expr: *TernaryExpr): *HirExpr {
     return hir_mk_cond_expr(cond, then_expr, else_expr, &expr.pos);
 }
 
+func lower_is_expr(ctx: *Context, expr: *IsExpr): *HirExpr {
+    var ast_left = expr.left;
+    var ast_pattern = expr.pattern;
+
+    var left = lower_expr(ctx, ast_left);
+    var test = lower_pattern(ctx, left, ast_pattern);
+
+    return test;
+}
+
 func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
     var ast_subexpr = expr.expr;
     var subexpr = lower_expr(ctx, ast_subexpr);
@@ -759,6 +769,8 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
         return lower_binary_expr(ctx, expr as *BinaryExpr);
     } else if (expr.kind == Expr_Ternary) {
         return lower_ternary_expr(ctx, expr as *TernaryExpr);
+    } else if (expr.kind == Expr_Is) {
+        return lower_is_expr(ctx, expr as *IsExpr);
     } else if (expr.kind == Expr_Cast) {
         return lower_cast_expr(ctx, expr as *CastExpr);
     } else if (expr.kind == Expr_Record) {

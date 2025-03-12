@@ -15,6 +15,7 @@
 //# stdout = x is false
 //# stdout = x is null
 //# stdout = x is not null
+//# stdout = x is >= 1 and <= 10 or 42 or 13
 
 extern func printf(format: *Char, ...): Int32;
 
@@ -79,6 +80,12 @@ func matchPointerTest(x: *Char) {
     }
 }
 
+func isOperatorTest(x: Int) {
+    if (x is 1...10 || x is (42 | 13)) {
+        printf("x is >= 1 and <= 10 or 42 or 13\n");
+    }
+}
+
 func main(): Int32 {
     matchIntegerTest(42);
     matchIntegerTest(10);
@@ -97,5 +104,6 @@ func main(): Int32 {
     matchBoolTest(false);
     matchPointerTest(null);
     matchPointerTest("hey");
+    isOperatorTest(5);
     return 0;
 }

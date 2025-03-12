@@ -278,6 +278,7 @@ enum TokKind {
     Tok_Func,
     Tok_If,
     Tok_Include,
+    Tok_Is,
     Tok_Match,
     Tok_Null,
     Tok_Return,
@@ -285,10 +286,10 @@ enum TokKind {
     Tok_Struct,
     Tok_True,
     Tok_Typeof,
+    Tok_Underscore,
     Tok_Union,
     Tok_Var,
     Tok_While,
-    Tok_Underscore,
     // Symbols
     Tok_LParen,
     Tok_RParen,
@@ -481,6 +482,7 @@ enum ExprKind {
     Expr_Unary,
     Expr_Binary,
     Expr_Ternary,
+    Expr_Is,
     Expr_Cast,
     Expr_Record,
 }
@@ -548,6 +550,11 @@ struct TernaryExpr: Expr {
     cond: *Expr,
     then_expr: *Expr,
     else_expr: *Expr,
+}
+
+struct IsExpr: Expr {
+    left: *Expr,
+    pattern: *Pattern,
 }
 
 struct CastExpr: Expr {

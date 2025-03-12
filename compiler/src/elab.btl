@@ -1012,6 +1012,17 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
     }
 }
 
+// `x is <pattern>`
+func elab_is_expr(ctx: *ElabCtx, expr: *IsExpr) {
+    var left = expr.left;
+    var pattern = expr.pattern;
+
+    elab_expr_infer(ctx, left, type_hint: null);
+    elab_pattern_infer(ctx, pattern, left.type);
+
+    expr.type = mk_bool_type();
+}
+
 func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     var subexpr = expr.expr;
     elab_expr_infer(ctx, subexpr, type_hint: null);
@@ -1113,6 +1124,8 @@ func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
         elab_binary_expr(ctx, expr as *BinaryExpr, type_hint);
     } else if (expr.kind == Expr_Ternary) {
         elab_ternary_expr(ctx, expr as *TernaryExpr, type_hint);
+    } else if (expr.kind == Expr_Is) {
+        elab_is_expr(ctx, expr as *IsExpr);
     } else if (expr.kind == Expr_Cast) {
         elab_cast_expr(ctx, expr as *CastExpr);
     } else if (expr.kind == Expr_Record) {
