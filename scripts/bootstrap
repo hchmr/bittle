@@ -344,6 +344,8 @@ stage "feat(compiler): Add call signature checks for main function"
 
 stage "feat(compiler): Allow unions to inherit from multi-field structs"
 
+stage "feat(compiler): Add syntax for mutable pointers"
+
 if [ "$extra_stage" = true ]; then
     stage "$head_commit"
 fi
