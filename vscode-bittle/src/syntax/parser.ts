@@ -1250,23 +1250,24 @@ enum Assoc {
     None,
 }
 
-const Prec = {
-    Assign: 1,
-    Cond: 2,
-    CondOr: 3,
-    CondAnd: 4,
-    BitOr: 5,
-    BitXor: 6,
-    BitAnd: 7,
-    Cmp: 8,
-    Shift: 9,
-    Add: 10,
-    Mul: 11,
-    Cast: 12,
-    Unary: 13,
-    Postfix: 14,
-    Primary: 15,
-};
+enum Prec {
+    Assign = 1,
+    Cond = 2,
+    CondOr = 3,
+    CondAnd = 4,
+    Is = 5,
+    BitOr = 6,
+    BitXor = 7,
+    BitAnd = 8,
+    Cmp = 9,
+    Shift = 10,
+    Add = 11,
+    Mul = 12,
+    Cast = 13,
+    Unary = 14,
+    Postfix = 15,
+    Primary = 16,
+}
 
 const nudTable: Record<TokenKind, Nud> = (function () {
     return createTable(
@@ -1309,7 +1310,7 @@ const ledTable: Record<TokenKind, Led> = (function () {
         mkRow('?', Prec.Cond, Assoc.Right, (parser, led, checkpoint) => parser.ternaryExpr(led.rbp, checkpoint)),
         mkBinaryOp('||', Prec.CondOr, Assoc.Left),
         mkBinaryOp('&&', Prec.CondAnd, Assoc.Left),
-        mkRow('is', Prec.CondAnd, Assoc.None, (parser, _, checkpoint) => parser.isExpr(checkpoint)),
+        mkRow('is', Prec.Is, Assoc.None, (parser, _, checkpoint) => parser.isExpr(checkpoint)),
         mkBinaryOp('|', Prec.BitOr, Assoc.Left),
         mkBinaryOp('^', Prec.BitXor, Assoc.Left),
         mkBinaryOp('&', Prec.BitAnd, Assoc.Left),
