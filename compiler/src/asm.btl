@@ -146,7 +146,7 @@ func asm_mk_raw_operand(op: *Char): AsmRawOperand {
 func asm_mk_mem_operand(n_args: Int): AsmMemOperand {
     return AsmMemOperand {
         n_args: n_args,
-        args: calloc(n_args, sizeof(AsmOperand)),
+        args: calloc(n_args, sizeof(AsmOperand)) as *AsmOperand,
     };
 }
 
@@ -177,8 +177,8 @@ func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
     return box(sizeof(AsmInstr), &AsmInstr {
         op: op,
         n_args: n_args,
-        args: calloc(n_args, sizeof(AsmOperand)),
-    });
+        args: calloc(n_args, sizeof(AsmOperand)) as *AsmOperand,
+    }) as *AsmInstr;
 }
 
 //==============================================================================
@@ -187,7 +187,7 @@ func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
 func asm_builder_new(): *AsmInstrBuilder {
     return box(sizeof(AsmInstrBuilder), &AsmInstrBuilder {
         instrs: list_new(),
-    });
+    }) as *AsmInstrBuilder;
 }
 
 func asm_write_instr(builder: *AsmInstrBuilder, op: *Char, n_args: Int): *AsmInstr {
@@ -453,7 +453,7 @@ func asm_add_comment_to_last(builder: *AsmInstrBuilder, fmt: *Char, ...args) {
     var text = sb_finish(sb);
 
     var list = builder.instrs;
-    var instr: *AsmInstr = list_get(list, list_len(list) - 1);
+    var instr = list_get(list, list_len(list) - 1) as *AsmInstr;
     instr.comment = text;
 }
 
@@ -580,7 +580,7 @@ func asm_print_func(fun: *AsmFunc) {
     var instrs = fun.builder.instrs;
     var n_instrs = list_len(instrs);
     for (var i = 0; i < n_instrs; i += 1) {
-        var instr: *AsmInstr = list_get(instrs, i);
+        var instr = list_get(instrs, i) as *AsmInstr;
         asm_print_instr(fun, instr);
     }
 

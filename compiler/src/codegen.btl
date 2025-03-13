@@ -173,13 +173,13 @@ func reserve_reg(ctx: *CodegenCtx, reg: Reg) {
         spill_reg(ctx, reg);
     }
 
-    var reservation: *RegReservation = box(sizeof(RegReservation), &RegReservation { did_spill: spill_needed });
+    var reservation = box(sizeof(RegReservation), &RegReservation { did_spill: spill_needed }) as *RegReservation;
     list_push(state.reservations, reservation);
 }
 
 func free_reg(ctx: *CodegenCtx, reg: Reg) {
     var state = &ctx.regs[reg as Int];
-    var reservation: *RegReservation = list_pop(state.reservations);
+    var reservation = list_pop(state.reservations) as *RegReservation;
     var did_spill = reservation.did_spill;
     free(reservation);
 
@@ -663,7 +663,7 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composit
     }
 
     for (var i = 0; i < layout.n_args; i += 1) {
-        var arg: *HirExpr = e.args[i];
+        var arg = e.args[i];
         var arg_loc = &layout.arg_locs[i];
         match (arg_loc.kind) {
             case ArgLocation_Reg if is_scalar(arg.type): {
@@ -896,8 +896,8 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
 
     // Copy arguments to stack slots
     for (var i = 0; i < layout.n_args; i += 1) {
-        var param: *FuncParam = list_get(sym.params, i);
-        var local: *LocalSym = list_get(sym.locals, i);
+        var param = list_get(sym.params, i) as *FuncParam;
+        var local = list_get(sym.locals, i) as *LocalSym;
         var arg_loc = &layout.arg_locs[i];
         if (arg_loc.kind == ArgLocation_Reg) {
             var arg_loc = &arg_loc.Reg;
@@ -920,7 +920,7 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
 
     // Create va_list if needed
     if (sym.rest_param_name) {
-        var local: *LocalSym = list_get(sym.locals, layout.n_args);
+        var local = list_get(sym.locals, layout.n_args) as *LocalSym;
         var slot_id = local.slot_id;
         var fp_offset = get_fp_offset_for_slot(ctx, mk_rest_param_type(), slot_id);
 
@@ -968,8 +968,8 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
     }
 
     for (var i = 0; i < layout.n_args; i += 1) {
-        var param: *FuncParam = list_get(sym.params, i);
-        var local: *LocalSym = list_get(sym.locals, i);
+        var param = list_get(sym.params, i) as *FuncParam;
+        var local = list_get(sym.locals, i) as *LocalSym;
         var arg_loc = &layout.arg_locs[i];
 
         if (arg_loc.kind == ArgLocation_Reg) {
@@ -1002,16 +1002,16 @@ func layout_slots(ctx: *CodegenCtx, start_fp_offset: Int): Int {
     var n_locals = list_len(sym.locals);
     var n_temps = list_len(sym.temps);
     var n_slots = n_locals + n_temps;
-    var slots: *Slot = calloc(n_slots, sizeof(Slot));
+    var slots = calloc(n_slots, sizeof(Slot)) as *Slot;
 
     var next_fp_offset = start_fp_offset;
     for (var i = 0; i < n_locals; i += 1) {
-        var local: *LocalSym = list_get(sym.locals, i);
+        var local = list_get(sym.locals, i) as *LocalSym;
         next_fp_offset = -align_up(-next_fp_offset + type_size(local.type), type_align(local.type));
         slots[i] = Slot { fp_offset: next_fp_offset };
     }
     for (var i = 0; i < n_temps; i += 1) {
-        var temp: *HirTemp = list_get(sym.temps, i);
+        var temp = list_get(sym.temps, i) as *HirTemp;
         next_fp_offset = -align_up(-next_fp_offset + type_size(temp.type), type_align(temp.type));
         slots[n_locals + i] = Slot { fp_offset: next_fp_offset };
     }
@@ -1111,12 +1111,13 @@ func emit_program(syms: *List) {
     ctx.strings = list_new();
 
     for (var i = 0; i < list_len(syms); i += 1) {
-        var sym = list_get(syms, i);
+        var sym = list_get(syms, i) as *Sym;
         emit_sym(ctx, sym);
     }
 
     var n_strings = list_len(ctx.strings);
     for (var i = 0; i < n_strings; i += 1) {
-        asm_print_string(i, list_get(ctx.strings, i));
+        var string = list_get(ctx.strings, i) as *StringBuffer;
+        asm_print_string(i, string);
     }
 }

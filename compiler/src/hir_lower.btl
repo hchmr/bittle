@@ -42,7 +42,7 @@ func mk_skip_stmt(pos: *Pos): *HirExpr {
     return box(sizeof(HirSkipExpr), &HirSkipExpr {
         type: mk_void_type(),
         pos: *pos,
-    });
+    }) as *HirSkipExpr;
 }
 
 func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
@@ -51,7 +51,7 @@ func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
         pos: first.pos,
         first,
         second,
-    });
+    }) as *HirSeqExpr;
 }
 
 func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
@@ -59,7 +59,7 @@ func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
         type,
         pos: *pos,
         value,
-    });
+    }) as *HirIntExpr;
 }
 
 func hir_mk_bool_expr(value: Bool, pos: *Pos): *HirIntExpr {
@@ -71,7 +71,7 @@ func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
         type: mk_ptr_type(mk_int_type(1)),
         pos: *pos,
         value,
-    });
+    }) as *HirStrExpr;
 }
 
 func hir_mk_var_expr(sym: *Sym, type: *Type, pos: *Pos): *HirVarExpr {
@@ -79,7 +79,7 @@ func hir_mk_var_expr(sym: *Sym, type: *Type, pos: *Pos): *HirVarExpr {
         type,
         pos: *pos,
         sym,
-    });
+    }) as *HirVarExpr;
 }
 
 func hir_mk_temp_expr(temp: *HirTemp, pos: *Pos): *HirTempExpr {
@@ -87,7 +87,7 @@ func hir_mk_temp_expr(temp: *HirTemp, pos: *Pos): *HirTempExpr {
         type: temp.type,
         pos: *pos,
         temp,
-    });
+    }) as *HirTempExpr;
 }
 
 func hir_mk_cond_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, pos: *Pos): *HirCondExpr {
@@ -97,7 +97,7 @@ func hir_mk_cond_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, 
         cond,
         then_expr,
         else_expr,
-    });
+    }) as *HirCondExpr;
 }
 
 func hir_mk_loop_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos): *HirLoopExpr {
@@ -107,7 +107,7 @@ func hir_mk_loop_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos)
         cond,
         body,
         step,
-    });
+    }) as *HirLoopExpr;
 }
 
 func hir_mk_return_expr(expr: *HirExpr, pos: *Pos): *HirReturnExpr {
@@ -115,7 +115,7 @@ func hir_mk_return_expr(expr: *HirExpr, pos: *Pos): *HirReturnExpr {
         type: mk_void_type(),
         pos: *pos,
         expr,
-    });
+    }) as *HirReturnExpr;
 }
 
 func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *HirJumpExpr {
@@ -123,7 +123,7 @@ func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *HirJumpExpr {
         type: mk_void_type(),
         pos: *pos,
         is_break,
-    });
+    }) as *HirJumpExpr;
 }
 
 func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
@@ -132,7 +132,7 @@ func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
         pos: dst.pos,
         dst,
         src,
-    });
+    }) as *HirAssignExpr;
 }
 
 func hir_mk_binary_op_expr(op: HirOpKind, left: *HirExpr, right: *HirExpr, type: *Type): *HirBinaryOpExpr {
@@ -142,7 +142,7 @@ func hir_mk_binary_op_expr(op: HirOpKind, left: *HirExpr, right: *HirExpr, type:
         op,
         left,
         right,
-    });
+    }) as *HirBinaryOpExpr;
 }
 
 func hir_mk_neg_expr(expr: *HirExpr): *HirExpr {
@@ -167,7 +167,7 @@ func hir_mk_call_expr(callee: *FuncSym, args: **HirExpr, n_args: Int, pos: *Pos)
         callee,
         args,
         n_args,
-    });
+    }) as *HirCallExpr;
 }
 
 func hir_mk_member_expr(left: *HirExpr, name: *Char, field: *RecordField, field_type: *Type): *HirMemberExpr {
@@ -177,7 +177,7 @@ func hir_mk_member_expr(left: *HirExpr, name: *Char, field: *RecordField, field_
         left,
         name,
         field,
-    });
+    }) as *HirMemberExpr;
 }
 
 func hir_mk_index_expr(indexee: *HirExpr, index: *HirExpr): *HirIndexExpr {
@@ -194,7 +194,7 @@ func hir_mk_index_expr(indexee: *HirExpr, index: *HirExpr): *HirIndexExpr {
         pos: indexee.pos,
         indexee,
         index,
-    });
+    }) as *HirIndexExpr;
 }
 
 func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
@@ -205,7 +205,7 @@ func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
         type: deref_type,
         pos: *pos,
         expr,
-    });
+    }) as *HirDerefExpr;
 }
 
 func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
@@ -213,7 +213,7 @@ func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
         type: mk_ptr_type(expr.type),
         pos: *pos,
         expr,
-    });
+    }) as *HirAddrExpr;
 }
 
 func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
@@ -221,14 +221,14 @@ func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
         type,
         pos: expr.pos,
         expr,
-    });
+    }) as *HirCastExpr;
 }
 
 func hir_mk_unreachable_expr(pos: *Pos, type: *Type): *HirExpr {
     return box(sizeof(HirUnreachableExpr), &HirUnreachableExpr {
         type,
         pos: *pos,
-    });
+    }) as *HirUnreachableExpr;
 }
 
 //==============================================================================
@@ -241,10 +241,10 @@ struct Context {
 func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
     var slot_id = list_len(ctx.func_.locals) + list_len(ctx.func_.temps);
 
-    var temp: *HirTemp = box(sizeof(HirTemp), &HirTemp {
+    var temp = box(sizeof(HirTemp), &HirTemp {
         type,
         slot_id: slot_id
-    });
+    }) as *HirTemp;
 
     list_push(ctx.func_.temps, temp);
 
@@ -370,11 +370,11 @@ func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirEx
     }
 
     var last_index = n_patterns - 1;
-    var last_pattern: *Pattern = list_get(pattern.patterns, last_index);
+    var last_pattern = list_get(pattern.patterns, last_index) as *Pattern;
     var acc = lower_pattern(ctx, lhs, last_pattern);
 
     for (var i = last_index - 1; i >= 0; i -= 1) {
-        var current_pattern: *Pattern = list_get(pattern.patterns, i);
+        var current_pattern = list_get(pattern.patterns, i) as *Pattern;
         var current = lower_pattern(ctx, lhs, current_pattern);
 
         acc = hir_mk_cond_expr(current, hir_mk_bool_expr(true, &pattern.pos), acc, &pattern.pos);
@@ -494,10 +494,10 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
     var n_ast_args = list_len(ast_args);
 
     var n_hir_args = int_max(n_params, n_ast_args);
-    var hir_args: **HirExpr = calloc(n_hir_args, sizeof(*HirExpr));
+    var hir_args = calloc(n_hir_args, sizeof(*HirExpr)) as **HirExpr;
 
     for (var i = 0; i < n_ast_args; i += 1) {
-        var ast_arg: *CallArg = list_get(ast_args, i);
+        var ast_arg = list_get(ast_args, i) as *CallArg;
         var hir_arg = lower_arg(ctx, ast_arg.expr);
 
         assert(0 <= ast_arg.positional_index && ast_arg.positional_index < n_hir_args, "lower_call_expr: positional index out of bounds");
@@ -510,7 +510,7 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
             continue;
         }
 
-        var param: *FuncParam = list_get(sym.params, i);
+        var param = list_get(sym.params, i) as *FuncParam;
         if (hir_args[i]) {
             continue;
         }
@@ -717,7 +717,7 @@ func lower_record_expr(ctx: *Context, expr: *RecordExpr): *HirExpr {
     var sequence = mk_skip_stmt(&expr.pos);
     var n_initializers = list_len(expr.fields);
     for (var i = 0; i < n_initializers; i += 1) {
-        var field: *FieldInitializer = list_get(expr.fields, i);
+        var field = list_get(expr.fields, i) as *FieldInitializer;
         var hir_expr = lower_expr(ctx, field.expr);
         sequence = hir_mk_seq_expr(sequence, hir_expr);
     }
@@ -792,7 +792,7 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
     var initializers = ast_src.fields;
     var n_initializers = list_len(initializers);
 
-    var is_initialized: *Bool = calloc(n_fields, sizeof(Bool));
+    var is_initialized = calloc(n_fields, sizeof(Bool)) as *Bool;
 
     var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
 
@@ -802,9 +802,9 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
 
     var body: *HirExpr = temp_init;
     for (var init_index = 0; init_index < n_initializers; init_index += 1) {
-        var initializer: *FieldInitializer = list_get(initializers, init_index);
+        var initializer = list_get(initializers, init_index) as *FieldInitializer;
         var field_index = find_record_field_by_name(record_type.sym, initializer.name);
-        var field: *RecordField = list_get(record_type.sym.fields, field_index);
+        var field = list_get(record_type.sym.fields, field_index) as *RecordField;
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
         var field_access = hir_mk_member_expr(temp_deref, field.name, field, field.type);
@@ -816,7 +816,7 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
         if (is_initialized[field_index]) {
             continue;
         }
-        var field: *RecordField = list_get(record_type.sym.fields, field_index);
+        var field = list_get(record_type.sym.fields, field_index) as *RecordField;
         if (!field.default_value) {
             continue;
         }
@@ -862,7 +862,7 @@ func lower_assign_expr_array(ctx: *Context, dst: *HirExpr, ast_src: *ArrayExpr, 
 
     var body: *HirExpr = temp_init;
     for (var i = 0; i < arr_size; i += 1) {
-        var ast_elem: *Expr = list_get(elems, i);
+        var ast_elem = list_get(elems, i) as *Expr;
         var index = hir_mk_int_expr(i, mk_int_type(4), pos);
         var index_expr = hir_mk_index_expr(temp, index);
         var assignment = lower_assign_expr(ctx, index_expr, ast_elem, &ast_elem.pos);
@@ -897,7 +897,7 @@ func lower_block_stmt(ctx: *Context, stmt: *BlockStmt): *HirExpr {
     var current = mk_skip_stmt(&stmt.pos);
 
     for (var i = 0; i < list_len(stmt.stmts); i += 1) {
-        var ast_stmt = list_get(stmt.stmts, i);
+        var ast_stmt = list_get(stmt.stmts, i) as *Stmt;
         var hir_stmt = lower_stmt(ctx, ast_stmt);
 
         current = hir_mk_seq_expr(current, hir_stmt);
@@ -961,7 +961,7 @@ func lower_match_stmt(ctx: *Context, stmt: *MatchStmt): *HirExpr {
 
     var acc = mk_skip_stmt(&stmt.pos);
     for (var i = list_len(ast_cases) - 1; i >= 0; i -= 1) {
-        var ast_case: *MatchCase = list_get(ast_cases, i);
+        var ast_case = list_get(ast_cases, i) as *MatchCase;
         var ast_pattern = ast_case.pattern;
         var ast_guard = ast_case.guard;
         var ast_body = ast_case.body;
@@ -1090,7 +1090,7 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
 //== Top-level declarations
 
 func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr {
-    var ctx: *Context = box(sizeof(Context), &Context { func_ });
+    var ctx = box(sizeof(Context), &Context { func_ }) as *Context;
 
     return lower_stmt(ctx, body);
 }
