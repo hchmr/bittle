@@ -157,6 +157,12 @@ func list_pop(self: *List): *Void {
     return self.elems[self.len];
 }
 
+func box(size: Int64, data: *Void): *Void {
+    var copy = malloc(size + sizeof(*Void));
+    memcpy(copy, data, size);
+    return copy;
+}
+
 func str_eq(a: *Char, b: *Char): Bool {
     return strcmp(a, b) == 0;
 }

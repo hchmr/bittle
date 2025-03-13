@@ -173,8 +173,7 @@ func reserve_reg(ctx: *CodegenCtx, reg: Reg) {
         spill_reg(ctx, reg);
     }
 
-    var reservation: *RegReservation = calloc(1, sizeof(RegReservation));
-    *reservation = RegReservation { did_spill: spill_needed };
+    var reservation: *RegReservation = box(sizeof(RegReservation), &RegReservation { did_spill: spill_needed });
     list_push(state.reservations, reservation);
 }
 

@@ -41,6 +41,8 @@ func list_set(self: *List, i: Int, elem: *Void);
 func list_push(self: *List, elem: *Void);
 func list_pop(self: *List): *Void;
 
+func box(size: Int, data: *Void): *Void;
+
 func str_eq(a: *Char, b: *Char): Bool;
 
 func align_up(size: Int , align: Int): Int;

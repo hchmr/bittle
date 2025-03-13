@@ -174,24 +174,20 @@ func asm_mk_sp_from_fp_mem_operand(fp_offset: Int): AsmMemOperand {
 }
 
 func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
-    var instr: *AsmInstr = calloc(1, sizeof(AsmInstr));
-    *instr = AsmInstr {
+    return box(sizeof(AsmInstr), &AsmInstr {
         op: op,
         n_args: n_args,
         args: calloc(n_args, sizeof(AsmOperand)),
-    };
-    return instr;
+    });
 }
 
 //==============================================================================
 //== Instruction building
 
 func asm_builder_new(): *AsmInstrBuilder {
-    var builder: *AsmInstrBuilder = calloc(1, sizeof(AsmInstrBuilder));
-    *builder = AsmInstrBuilder {
+    return box(sizeof(AsmInstrBuilder), &AsmInstrBuilder {
         instrs: list_new(),
-    };
-    return builder;
+    });
 }
 
 func asm_write_instr(builder: *AsmInstrBuilder, op: *Char, n_args: Int): *AsmInstr {

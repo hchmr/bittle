@@ -1,38 +1,30 @@
 include "bittle.btls";
 
 func mk_bool_const_value(value: Bool): *BoolConstValue {
-    var result: *BoolConstValue = calloc(1, sizeof(BoolConstValue));
-    *result = BoolConstValue {
+    return box(sizeof(BoolConstValue), &BoolConstValue {
         type: mk_bool_type(),
         bool: value,
-    };
-    return result;
+    });
 }
 
 func mk_int_const_value(value: Int, type: *Type): *IntConstValue {
-    var result: *IntConstValue = calloc(1, sizeof(IntConstValue));
-    *result = IntConstValue {
+    return box(sizeof(IntConstValue), &IntConstValue {
         type: type,
         int: value,
-    };
-    return result;
+    });
 }
 
 func mk_null_const_value(type: *Type): *NullConstValue {
-    var result: *NullConstValue = calloc(1, sizeof(NullConstValue));
-    *result = NullConstValue {
+    return box(sizeof(NullConstValue), &NullConstValue {
         type: type,
-    };
-    return result;
+    });
 }
 
 func mk_string_const_value(value: *StringBuffer): *StringConstValue {
-    var result: *StringConstValue = calloc(1, sizeof(StringConstValue));
-    *result = StringConstValue {
+    return box(sizeof(StringConstValue), &StringConstValue {
         type: mk_ptr_type(mk_int_type(1)),
         string: value,
-    };
-    return result;
+    });
 }
 
 func is_cmp_op(op: TokKind): Bool {

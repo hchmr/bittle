@@ -14,9 +14,10 @@ struct Scope {
 }
 
 func scope_new(parent: *Scope): *Scope {
-    var scope: *Scope = calloc(1, sizeof(Scope));
-    *scope = Scope { entries: list_new(), parent: parent };
-    return scope;
+    return box(sizeof(Scope), &Scope {
+        entries: list_new(),
+        parent: parent
+    });
 }
 
 func scope_drop(scope: *Scope) {
@@ -78,8 +79,10 @@ func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
 }
 
 func add_sym(ctx: *ElabCtx, sym: *Sym) {
-    var entry: *ScopeEntry = calloc(1, sizeof(ScopeEntry));
-    *entry = ScopeEntry { name: sym.name, sym_index: list_len(ctx.syms) };
+    var entry: *ScopeEntry = box(sizeof(ScopeEntry), &ScopeEntry {
+        name: sym.name,
+        sym_index: list_len(ctx.syms)
+    });
     list_push(ctx.syms, sym);
     list_push(ctx.scope.entries, entry);
 }
@@ -93,12 +96,11 @@ func declare_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
         return existing as *EnumSym;
     }
 
-    var sym: *EnumSym = calloc(1, sizeof(EnumSym));
-    *sym = EnumSym {
+    var sym: *EnumSym = box(sizeof(EnumSym), &EnumSym {
         name,
         is_defined: false,
         size: -1,
-    };
+    });
     add_sym(ctx, sym);
     return sym;
 }
@@ -125,8 +127,7 @@ func declare_record(
         return existing as *RecordSym;
     }
 
-    var sym: *RecordSym = calloc(1, sizeof(RecordSym));
-    *sym = RecordSym {
+    var sym: *RecordSym = box(sizeof(RecordSym), &RecordSym {
         name,
         is_defined: false,
         is_union,
@@ -134,7 +135,7 @@ func declare_record(
         fields: null,
         unpadded_size: 0,
         align: 0,
-    };
+    });
     add_sym(ctx, sym);
     return sym;
 }
@@ -228,8 +229,7 @@ func declare_func(
         return existing;
     }
 
-    var sym: *FuncSym = calloc(1, sizeof(FuncSym));
-    *sym = FuncSym {
+    var sym: *FuncSym = box(sizeof(FuncSym), &FuncSym {
         name,
         is_defined: false,
         params,
@@ -239,7 +239,7 @@ func declare_func(
         locals: list_new(),
         temps: list_new(),
         body: null
-    };
+    });
     add_sym(ctx, sym);
     return sym;
 }
@@ -339,18 +339,19 @@ func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
     if (!type_implicitly_convertible(e.type, target)) {
         return false;
     }
-    var cast: *CastExpr = calloc(1, sizeof(CastExpr));
+
     var const_value: *ConstValue = null;
     if (e.const_value) {
         const_value = const_value_cast(e.const_value, target);
     }
-    *cast = CastExpr {
+
+    var cast: *CastExpr = box(sizeof(CastExpr), &CastExpr {
         pos: e.pos,
         type: target,
         const_value,
         expr: e,
         type_expr: null
-    };
+    });
     *out = cast;
     return true;
 }
@@ -380,24 +381,22 @@ func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
 
     var field: *RecordField = list_get(sym.fields, field_index);
 
-    var field_init: *FieldInitializer = calloc(1, sizeof(FieldInitializer));
-    *field_init = FieldInitializer {
+    var field_init: *FieldInitializer = box(sizeof(FieldInitializer), &FieldInitializer {
         pos: e.pos,
         name: field.name,
         expr: e
-    };
+    });
 
     var field_inits: *List = list_new();
     list_push(field_inits, field_init);
 
-    var record_expr: *RecordExpr = calloc(1, sizeof(RecordExpr));
-    *record_expr = RecordExpr {
+    var record_expr: *RecordExpr = box(sizeof(RecordExpr), &RecordExpr {
         pos: e.pos,
         type: target,
         const_value: null,
         name: sym.name,
         fields: field_inits,
-    };
+    });
     *out = record_expr;
     return true;
 }
@@ -1446,13 +1445,12 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
     ? 0
     : align_up(sym.unpadded_size, field_align);
 
-    var field: *RecordField = calloc(1, sizeof(RecordField));
-    *field = RecordField {
+    var field: *RecordField = box(sizeof(RecordField), &RecordField {
         name: field_name,
         type: field_type,
         default_value,
         offset: field_offset,
-    };
+    });
 
     list_push(sym.fields, field);
     if (sym.is_union) {
@@ -1503,8 +1501,7 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
         var field: *RecordField = list_get(base_fields, i);
-        var copy: *RecordField = calloc(1, sizeof(RecordField));
-        *copy = *field;
+        var copy: *RecordField = box(sizeof(RecordField), field);
         list_push(fields, copy);
     }
 
@@ -1587,9 +1584,11 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
         default_value = const_eval_expect(ctx, param_decl.default_value, type);
     }
 
-    var result: *FuncParam = calloc(1, sizeof(FuncParam));
-    *result = FuncParam { name, type, default_value };
-    return result;
+    return box(sizeof(FuncParam), &FuncParam {
+        name,
+        type,
+        default_value
+    });
 }
 
 func check_default_params_order(param_decls: *List, rest_param: *RestParamDecl) {
@@ -1782,14 +1781,13 @@ func elab_decl(ctx: *ElabCtx, decl: *Decl) {
 }
 
 func elab(ast: *Ast): *List { // *List<*Sym>
-    var ctx: *ElabCtx = calloc(1, sizeof(ElabCtx));
-    *ctx = ElabCtx {
+    var ctx: *ElabCtx = box(sizeof(ElabCtx), &ElabCtx {
         syms: list_new(),
         scope: scope_new(null),
         current_func: null,
         loop_depth: 0,
         or_pattern_depth: 0,
-    };
+    });
 
     for (var pass = 0; pass < 4; pass += 1) {
         for (var i = 0; i < list_len(ast.decls); i += 1) {
