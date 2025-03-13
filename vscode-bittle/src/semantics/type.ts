@@ -413,7 +413,7 @@ export function typeConvertible(src: Type, dst: Type): boolean {
 function pointeeTypeLe(t1: Type, t2: Type): boolean {
     return typeEq(t1, t2)
         || (t1.kind === TypeKind.Err || t2.kind === TypeKind.Err)
-        || (t1.kind === TypeKind.Void)
+        || (t1.kind === TypeKind.Void || t2.kind === TypeKind.Void)
         || (t1.kind === TypeKind.Record && t2.kind === TypeKind.Record && recordLe(t1.sym, t2.sym));
 }
 
