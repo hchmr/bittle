@@ -319,20 +319,8 @@ func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
 //==============================================================================
 //== Type checking
 
-func types_compatible(t1: *Type, t2: *Type): Bool {
-    if (type_eq(t1, t2)) {
-        return true;
-    }
-    if (t1.kind == Type_Ptr && t2.kind == Type_Ptr) {
-        var p1 = t1 as *PtrType;
-        var p2 = t2 as *PtrType;
-        return p1.pointee.kind == Type_Void || p2.pointee.kind == Type_Void;
-    }
-    return false;
-}
-
 func report_type_mismatch(pos: *Pos, expected: *Type, actual: *Type) {
-    die_at(pos, "Type mismatch: %s != %s.\n", pretty_type(expected), pretty_type(actual));
+    die_at(pos, "Type mismatch. Expected '%s', got '%s'", pretty_type(expected), pretty_type(actual));
 }
 
 func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
@@ -357,10 +345,10 @@ func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
 }
 
 /*
-Desugar
-x: MyUnion = 123
-to
-x: MyUnion = MyUnion { field: 123 }
+    Desugar
+        x: MyUnion = 123
+    to
+        x: MyUnion = MyUnion { field: 123 }
 */
 func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
     if (target.kind != Type_Record) {
@@ -402,9 +390,9 @@ func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
 }
 
 func try_coerce_expr(e: *Expr, target: *Type, out: **Expr): Bool {
-    return types_compatible(e.type, target)
-    || try_coerce_expr_with_cast(e, target, out)
-    || try_coerce_expr_to_union(e, target, out);
+    return type_eq(e.type, target)
+        || try_coerce_expr_with_cast(e, target, out)
+        || try_coerce_expr_to_union(e, target, out);
 }
 
 func try_coerce_expr_to_int(e: *Expr, out: **Expr): Bool {
@@ -420,7 +408,7 @@ func try_coerce_expr_to_int(e: *Expr, out: **Expr): Bool {
 
 func check_expr_type(e: **Expr, expected: *Type) {
     try_coerce_expr(*e, expected, e);
-    if (!types_compatible((*e).type, expected)) {
+    if (!type_eq((*e).type, expected)) {
         report_type_mismatch(&(*e).pos, expected, (*e).type);
     }
 }
@@ -435,14 +423,14 @@ func check_expr_type_bool(e: **Expr) {
     check_expr_type(e, mk_bool_type());
 }
 
-func unify_expr_types(e1: **Expr, e2: **Expr) {
+func unify_expr_types_with_coersion(e1: **Expr, e2: **Expr) {
     try_coerce_expr(*e2, (*e1).type, e2);
     try_coerce_expr(*e1, (*e2).type, e1);
     check_expr_type(e2, (*e1).type);
 }
 
 func check_pattern_type(p: *Pattern, expected: *Type) {
-    if (!types_compatible(p.type, expected)) {
+    if (!type_eq(p.type, expected)) {
         report_type_mismatch(&p.pos, expected, p.type);
     }
 }
@@ -991,7 +979,7 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
         case Tok_EqEq | Tok_BangEq | Tok_Lt | Tok_LtEq | Tok_Gt | Tok_GtEq: {
             elab_expr_infer(ctx, left, type_hint: null);
             elab_expr_infer(ctx, right, type_hint: left.type);
-            unify_expr_types(&left, &right);
+            unify_expr_types_with_coersion(&left, &right);
             if (!is_scalar(left.type)) {
                 die_at(&left.pos, "Operands type is not comparable");
             }
@@ -1002,7 +990,7 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
         case Tok_Amp | Tok_Bar | Tok_Caret | Tok_LtLt | Tok_GtGt | Tok_Plus | Tok_Minus | Tok_Star | Tok_Slash | Tok_Percent: {
             elab_expr_int(ctx, &left, type_hint);
             elab_expr_int(ctx, &right, left.type);
-            unify_expr_types(&left, &right);
+            unify_expr_types_with_coersion(&left, &right);
             expr.type = left.type;
             expr.left = left;
             expr.right = right;
@@ -1025,7 +1013,7 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
     elab_expr_infer(ctx, then_expr, type_hint: type_hint);
     elab_expr_infer(ctx, else_expr, type_hint: then_expr.type);
 
-    unify_expr_types(&then_expr, &else_expr);
+    unify_expr_types_with_coersion(&then_expr, &else_expr);
     expr.type = then_expr.type;
     expr.cond = cond;
     expr.then_expr = then_expr;

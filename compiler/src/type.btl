@@ -85,7 +85,13 @@ func record_le(s1: *RecordSym, s2: *RecordSym): Bool {
 func pointee_type_le(t1: *Type, t2: *Type): Bool {
     return type_eq(t1, t2)
         || t1.kind == Type_Void
-        || t1.kind == Type_Record && t2.kind == Type_Record && record_le((t1 as *RecordType).sym, (t2 as *RecordType).sym);
+        || t2.kind == Type_Void
+        || t1.kind == Type_Record && t2.kind == Type_Record
+            && record_le((t1 as *RecordType).sym, (t2 as *RecordType).sym);
+}
+
+func pointer_type_le(t1: *PtrType, t2: *PtrType): Bool {
+    return pointee_type_le(t1.pointee, t2.pointee);
 }
 
 // Returns whether the first type is implicitly convertible to the second type.
@@ -103,7 +109,8 @@ func type_implicitly_convertible(src: *Type, dst: *Type): Bool {
                 || src.kind == Type_Enum && type_size(src) <= type_size(dst);
         }
         case Type_Ptr: {
-            return src.kind == Type_Ptr && pointee_type_le((src as *PtrType).pointee, (dst as *PtrType).pointee);
+            return src.kind == Type_Ptr
+                && pointer_type_le(src as *PtrType, dst as *PtrType);
         }
         case _: {
             return false;
