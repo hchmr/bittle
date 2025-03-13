@@ -1,4 +1,4 @@
-import { BoolType, canCoerce, mkBoolType, mkIntType, mkPointerType, Type, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout } from './type';
+import { BoolType, canCoerce, mkBoolType, mkIntType, mkPointerType, Type, typeEq, TypeKind, typeLayout } from './type';
 
 export enum ConstValueKind {
     Bool,
@@ -61,7 +61,7 @@ export function mkNullConstValue(type: Type): NullConstValue {
 }
 
 export function mkStringConstValue(value: string): StringConstValue {
-    return { kind: ConstValueKind.String, type: mkPointerType(mkIntType(8)), value };
+    return { kind: ConstValueKind.String, type: mkPointerType(mkIntType(8), false), value };
 }
 
 export function constCoerce(value: ConstValue, target: Type): ConstValue | undefined {

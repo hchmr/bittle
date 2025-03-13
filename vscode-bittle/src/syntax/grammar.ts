@@ -160,6 +160,7 @@ export const grammar = createGrammar({
 
     PointerType: $ => seq(
         '*',
+        optional('mut'),
         label('pointee', $.Type),
     ),
 

@@ -43,6 +43,7 @@ export type IntType = Readonly<{
 export type PointerType = Readonly<{
     kind: TypeKind.Ptr;
     pointeeType: Type;
+    isMut: boolean;
 }>;
 
 export type ArrayType = Readonly<{
@@ -97,6 +98,8 @@ const ERROR_TYPE: ErrorType = { kind: TypeKind.Err };
 
 const POINTER_TYPES = new WeakMap<Type, PointerType>();
 
+const MUT_POINTER_TYPES = new WeakMap<Type, PointerType>();
+
 const ENUM_TYPES = new WeakMap<EnumSym, EnumType>();
 
 const RECORD_TYPES = new WeakMap<RecordSym, RecordType>();
@@ -119,11 +122,12 @@ export function mkIntType(size: number | undefined): IntType {
     }
 }
 
-export function mkPointerType(pointeeType: Type): PointerType {
-    let ptrType = POINTER_TYPES.get(pointeeType);
+export function mkPointerType(pointeeType: Type, isMut: boolean): PointerType {
+    const cache = isMut ? MUT_POINTER_TYPES : POINTER_TYPES;
+    let ptrType = cache.get(pointeeType);
     if (ptrType === undefined) {
-        ptrType = { kind: TypeKind.Ptr, pointeeType };
-        POINTER_TYPES.set(pointeeType, ptrType);
+        ptrType = { kind: TypeKind.Ptr, pointeeType, isMut };
+        cache.set(pointeeType, ptrType);
     }
     return ptrType;
 }
@@ -265,8 +269,9 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
         const size = unifySize(t1.size, t2.size, onError);
         return mkIntType(size);
     } else if (t1.kind === TypeKind.Ptr && t2.kind === t1.kind) {
+        const isMut = tryUnifyMutability(t1.isMut, t2.isMut, onError);
         const pointeeType = tryUnifyTypes(t1.pointeeType, t2.pointeeType, onError);
-        return mkPointerType(pointeeType);
+        return mkPointerType(pointeeType, isMut);
     } else if (t1.kind === TypeKind.Arr && t2.kind === t1.kind) {
         const elemType = tryUnifyTypes(t1.elemType, t2.elemType, onError);
         const size = unifySize(t1.size, t2.size, onError);
@@ -287,6 +292,13 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
             return undefined;
         }
         return size1 ?? size2;
+    }
+
+    function tryUnifyMutability(isMut1: boolean, isMut2: boolean, onError: () => void): boolean {
+        if (isMut1 !== isMut2) {
+            onError();
+        }
+        return isMut1 || isMut2;
     }
 }
 
@@ -324,7 +336,8 @@ export function typeEq(t1: Type, t2: Type): boolean {
         return t1.size === t2.size;
     } else if (t1.kind === TypeKind.Ptr) {
         t2 = t2 as PointerType;
-        return typeEq(t1.pointeeType, t2.pointeeType);
+        return t1.isMut === t2.isMut
+            && typeEq(t1.pointeeType, t2.pointeeType);
     } else if (t1.kind === TypeKind.Arr) {
         t2 = t2 as ArrayType;
         return typeEq(t1.elemType, t2.elemType) && t1.size === t2.size;
@@ -380,28 +393,28 @@ export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
     } else if (dst.kind === TypeKind.Int) {
         return (src.kind === TypeKind.Int && src.size! <= dst.size!)
             || (src.kind === TypeKind.Enum && src.sym.size <= dst.size!);
-    } else if (dst.kind === TypeKind.Ptr) {
-        return src.kind === TypeKind.Ptr && pointeeTypeLe(src.pointeeType, dst.pointeeType);
+    } else if (src.kind === TypeKind.Ptr && dst.kind === TypeKind.Ptr) {
+        return pointerTypeLe(src, dst);
     } else {
         return false;
     }
 }
 
+function pointerTypeConvertible(src: PointerType, dst: PointerType): boolean {
+    return !(!src.isMut && dst.isMut && (pointeeTypeLe(src.pointeeType, dst.pointeeType) || pointeeTypeLe(dst.pointeeType, src.pointeeType)))
+        || ([src.pointeeType.kind, dst.pointeeType.kind].includes(TypeKind.Void));
+}
+
 export function typeConvertible(src: Type, dst: Type): boolean {
-    if (src.kind === TypeKind.Never || src.kind === TypeKind.Err) {
-        return true;
-    }
-    if (dst.kind === TypeKind.Err) {
+    if (typeImplicitlyConvertible(src, dst)) {
         return true;
     }
 
-    if (dst.kind === TypeKind.Bool) {
-        return isScalarType(src);
-    } else if (dst.kind === TypeKind.Int) {
+    if (dst.kind === TypeKind.Int) {
         return isScalarType(src);
     } else if (dst.kind === TypeKind.Ptr) {
         return (src.kind === TypeKind.Int && src.size === 64)
-            || src.kind === TypeKind.Ptr;
+            || src.kind === TypeKind.Ptr && pointerTypeConvertible(src, dst);
     } else if (dst.kind === TypeKind.Enum) {
         return src.kind === TypeKind.Int
             || src.kind === TypeKind.Enum;
@@ -410,21 +423,29 @@ export function typeConvertible(src: Type, dst: Type): boolean {
     }
 }
 
-function pointeeTypeLe(t1: Type, t2: Type): boolean {
-    return typeEq(t1, t2)
-        || (t1.kind === TypeKind.Err || t2.kind === TypeKind.Err)
-        || t2.kind === TypeKind.Void
-        || (t1.kind === TypeKind.Record && t2.kind === TypeKind.Record && recordLe(t1.sym, t2.sym));
-}
-
 function recordLe(s1: RecordSym, s2: RecordSym): boolean {
     if (s1.qualifiedName === s2.qualifiedName) {
         return true;
     }
-    if (s1.base === undefined) {
+    if (!s1.base) {
         return false;
     }
     return recordLe(s1.base, s2);
+}
+
+function pointeeTypeLe(t1: Type, t2: Type): boolean {
+    return typeEq(t1, t2)
+        || t1.kind === TypeKind.Never
+        || t2.kind === TypeKind.Void
+        || (t1.kind === TypeKind.Record && t2.kind === TypeKind.Record && recordLe(t1.sym, t2.sym));
+}
+
+function pointerTypeLe(t1: PointerType, t2: PointerType): boolean {
+    const p1 = t1.pointeeType;
+    const p2 = t2.pointeeType;
+
+    return (!t2.isMut && pointeeTypeLe(p1, p2))
+        || (t1.isMut && t2.isMut && (typeEq(p1, p2) || p2.kind === TypeKind.Void));
 }
 
 export function prettyType(t: Type): string {
@@ -432,7 +453,7 @@ export function prettyType(t: Type): string {
         case TypeKind.Void: return 'Void';
         case TypeKind.Bool: return 'Bool';
         case TypeKind.Int: return `Int${t.size ?? ''}`;
-        case TypeKind.Ptr: return '*' + prettyType(t.pointeeType);
+        case TypeKind.Ptr: return '*' + (t.isMut ? 'mut ' : '') + prettyType(t.pointeeType);
         case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
         case TypeKind.Enum:
         case TypeKind.Record: return t.sym.name;

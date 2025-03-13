@@ -295,6 +295,9 @@ export class PointerTypeNode extends AstNode {
     get starToken(): TokenNode<'*'> | undefined {
         return this.getTokenOfType(undefined, ['*']);
     }
+    get mutToken(): TokenNode<'mut'> | undefined {
+        return this.getTokenOfType(undefined, ['mut']);
+    }
     get pointee(): TypeNode | undefined {
         return this.getAstNodeOfType<TypeNode>('pointee', ['GroupedType', 'NameType', 'PointerType', 'ArrayType', 'TypeofType', 'NeverType', 'RestParamType']);
     }

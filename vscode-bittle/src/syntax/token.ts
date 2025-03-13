@@ -84,6 +84,7 @@ export const keywords = [
     'is',
     'include',
     'match',
+    'mut',
     'null',
     'return',
     'sizeof',

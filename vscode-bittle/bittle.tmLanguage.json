@@ -39,7 +39,7 @@
         },
         {
             "name": "keyword.btl",
-            "match": "(?:as|const|enum|extern|false|func|include|is|null|sizeof|struct|true|typeof|union|var)\\b"
+            "match": "(?:as|const|enum|extern|false|func|include|is|mut|null|sizeof|struct|true|typeof|union|var)\\b"
         },
         {
             "name": "constant.language.btl",

@@ -579,7 +579,8 @@ export class Elaborator {
                     }
                 }
             } else if (typeNode instanceof PointerTypeNode) {
-                return mkPointerType(this.typeEval(typeNode.pointee));
+                const isMut = !!typeNode.mutToken;
+                return mkPointerType(this.typeEval(typeNode.pointee), isMut);
             } else if (typeNode instanceof ArrayTypeNode) {
                 const elemType = this.typeEval(typeNode.type);
                 if (this.isUnsizedType(elemType)) {
@@ -1025,7 +1026,7 @@ export class Elaborator {
                     this.reportError(paramNode, `The arg count parameter of 'main' must have type 'Int32'.`);
                 }
             } else if (i === 1) {
-                if (!typeEq(param.type, mkPointerType(mkPointerType(mkIntType(8))))) {
+                if (!typeEq(param.type, mkPointerType(mkPointerType(mkIntType(8), false), false))) {
                     this.reportError(paramNode, `The arg vector parameter of 'main' must have type '**Char'.`);
                 }
             } else {
@@ -1376,7 +1377,8 @@ export class Elaborator {
             case '&': {
                 const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint.pointeeType : undefined;
                 const operandType = this.elabExprInfer(operandNode, { typeHint: operandTypeHint });
-                return mkPointerType(operandType);
+                const isMut = this.checkIfLvalue(operandNode)?.isMut ?? false;
+                return mkPointerType(operandType, isMut);
             }
             case '*': {
                 const operandTypeHint = typeHint?.kind === TypeKind.Ptr ? typeHint : undefined;
@@ -1412,9 +1414,6 @@ export class Elaborator {
                 const leftNode = node.left;
                 const rightNode = node.right;
 
-                if (!isLvalue(leftNode)) {
-                    this.reportError(leftNode ?? node, `L-value expected.`);
-                }
                 const leftType = op !== '='
                     ? this.elabExprInferInt(leftNode, { typeHint })
                     : this.elabExprInfer(leftNode, { typeHint: undefined });
@@ -1422,6 +1421,15 @@ export class Elaborator {
                 if (rightNode) {
                     this.elabExpr(rightNode, leftType);
                 }
+
+                const lvalueResult = this.checkIfLvalue(leftNode);
+                if (!lvalueResult.isLvalue) {
+                    this.reportError(leftNode ?? node, `L-value expected.`);
+                }
+                if (lvalueResult.isMut === false) {
+                    this.reportError(leftNode ?? node, `Target is not mutable.`);
+                }
+
                 return mkVoidType();
             }
             case '+':
@@ -1885,9 +1893,9 @@ export class Elaborator {
         } else if (node instanceof CharLiteralNode) {
             return mkIntType(8);
         } else if (node instanceof StringLiteralNode) {
-            return mkPointerType(mkIntType(8));
+            return mkPointerType(mkIntType(8), false);
         } else if (node instanceof NullLiteralNode) {
-            return typeHint?.kind === TypeKind.Ptr ? typeHint : mkPointerType(mkVoidType());
+            return typeHint?.kind === TypeKind.Ptr ? typeHint : mkPointerType(mkVoidType(), true);
         } else {
             unreachable(node);
         }
@@ -1953,6 +1961,48 @@ export class Elaborator {
     //==============================================================================
     //== Helper methods
 
+    checkIfLvalue(node: ExprNode | Nullish): { isLvalue: boolean; isMut?: boolean } {
+        if (!node) {
+            return { isLvalue: false };
+        } else if (node instanceof GroupedExprNode) {
+            return this.checkIfLvalue(node.exprNode);
+        } else if (node instanceof NameExprNode) {
+            const sym = this.resolveName(node.identifierToken!);
+            if (!sym || ![SymKind.Local, SymKind.Global, SymKind.FuncParam].includes(sym.kind)) {
+                return { isLvalue: false };
+            }
+            return { isLvalue: true, isMut: true };
+        } else if (node instanceof FieldExprNode) {
+            if (!node.left) {
+                return { isLvalue: true };
+            }
+            const leftType = this.getType(node.left);
+            if (leftType.kind === TypeKind.Ptr) {
+                return { isLvalue: true, isMut: leftType.isMut };
+            }
+            return this.checkIfLvalue(node.left);
+        } else if (node instanceof IndexExprNode) {
+            if (!node.indexee) {
+                return { isLvalue: true };
+            }
+            const indexeeType = this.getType(node.indexee);
+            if (indexeeType.kind === TypeKind.Ptr) {
+                return { isLvalue: true, isMut: indexeeType.isMut };
+            }
+            return this.checkIfLvalue(node.indexee);
+        } else if (node instanceof UnaryExprNode && node.op?.text === '*') {
+            if (!node.right) {
+                return { isLvalue: true };
+            }
+            const rightType = this.getType(node.right);
+            return rightType.kind === TypeKind.Ptr
+                ? { isLvalue: true, isMut: rightType.isMut }
+                : { isLvalue: false };
+        } else {
+            return { isLvalue: false };
+        }
+    }
+
     private setType(node: ExprNode | PatternNode | TypeNode, type: Type) {
         this.nodeTypeMap.set(node.syntax, type);
     }
@@ -2013,24 +2063,6 @@ export class Elaborator {
 
 //================================================================================
 //== Utility functions
-
-function isLvalue(node: ExprNode | Nullish): boolean {
-    if (!node)
-        return true;
-    if (node instanceof GroupedExprNode) {
-        return isLvalue(node.exprNode);
-    } else if (node instanceof NameExprNode) {
-        return true;
-    } else if (node instanceof IndexExprNode) {
-        return true;
-    } else if (node instanceof FieldExprNode) {
-        return true;
-    } else if (node instanceof UnaryExprNode) {
-        return node.op?.text === '*';
-    } else {
-        return false;
-    }
-}
 
 function isInvalidReturnType(type: Type): boolean {
     return type.kind !== TypeKind.Err && !isValidReturnType(type);

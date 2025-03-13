@@ -1132,6 +1132,9 @@ export class Parser extends ParserBase {
     pointerType() {
         this.beginNode(CompositeNodeTypes.PointerType);
         this.bump('*');
+        if (this.match('mut')) {
+            this.bump('mut');
+        }
         this.beginField('pointee');
         this.type();
         this.finishField('pointee');
