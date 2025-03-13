@@ -235,11 +235,11 @@ func join_paths(dir: *Char, file: *Char): *Char {
     return sb_finish(sb);
 }
 
-func is_whitespace(c: Int32): Bool {
+func is_whitespace(c: Char): Bool {
     return c is (' ' | '\n' | '\r' | '\t');
 }
 
-func is_digit(c: Int32, base: Int): Bool {
+func is_digit(c: Char, base: Int): Bool {
     var MAX_BASE = 'z' - '0' + 1;
     assert(0 < base && base <= MAX_BASE, "is_digit: invalid base");
 
@@ -248,15 +248,15 @@ func is_digit(c: Int32, base: Int): Bool {
         || c is ('A' ... 'Z') && c - 'A' < base - 10;
 }
 
-func is_word_start(c: Int32): Bool {
+func is_word_start(c: Char): Bool {
     return c is ('a' ... 'z' | 'A' ... 'Z' | '_');
 }
 
-func is_word_part(c: Int32): Bool {
+func is_word_part(c: Char): Bool {
     return is_word_start(c) || is_digit(c, 10);
 }
 
-func is_print(c: Int32): Bool {
+func is_print(c: Char): Bool {
     return c is ' '...'~';
 }
 
