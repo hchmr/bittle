@@ -1452,9 +1452,6 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
         die_at(&base.pos, "Record cannot inherit from itself");
     }
     var base_fields = baseSym.fields;
-    if (baseSym.is_union != record_sym.is_union && list_len(base_fields) != 1) {
-        die_at(&base.pos, "Base type must be the same kind of record or have exactly one field");
-    }
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
         var field: *RecordField = list_get(base_fields, i);
