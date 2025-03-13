@@ -58,30 +58,37 @@ func type_eq(t1: *Type, t2: *Type): Bool {
     if (t1.kind != t2.kind) {
         return false;
     }
-    if (t1.kind == Type_Int) {
-        var t1 = t1 as *IntType;
-        var t2 = t2 as *IntType;
-        return t1.size == t2.size;
-    } else if (t1.kind == Type_Ptr) {
-        var t1 = t1 as *PtrType;
-        var t2 = t2 as *PtrType;
-        return type_eq(t1.pointee, t2.pointee);
-    } else if (t1.kind == Type_Arr) {
-        var t1 = t1 as *ArrType;
-        var t2 = t2 as *ArrType;
-        return type_eq(t1.elem, t2.elem) && t1.size == t2.size;
-    } else if (t1.kind == Type_Enum) {
-        var t1 = t1 as *EnumType;
-        var t2 = t2 as *EnumType;
-        return t1.sym == t2.sym;
-    } else if (t1.kind == Type_Record) {
-        var t1 = t1 as *RecordType;
-        var t2 = t2 as *RecordType;
-        return t1.sym == t2.sym;
+    match (t1.kind) {
+        case Type_Int: {
+            var t1 = t1 as *IntType;
+            var t2 = t2 as *IntType;
+            return t1.size == t2.size;
+        }
+        case Type_Ptr: {
+            var t1 = t1 as *PtrType;
+            var t2 = t2 as *PtrType;
+            return type_eq(t1.pointee, t2.pointee);
+        }
+        case Type_Arr: {
+            var t1 = t1 as *ArrType;
+            var t2 = t2 as *ArrType;
+            return type_eq(t1.elem, t2.elem) && t1.size == t2.size;
+        }
+        case Type_Enum: {
+            var t1 = t1 as *EnumType;
+            var t2 = t2 as *EnumType;
+            return t1.sym == t2.sym;
+        }
+        case Type_Record: {
+            var t1 = t1 as *RecordType;
+            var t2 = t2 as *RecordType;
+            return t1.sym == t2.sym;
+        }
+        case _: {
+            return true;
+        }
     }
-    return true;
 }
-
 func record_le(s1: *RecordSym, s2: *RecordSym): Bool {
     if (s1 == s2) {
         return true;
@@ -104,15 +111,20 @@ func type_implicitly_convertible(src: *Type, dst: *Type): Bool {
         return true;
     }
 
-    if (dst.kind == Type_Bool) {
-        return is_scalar(src);
-    } else if (dst.kind == Type_Int) {
-        return src.kind == Type_Int && type_size(src) <= type_size(dst)
-            || src.kind == Type_Enum && type_size(src) <= type_size(dst);
-    } else if (dst.kind == Type_Ptr) {
-        return src.kind == Type_Ptr && pointee_type_le((src as *PtrType).pointee, (dst as *PtrType).pointee);
-    } else {
-        return false;
+    match (dst.kind) {
+        case Type_Bool: {
+            return is_scalar(src);
+        }
+        case Type_Int: {
+            return src.kind == Type_Int && type_size(src) <= type_size(dst)
+                || src.kind == Type_Enum && type_size(src) <= type_size(dst);
+        }
+        case Type_Ptr: {
+            return src.kind == Type_Ptr && pointee_type_le((src as *PtrType).pointee, (dst as *PtrType).pointee);
+        }
+        case _: {
+            return false;
+        }
     }
 }
 
@@ -123,73 +135,88 @@ func type_convertible(src: *Type, dst: *Type): Bool {
         return true;
     }
 
-    if (dst.kind == Type_Bool) {
-        return is_scalar(src);
-    } else if (dst.kind == Type_Int) {
-        return is_scalar(src);
-    } else if (dst.kind == Type_Ptr) {
-        return src.kind == Type_Int && type_size(src) == 8
-            || src.kind == Type_Ptr;
-    } else if (dst.kind == Type_Enum) {
-        return src.kind == Type_Int
-            || src.kind == Type_Enum;
-    } else {
-        return false;
+    match (dst.kind) {
+        case Type_Bool: {
+            return is_scalar(src);
+        }
+        case Type_Int: {
+            return is_scalar(src);
+        }
+        case Type_Ptr: {
+            return src.kind == Type_Int && type_size(src) == 8
+                || src.kind == Type_Ptr;
+        }
+        case Type_Enum: {
+            return src.kind is (Type_Int | Type_Enum);
+        }
+        case _: {
+            return false;
+        }
     }
 }
 
 func type_size(type: *Type): Int {
-    if (type.kind == Type_Void) {
-        return -1;
-    } else if (type.kind == Type_Bool) {
-        return 1;
-    } else if (type.kind == Type_Int) {
-        return (type as *IntType).size;
-    } else if (type.kind == Type_Ptr) {
-        return 8;
-    } else if (type.kind == Type_Arr) {
-        var type = type as *ArrType;
-        return type_size(type.elem) * type.size;
-    } else if (type.kind == Type_Enum) {
-        var type = type as *EnumType;
-        return type_size(mk_int_type(type.sym.size));
-    } else if (type.kind == Type_Record) {
-        var type = type as *RecordType;
-        return list_len(type.sym.fields) == 0 ? -1 : align_up(type.sym.unpadded_size, type.sym.align);
-    } else if (type.kind == Type_Never) {
-        return -1;
-    } else if (type.kind == Type_RestParam) {
-        return 32;
-    } else {
-        unreachable("type_size");
+    match (type.kind) {
+        case Type_Void: {
+            return -1;
+        }
+        case Type_Bool: {
+            return 1;
+        }
+        case Type_Int: {
+            return (type as *IntType).size;
+        }
+        case Type_Ptr: {
+            return 8;
+        }
+        case Type_Arr: {
+            var type = type as *ArrType;
+            return type_size(type.elem) * type.size;
+        }
+        case Type_Enum: {
+            var type = type as *EnumType;
+            return type_size(mk_int_type(type.sym.size));
+        }
+        case Type_Record: {
+            var type = type as *RecordType;
+            return list_len(type.sym.fields) == 0 ? -1 : align_up(type.sym.unpadded_size, type.sym.align);
+        }
+        case Type_Never: {
+            return -1;
+        }
+        case Type_RestParam: {
+            return 32;
+        }
+        case _: {
+            unreachable("type_size");
+        }
     }
 }
 
 func type_align(type: *Type): Int {
-    if (type.kind == Type_Record) {
-        var type = type as *RecordType;
-        return list_len(type.sym.fields) == 0 ? -1 : type.sym.align;
-    } else if (type.kind == Type_Arr) {
-        var type = type as *ArrType;
-        return type_align(type.elem);
-    } else if (type.kind == Type_RestParam) {
-        return 8;
-    } else {
-        return type_size(type);
+    match (type.kind) {
+        case Type_Record: {
+            var type = type as *RecordType;
+            return list_len(type.sym.fields) == 0 ? -1 : type.sym.align;
+        }
+        case Type_Arr: {
+            var type = type as *ArrType;
+            return type_align(type.elem);
+        }
+        case Type_RestParam: {
+            return 8;
+        }
+        case _: {
+            return type_size(type);
+        }
     }
 }
-
 func is_scalar(type: *Type): Bool {
-    return type.kind == Type_Bool
-        || type.kind == Type_Int
-        || type.kind == Type_Ptr
-        || type.kind == Type_Enum;
+    return type.kind is (Type_Bool | Type_Int | Type_Ptr | Type_Enum);
 }
 
 func is_composite(type: *Type): Bool {
-    return type.kind == Type_Arr
-        || type.kind == Type_Record
-        || type.kind == Type_RestParam;
+    return type.kind is (Type_Arr | Type_Record | Type_RestParam);
 }
 
 func is_pass_by_ptr(type: *Type): Bool {
@@ -201,32 +228,43 @@ func is_sized(type: *Type): Bool {
 }
 
 func sb_pretty_type(sb: *StringBuffer, type: *Type) {
-    if (type.kind == Type_Void) {
-        sb_printf(sb, "Void");
-    } else if (type.kind == Type_Bool) {
-        sb_printf(sb, "Bool");
-    } else if (type.kind == Type_Int) {
-        sb_printf(sb, "Int%d", (type as *IntType).size * 8);
-    } else if (type.kind == Type_Ptr) {
-        sb_printf(sb, "*");
-        sb_pretty_type(sb, (type as *PtrType).pointee);
-    } else if (type.kind == Type_Arr) {
-        var type = type as *ArrType;
-        sb_printf(sb, "[");
-        sb_pretty_type(sb, type.elem);
-        sb_printf(sb, "; %d]", type.size);
-    } else if (type.kind == Type_Enum) {
-        var sym = (type as *EnumType).sym;
-        sb_printf(sb, "%s", sym.name);
-    } else if (type.kind == Type_Record) {
-        var sym = (type as *RecordType).sym;
-        sb_printf(sb, "%s", sym.name);
-    } else if (type.kind == Type_Never) {
-        sb_printf(sb, "!");
-    } else if (type.kind == Type_RestParam) {
-        sb_printf(sb, "...");
-    } else {
-        unreachable("pretty_type");
+    match (type.kind) {
+        case Type_Void: {
+            sb_printf(sb, "Void");
+        }
+        case Type_Bool: {
+            sb_printf(sb, "Bool");
+        }
+        case Type_Int: {
+            sb_printf(sb, "Int%d", (type as *IntType).size * 8);
+        }
+        case Type_Ptr: {
+            sb_printf(sb, "*");
+            sb_pretty_type(sb, (type as *PtrType).pointee);
+        }
+        case Type_Arr: {
+            var type = type as *ArrType;
+            sb_printf(sb, "[");
+            sb_pretty_type(sb, type.elem);
+            sb_printf(sb, "; %d]", type.size);
+        }
+        case Type_Enum: {
+            var sym = (type as *EnumType).sym;
+            sb_printf(sb, "%s", sym.name);
+        }
+        case Type_Record: {
+            var sym = (type as *RecordType).sym;
+            sb_printf(sb, "%s", sym.name);
+        }
+        case Type_Never: {
+            sb_printf(sb, "!");
+        }
+        case Type_RestParam: {
+            sb_printf(sb, "...");
+        }
+        case _: {
+            unreachable("pretty_type");
+        }
     }
 }
 

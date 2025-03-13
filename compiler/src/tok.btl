@@ -1,91 +1,90 @@
 include "bittle.btls";
 
-func not_found(kind: Int32): ! {
-    fprintf(stderr, "\n*** Unreachable: Unknown token kind %d\n", kind);
-    exit(1);
-}
-
-func pretty_tok_kind(kind: Int32): *Char {
-    return kind == Tok_Eof ? "<eof>"
+func pretty_tok_kind(kind: TokKind): *Char {
+    match (kind) {
+        case Tok_Eof: return "<eof>";
         // Identifier
-        : kind == Tok_Ident ? "identifier"
+        case Tok_Ident: return "identifier";
         // Literals
-        : kind == Tok_Int ? "integer"
-        : kind == Tok_String ? "string"
-        : kind == Tok_Char ? "character"
+        case Tok_Int: return "integer";
+        case Tok_String: return "string";
+        case Tok_Char: return "character";
         // Keywords
-        : kind == Tok_As ? "'as'"
-        : kind == Tok_Break ? "'break'"
-        : kind == Tok_Case ? "'case'"
-        : kind == Tok_Const ? "'const'"
-        : kind == Tok_Continue ? "'continue'"
-        : kind == Tok_Else ? "'else'"
-        : kind == Tok_Enum ? "'enum'"
-        : kind == Tok_Extern ? "'extern'"
-        : kind == Tok_False ? "'false'"
-        : kind == Tok_For ? "'for'"
-        : kind == Tok_Func ? "'func'"
-        : kind == Tok_If ? "'if'"
-        : kind == Tok_Is ? "'is'"
-        : kind == Tok_Include ? "'include'"
-        : kind == Tok_Match ? "'match'"
-        : kind == Tok_Null ? "'null'"
-        : kind == Tok_Return ? "'return'"
-        : kind == Tok_Sizeof ? "'sizeof'"
-        : kind == Tok_Struct ? "'struct'"
-        : kind == Tok_True ? "'true'"
-        : kind == Tok_Typeof ? "'typeof'"
-        : kind == Tok_Union ? "'union'"
-        : kind == Tok_Var ? "'var'"
-        : kind == Tok_While ? "'while'"
-        : kind == Tok_Underscore ? "'_'"
+        case Tok_As: return "'as'";
+        case Tok_Break: return "'break'";
+        case Tok_Case: return "'case'";
+        case Tok_Const: return "'const'";
+        case Tok_Continue: return "'continue'";
+        case Tok_Else: return "'else'";
+        case Tok_Enum: return "'enum'";
+        case Tok_Extern: return "'extern'";
+        case Tok_False: return "'false'";
+        case Tok_For: return "'for'";
+        case Tok_Func: return "'func'";
+        case Tok_If: return "'if'";
+        case Tok_Is: return "'is'";
+        case Tok_Include: return "'include'";
+        case Tok_Match: return "'match'";
+        case Tok_Null: return "'null'";
+        case Tok_Return: return "'return'";
+        case Tok_Sizeof: return "'sizeof'";
+        case Tok_Struct: return "'struct'";
+        case Tok_True: return "'true'";
+        case Tok_Typeof: return "'typeof'";
+        case Tok_Union: return "'union'";
+        case Tok_Var: return "'var'";
+        case Tok_While: return "'while'";
+        case Tok_Underscore: return "'_'";
         // Symbols
-        : kind == Tok_LParen ? "'('"
-        : kind == Tok_RParen ? "')'"
-        : kind == Tok_LBrace ? "'{'"
-        : kind == Tok_RBrace ? "'}'"
-        : kind == Tok_LBracket ? "'['"
-        : kind == Tok_RBracket ? "']'"
-        : kind == Tok_Comma ? "','"
-        : kind == Tok_Semicolon ? "';'"
-        : kind == Tok_Dot ? "'.'"
-        : kind == Tok_DotDot ? "'..'"
-        : kind == Tok_DotDotDot ? "'...'"
-        : kind == Tok_Colon ? "':'"
-        : kind == Tok_ColonColon ? "'::'"
-        : kind == Tok_At ? "'@'"
-        : kind == Tok_Arrow ? "'->'"
-        : kind == Tok_Plus ? "'+'"
-        : kind == Tok_PlusEq ? "'+='"
-        : kind == Tok_Minus ? "'-'"
-        : kind == Tok_MinusEq ? "'-='"
-        : kind == Tok_Star ? "'*'"
-        : kind == Tok_StarEq ? "'*='"
-        : kind == Tok_Slash ? "'/'"
-        : kind == Tok_SlashEq ? "'/='"
-        : kind == Tok_Percent ? "'%'"
-        : kind == Tok_PercentEq ? "'%='"
-        : kind == Tok_Amp ? "'&'"
-        : kind == Tok_AmpEq ? "'&='"
-        : kind == Tok_AmpAmp ? "'&&'"
-        : kind == Tok_Bar ? "'|'"
-        : kind == Tok_BarEq ? "'|='"
-        : kind == Tok_BarBar ? "'||'"
-        : kind == Tok_Caret ? "'^'"
-        : kind == Tok_CaretEq ? "'^='"
-        : kind == Tok_Bang ? "'!'"
-        : kind == Tok_Tilde ? "'~'"
-        : kind == Tok_Question ? "'?'"
-        : kind == Tok_Lt ? "'<'"
-        : kind == Tok_LtLtEq ? "'<<='"
-        : kind == Tok_LtLt ? "'<<'"
-        : kind == Tok_LtEq ? "'<='"
-        : kind == Tok_Gt ? "'>'"
-        : kind == Tok_GtEq ? "'>='"
-        : kind == Tok_GtGt ? "'>>'"
-        : kind == Tok_GtGtEq ? "'>>='"
-        : kind == Tok_Eq ? "'='"
-        : kind == Tok_EqEq ? "'=='"
-        : kind == Tok_BangEq ? "'!='"
-        : not_found(kind);
+        case Tok_LParen: return "'('";
+        case Tok_RParen: return "')'";
+        case Tok_LBrace: return "'{'";
+        case Tok_RBrace: return "'}'";
+        case Tok_LBracket: return "'['";
+        case Tok_RBracket: return "']'";
+        case Tok_Comma: return "','";
+        case Tok_Semicolon: return "';'";
+        case Tok_Dot: return "'.'";
+        case Tok_DotDot: return "'..'";
+        case Tok_DotDotDot: return "'...'";
+        case Tok_Colon: return "':'";
+        case Tok_ColonColon: return "'::'";
+        case Tok_At: return "'@'";
+        case Tok_Arrow: return "'->'";
+        case Tok_Plus: return "'+'";
+        case Tok_PlusEq: return "'+='";
+        case Tok_Minus: return "'-'";
+        case Tok_MinusEq: return "'-='";
+        case Tok_Star: return "'*'";
+        case Tok_StarEq: return "'*='";
+        case Tok_Slash: return "'/'";
+        case Tok_SlashEq: return "'/='";
+        case Tok_Percent: return "'%'";
+        case Tok_PercentEq: return "'%='";
+        case Tok_Amp: return "'&'";
+        case Tok_AmpEq: return "'&='";
+        case Tok_AmpAmp: return "'&&'";
+        case Tok_Bar: return "'|'";
+        case Tok_BarEq: return "'|='";
+        case Tok_BarBar: return "'||'";
+        case Tok_Caret: return "'^'";
+        case Tok_CaretEq: return "'^='";
+        case Tok_Bang: return "'!'";
+        case Tok_Tilde: return "'~'";
+        case Tok_Question: return "'?'";
+        case Tok_Lt: return "'<'";
+        case Tok_LtLtEq: return "'<<='";
+        case Tok_LtLt: return "'<<'";
+        case Tok_LtEq: return "'<='";
+        case Tok_Gt: return "'>'";
+        case Tok_GtEq: return "'>='";
+        case Tok_GtGt: return "'>>'";
+        case Tok_GtGtEq: return "'>>='";
+        case Tok_Eq: return "'='";
+        case Tok_EqEq: return "'=='";
+        case Tok_BangEq: return "'!='";
+        case _: {
+            unreachable("pretty_tok_kind");
+        }
+    }
 }

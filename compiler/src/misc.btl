@@ -230,21 +230,20 @@ func join_paths(dir: *Char, file: *Char): *Char {
 }
 
 func is_whitespace(c: Int32): Bool {
-    return c == ' ' || c == '\n' || c == '\r' || c == '\t';
+    return c is (' ' | '\n' | '\r' | '\t');
 }
 
 func is_digit(c: Int32, base: Int): Bool {
     var MAX_BASE = 'z' - '0' + 1;
     assert(0 < base && base <= MAX_BASE, "is_digit: invalid base");
 
-    return
-        ('0' <= c && c <= '9' && c - '0' < base)
-        || ('a' <= c && c <= 'z' && c - 'a' < base - 10)
-        || ('A' <= c && c <= 'Z' && c - 'A' < base - 10);
+    return c is ('0' ... '9') && c - '0' < base
+        || c is ('a' ... 'z') && c - 'a' < base - 10
+        || c is ('A' ... 'Z') && c - 'A' < base - 10;
 }
 
 func is_word_start(c: Int32): Bool {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    return c is ('a' ... 'z' | 'A' ... 'Z' | '_');
 }
 
 func is_word_part(c: Int32): Bool {
@@ -252,7 +251,7 @@ func is_word_part(c: Int32): Bool {
 }
 
 func is_print(c: Int32): Bool {
-    return c >= ' ' && c <= '~';
+    return c is ' '...'~';
 }
 
 func parse_char(s: *Char): Char {
@@ -270,29 +269,25 @@ func parse_string(s: *Char): *StringBuffer {
     assert(quote == '"' || quote == '\'', "parse_string: expected quote");
     i += 1;
     while (s[i] && s[i] != quote) {
-        if (s[i] == '\\') {
-            i += 1;
-            if (s[i] == '0') {
-                sb_push(sb, '\0');
-            } else if (s[i] == '\\') {
-                sb_push(sb, '\\');
-            } else if (s[i] == '\'') {
-                sb_push(sb, '\'');
-            } else if (s[i] == '\"') {
-                sb_push(sb, '\"');
-            } else if (s[i] == 'n') {
-                sb_push(sb, '\n');
-            } else if (s[i] == 'r') {
-                sb_push(sb, '\r');
-            } else if (s[i] == 't') {
-                sb_push(sb, '\t');
-            } else {
-                die("Invalid escape sequence.");
+        match (s[i]) {
+            case '\\': {
+                i += 1;
+                match (s[i]) {
+                    case '0': { sb_push(sb, '\0'); }
+                    case '\\': { sb_push(sb, '\\'); }
+                    case '\'': { sb_push(sb, '\''); }
+                    case '\"': { sb_push(sb, '\"'); }
+                    case 'n': { sb_push(sb, '\n'); }
+                    case 'r': { sb_push(sb, '\r'); }
+                    case 't': { sb_push(sb, '\t'); }
+                    case _: { die("Invalid escape sequence."); }
+                }
+                i += 1;
             }
-            i += 1;
-        } else {
-            sb_push(sb, s[i]);
-            i += 1;
+            case _: {
+                sb_push(sb, s[i]);
+                i += 1;
+            }
         }
     }
     assert(s[i] == quote, "parse_string: expected quote");

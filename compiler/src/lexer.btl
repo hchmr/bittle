@@ -88,7 +88,7 @@ func finish_token(self: *Lexer, tok_kind: TokKind, lexeme: *Char) {
     self.tok_lexeme = lexeme;
 }
 
-func curr_char(self: *Lexer): Int32 {
+func curr_char(self: *Lexer): Char {
     return self.input[self.index];
 }
 
@@ -206,21 +206,24 @@ func scan_number(self: *Lexer) {
 }
 
 func scan_char_part(self: *Lexer) {
-    if (eat_char(self, '\\')) {
-        if (eat_char(self, '\'')) {
-        } else if (eat_char(self, '\"')) {
-        } else if (eat_char(self, '0')) {
-        } else if (eat_char(self, '\\')) {
-        } else if (eat_char(self, 'n')) {
-        } else if (eat_char(self, 'r')) {
-        } else if (eat_char(self, 't')) {
-        } else {
-            die_at(&self.pos, "Invalid escape sequence.");
+    match (curr_char(self)) {
+        case '\\': {
+            next_char(self);
+            match (curr_char(self)) {
+                case '\'' | '\"' | '0' | '\\' | 'n' | 'r' | 't': {
+                    next_char(self);
+                }
+                case _: {
+                    die_at(&self.pos, "Invalid escape sequence.");
+                }
+            }
         }
-    } else if (at_printable(self)) {
-        next_char(self);
-    } else {
-        die_at(&self.pos, "Illegal character.\n");
+        case _ if at_printable(self): {
+            next_char(self);
+        }
+        case _: {
+            die_at(&self.pos, "Illegal character.\n");
+        }
     }
 }
 

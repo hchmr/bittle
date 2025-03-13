@@ -168,8 +168,8 @@ struct StringConstValue: ConstValue {
     string: *StringBuffer,
 }
 
-func const_value_unop(op: Int32, a: *ConstValue): *ConstValue;
-func const_value_binop(op: Int32, a: *ConstValue, b: *ConstValue): *ConstValue;
+func const_value_unop(op: TokKind, a: *ConstValue): *ConstValue;
+func const_value_binop(op: TokKind, a: *ConstValue, b: *ConstValue): *ConstValue;
 func const_value_ternop(a: *ConstValue, b: *ConstValue, c: *ConstValue): *ConstValue;
 func const_value_cast(value: *ConstValue, target: *Type): *ConstValue;
 
@@ -346,7 +346,7 @@ struct Tok {
     lexeme: *Char,
 }
 
-func pretty_tok_kind(kind: Int32): *Char;
+func pretty_tok_kind(kind: TokKind): *Char;
 
 //==============================================================================
 //== ast.btl
@@ -536,12 +536,12 @@ struct SizeofExpr: Expr {
 }
 
 struct UnaryExpr: Expr {
-    op: Int32,
+    op: TokKind,
     right: *Expr,
 }
 
 struct BinaryExpr: Expr {
-    op: Int32,
+    op: TokKind,
     left: *Expr,
     right: *Expr,
 }
@@ -848,7 +848,7 @@ struct HirAssignExpr: HirExpr {
 }
 
 struct HirBinaryOpExpr: HirExpr {
-    op: Int32,
+    op: HirOpKind,
     left: *HirExpr,
     right: *HirExpr,
 }

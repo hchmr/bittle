@@ -1,39 +1,41 @@
 include "bittle.btls";
 
-func translate_binary_op(tok_kind: Int32): Int32 {
-    return
-        tok_kind == Tok_Amp ? HirOp_And :
-        tok_kind == Tok_Bar ? HirOp_Or :
-        tok_kind == Tok_Caret ? HirOp_Xor :
-        tok_kind == Tok_LtLt ? HirOp_Shl :
-        tok_kind == Tok_GtGt ? HirOp_Shr :
-        tok_kind == Tok_EqEq ? HirOp_Eq :
-        tok_kind == Tok_BangEq ? HirOp_Ne :
-        tok_kind == Tok_Lt ? HirOp_Lt :
-        tok_kind == Tok_LtEq ? HirOp_Le :
-        tok_kind == Tok_Gt ? HirOp_Gt :
-        tok_kind == Tok_GtEq ? HirOp_Ge :
-        tok_kind == Tok_Plus ? HirOp_Add :
-        tok_kind == Tok_Minus ? HirOp_Sub :
-        tok_kind == Tok_Star ? HirOp_Mul :
-        tok_kind == Tok_Slash ? HirOp_Div :
-        tok_kind == Tok_Percent ? HirOp_Rem :
-        unreachable("translate_binary_op");
+func translate_binary_op(tok_kind: TokKind): HirOpKind {
+    match (tok_kind) {
+        case Tok_Amp: return HirOp_And;
+        case Tok_Bar: return HirOp_Or;
+        case Tok_Caret: return HirOp_Xor;
+        case Tok_LtLt: return HirOp_Shl;
+        case Tok_GtGt: return HirOp_Shr;
+        case Tok_EqEq: return HirOp_Eq;
+        case Tok_BangEq: return HirOp_Ne;
+        case Tok_Lt: return HirOp_Lt;
+        case Tok_LtEq: return HirOp_Le;
+        case Tok_Gt: return HirOp_Gt;
+        case Tok_GtEq: return HirOp_Ge;
+        case Tok_Plus: return HirOp_Add;
+        case Tok_Minus: return HirOp_Sub;
+        case Tok_Star: return HirOp_Mul;
+        case Tok_Slash: return HirOp_Div;
+        case Tok_Percent: return HirOp_Rem;
+        case _: unreachable("translate_binary_op");
+    }
 }
 
-func translate_assign_op(tok_kind: Int32): Int32 {
-    return
-        tok_kind == Tok_AmpEq ? HirOp_And :
-        tok_kind == Tok_BarEq ? HirOp_Or :
-        tok_kind == Tok_CaretEq ? HirOp_Xor :
-        tok_kind == Tok_LtLtEq ? HirOp_Shl :
-        tok_kind == Tok_GtGtEq ? HirOp_Shr :
-        tok_kind == Tok_PlusEq ? HirOp_Add :
-        tok_kind == Tok_MinusEq ? HirOp_Sub :
-        tok_kind == Tok_StarEq ? HirOp_Mul :
-        tok_kind == Tok_SlashEq ? HirOp_Div :
-        tok_kind == Tok_PercentEq ? HirOp_Rem :
-        unreachable("translate_assign_op");
+func translate_assign_op(tok_kind: TokKind): HirOpKind {
+    match (tok_kind) {
+        case Tok_AmpEq: return HirOp_And;
+        case Tok_BarEq: return HirOp_Or;
+        case Tok_CaretEq: return HirOp_Xor;
+        case Tok_LtLtEq: return HirOp_Shl;
+        case Tok_GtGtEq: return HirOp_Shr;
+        case Tok_PlusEq: return HirOp_Add;
+        case Tok_MinusEq: return HirOp_Sub;
+        case Tok_StarEq: return HirOp_Mul;
+        case Tok_SlashEq: return HirOp_Div;
+        case Tok_PercentEq: return HirOp_Rem;
+        case _: unreachable("translate_assign_op");
+    }
 }
 
 func mk_skip_stmt(pos: *Pos): *HirExpr {
@@ -166,7 +168,7 @@ func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
     return result;
 }
 
-func hir_mk_binary_op_expr(op: Int32, left: *HirExpr, right: *HirExpr, type: *Type): *HirBinaryOpExpr {
+func hir_mk_binary_op_expr(op: HirOpKind, left: *HirExpr, right: *HirExpr, type: *Type): *HirBinaryOpExpr {
     var result: *HirBinaryOpExpr = calloc(1, sizeof(HirBinaryOpExpr));
     *result = HirBinaryOpExpr {
         kind: HirExpr_BinaryOp,
@@ -308,19 +310,25 @@ func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
 //== Constants
 
 func lower_const_value(value: *ConstValue, pos: *Pos): *HirExpr {
-    if (value.kind == ConstValue_Bool) {
-        var value = value as *BoolConstValue;
-        return hir_mk_int_expr(value.bool as Int, value.type, pos);
-    } else if (value.kind == ConstValue_Int) {
-        var value = value as *IntConstValue;
-        return hir_mk_int_expr(value.int, value.type, pos);
-    } else if (value.kind == ConstValue_Null) {
-        return hir_mk_int_expr(0, value.type, pos);
-    } else if (value.kind == ConstValue_String) {
-        var value = value as *StringConstValue;
-        return hir_mk_str_expr(value.string, pos);
-    } else {
-        unreachable("elab_ident_expr");
+    match (value.kind) {
+        case ConstValue_Bool: {
+            var value = value as *BoolConstValue;
+            return hir_mk_int_expr(value.bool as Int, value.type, pos);
+        }
+        case ConstValue_Int: {
+            var value = value as *IntConstValue;
+            return hir_mk_int_expr(value.int, value.type, pos);
+        }
+        case ConstValue_Null: {
+            return hir_mk_int_expr(0, value.type, pos);
+        }
+        case ConstValue_String: {
+            var value = value as *StringConstValue;
+            return hir_mk_str_expr(value.string, pos);
+        }
+        case _: {
+            unreachable("elab_ident_expr");
+        }
     }
 }
 
@@ -433,22 +441,31 @@ func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirEx
 }
 
 func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr {
-    if (pattern.kind == Pattern_Grouped) {
-        return lower_grouped_pattern(ctx, lhs, pattern as *GroupedPattern);
-    } else if (pattern.kind == Pattern_Literal) {
-        return lower_literal_pattern(ctx, lhs, pattern as *LiteralPattern);
-    } else if (pattern.kind == Pattern_Name) {
-        return lower_name_pattern(ctx, lhs, pattern as *NamePattern);
-    } else if (pattern.kind == Pattern_Wildcard) {
-        return lower_wildcard_pattern(ctx, lhs, pattern as *WildcardPattern);
-    } else if (pattern.kind == Pattern_Var) {
-        return lower_var_pattern(ctx, lhs, pattern as *VarPattern);
-    } else if (pattern.kind == Pattern_Range) {
-        return lower_range_pattern(ctx, lhs, pattern as *RangePattern);
-    } else if (pattern.kind == Pattern_Or) {
-        return lower_or_pattern(ctx, lhs, (pattern as *OrPattern));
-    } else {
-        unreachable("lower_pattern_infer");
+    match (pattern.kind) {
+        case Pattern_Grouped: {
+            return lower_grouped_pattern(ctx, lhs, pattern as *GroupedPattern);
+        }
+        case Pattern_Literal: {
+            return lower_literal_pattern(ctx, lhs, pattern as *LiteralPattern);
+        }
+        case Pattern_Name: {
+            return lower_name_pattern(ctx, lhs, pattern as *NamePattern);
+        }
+        case Pattern_Wildcard: {
+            return lower_wildcard_pattern(ctx, lhs, pattern as *WildcardPattern);
+        }
+        case Pattern_Var: {
+            return lower_var_pattern(ctx, lhs, pattern as *VarPattern);
+        }
+        case Pattern_Range: {
+            return lower_range_pattern(ctx, lhs, pattern as *RangePattern);
+        }
+        case Pattern_Or: {
+            return lower_or_pattern(ctx, lhs, pattern as *OrPattern);
+        }
+        case _: {
+            unreachable("lower_pattern_infer");
+        }
     }
 }
 
@@ -460,35 +477,43 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
 func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr;
 
 func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
-    var sym = expr.sym;
-    if (sym.kind == Sym_Global || sym.kind == Sym_Local) {
-        return hir_mk_var_expr(sym, expr.type, &expr.pos);
-    } else if (sym.kind == Sym_Const) {
-        var value = (sym as *ConstSym).value;
-        return lower_const_value(value, &expr.pos);
-    } else {
-        unreachable("elab_ident_expr");
+    match (expr.sym.kind) {
+        case Sym_Global | Sym_Local: {
+            return hir_mk_var_expr(expr.sym, expr.type, &expr.pos);
+        }
+        case Sym_Const: {
+            var value = (expr.sym as *ConstSym).value;
+            return lower_const_value(value, &expr.pos);
+        }
+        case _: {
+            unreachable("elab_ident_expr");
+        }
     }
 }
 
 func lower_literal_expr(ctx: *Context, expr: *LiteralExpr): *HirExpr {
     var literal = expr.literal;
 
-    var result: *HirExpr;
-    if (literal.kind == Literal_Null) {
-        result = hir_mk_int_expr(0, expr.type, &expr.pos);
-    } else if (literal.kind == Literal_Bool) {
-        result = hir_mk_int_expr((literal as *BoolLiteral).value as Int, expr.type, &expr.pos);
-    } else if (literal.kind == Literal_Int) {
-        result = hir_mk_int_expr((literal as *IntLiteral).value, expr.type, &expr.pos);
-    } else if (literal.kind == Literal_Char) {
-        result = hir_mk_int_expr((literal as *CharLiteral).value, expr.type, &expr.pos);
-    } else if (literal.kind == Literal_String) {
-        result = hir_mk_str_expr((literal as *StringLiteral).value, &expr.pos);
-    } else {
-        unreachable("elab_literal_expr");
+    match (literal.kind) {
+        case Literal_Null: {
+            return hir_mk_int_expr(0, expr.type, &expr.pos);
+        }
+        case Literal_Bool: {
+            return hir_mk_int_expr((literal as *BoolLiteral).value as Int, expr.type, &expr.pos);
+        }
+        case Literal_Int: {
+            return hir_mk_int_expr((literal as *IntLiteral).value, expr.type, &expr.pos);
+        }
+        case Literal_Char: {
+            return hir_mk_int_expr((literal as *CharLiteral).value, expr.type, &expr.pos);
+        }
+        case Literal_String: {
+            return hir_mk_str_expr((literal as *StringLiteral).value, &expr.pos);
+        }
+        case _: {
+            unreachable("elab_literal_expr");
+        }
     }
-    return result;
 }
 
 func lower_array_expr(ctx: *Context, expr: *ArrayExpr): *HirExpr {
@@ -605,39 +630,46 @@ func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
     var ast_right = expr.right;
 
     var result: *HirExpr;
-    if (op == Tok_Minus) {
-        var right = lower_expr(ctx, ast_right);
-        result = hir_mk_neg_expr(right);
-    } else if (op == Tok_Tilde) {
-        var right = lower_expr(ctx, ast_right);
-        result = hir_mk_bit_not_expr(right);
-    } else if (op == Tok_Bang) {
-        var right = lower_expr(ctx, ast_right);
-        result = hir_mk_not_expr(right);
-    } else if (op == Tok_Star) {
-        var right = lower_expr(ctx, ast_right);
-        result = hir_mk_deref_expr(right, &expr.pos);
-    } else if (op == Tok_Amp) {
-        if (is_lvalue(ast_right)) {
+    match (op) {
+        case Tok_Minus: {
             var right = lower_expr(ctx, ast_right);
-            result = hir_mk_addr_expr(right, &expr.pos);
-        } else {
-            /*
-                Desugar
-                    &f()
-                to
-                    temp t1: typeof(f());
-                    t1 = f();
-                    &t1
-            */
-            var temp_var = mk_temp_var(ctx, ast_right.type);
-            var temp = hir_mk_temp_expr(temp_var, &expr.pos);
-            var temp_init = lower_assign_expr(ctx, temp, ast_right, &ast_right.pos);
-            var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
-            result = hir_mk_seq_expr(temp_init, addr_temp);
+            result = hir_mk_neg_expr(right);
         }
-    } else {
-        unreachable("elab_unary_expr");
+        case Tok_Tilde: {
+            var right = lower_expr(ctx, ast_right);
+            result = hir_mk_bit_not_expr(right);
+        }
+        case Tok_Bang: {
+            var right = lower_expr(ctx, ast_right);
+            result = hir_mk_not_expr(right);
+        }
+        case Tok_Star: {
+            var right = lower_expr(ctx, ast_right);
+            result = hir_mk_deref_expr(right, &expr.pos);
+        }
+        case Tok_Amp: {
+            if (is_lvalue(ast_right)) {
+                var right = lower_expr(ctx, ast_right);
+                result = hir_mk_addr_expr(right, &expr.pos);
+            } else {
+                /*
+                    Desugar
+                        &f()
+                    to
+                        temp t1: typeof(f());
+                        t1 = f();
+                        &t1
+                */
+                var temp_var = mk_temp_var(ctx, ast_right.type);
+                var temp = hir_mk_temp_expr(temp_var, &expr.pos);
+                var temp_init = lower_assign_expr(ctx, temp, ast_right, &ast_right.pos);
+                var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
+                result = hir_mk_seq_expr(temp_init, addr_temp);
+            }
+        }
+        case _: {
+            unreachable("elab_unary_expr");
+        }
     }
 
     return result;
@@ -651,44 +683,50 @@ func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
     var left = lower_expr(ctx, ast_left);
 
     var result: *HirExpr;
-    if (ast_op == Tok_Eq) {
-        result = lower_assign_expr(ctx, left, ast_right, &expr.pos);
-    } else if (ast_op == Tok_AmpEq || ast_op == Tok_BarEq || ast_op == Tok_CaretEq || ast_op == Tok_LtLtEq || ast_op == Tok_GtGtEq || ast_op == Tok_PlusEq || ast_op == Tok_MinusEq || ast_op == Tok_StarEq || ast_op == Tok_SlashEq || ast_op == Tok_PercentEq) {
-        /*
-            Desugar
-                left op= right
-            to
-                temp t1: *typeof(left);
-                t1 = &left;
-                *t1 = *t1 op right;
-        */
-        var addr_left = hir_mk_addr_expr(left, &expr.pos);
-        var typeof_addr_left = mk_ptr_type(addr_left.type);
+    match (ast_op) {
+        case Tok_Eq: {
+            result = lower_assign_expr(ctx, left, ast_right, &expr.pos);
+        }
+        case Tok_AmpEq | Tok_BarEq | Tok_CaretEq | Tok_LtLtEq | Tok_GtGtEq | Tok_PlusEq | Tok_MinusEq | Tok_StarEq | Tok_SlashEq | Tok_PercentEq: {
+            /*
+                Desugar
+                    left op= right
+                to
+                    temp t1: *typeof(left);
+                    t1 = &left;
+                    *t1 = *t1 op right;
+            */
+            var addr_left = hir_mk_addr_expr(left, &expr.pos);
+            var typeof_addr_left = mk_ptr_type(addr_left.type);
 
-        var temp_var = mk_temp_var(ctx, typeof_addr_left);
-        var temp = hir_mk_temp_expr(temp_var, &expr.pos);
-        var temp_init = hir_mk_assign_expr(temp, addr_left);
+            var temp_var = mk_temp_var(ctx, typeof_addr_left);
+            var temp = hir_mk_temp_expr(temp_var, &expr.pos);
+            var temp_init = hir_mk_assign_expr(temp, addr_left);
 
-        var temp_deref = hir_mk_deref_expr(temp, &expr.pos);
-        var right = lower_expr(ctx, ast_right);
-        var op = translate_assign_op(ast_op);
-        var computation = hir_mk_binary_op_expr(op, temp_deref, right, left.type);
-        var assign_temp = hir_mk_assign_expr(temp_deref, computation);
+            var temp_deref = hir_mk_deref_expr(temp, &expr.pos);
+            var right = lower_expr(ctx, ast_right);
+            var op = translate_assign_op(ast_op);
+            var computation = hir_mk_binary_op_expr(op, temp_deref, right, left.type);
+            var assign_temp = hir_mk_assign_expr(temp_deref, computation);
 
-        result = hir_mk_seq_expr(temp_init, assign_temp);
-    } else if (ast_op == Tok_AmpAmp || ast_op == Tok_BarBar) {
-        var right = lower_expr(ctx, ast_right);
-        if (ast_op == Tok_AmpAmp) {
+            result = hir_mk_seq_expr(temp_init, assign_temp);
+        }
+        case Tok_AmpAmp: {
+            var right = lower_expr(ctx, ast_right);
             result = hir_mk_cond_expr(left, right, hir_mk_int_expr(0, expr.type, &right.pos), &expr.pos);
-        } else {
+        }
+        case Tok_BarBar: {
+            var right = lower_expr(ctx, ast_right);
             result = hir_mk_cond_expr(left, hir_mk_int_expr(1, expr.type, &right.pos), right, &expr.pos);
         }
-    } else if (ast_op == Tok_EqEq || ast_op == Tok_BangEq || ast_op == Tok_Lt || ast_op == Tok_LtEq || ast_op == Tok_Gt || ast_op == Tok_GtEq || ast_op == Tok_Amp || ast_op == Tok_Bar || ast_op == Tok_Caret || ast_op == Tok_LtLt || ast_op == Tok_GtGt || ast_op == Tok_Plus || ast_op == Tok_Minus || ast_op == Tok_Star || ast_op == Tok_Slash || ast_op == Tok_Percent) {
-        var right = lower_expr(ctx, ast_right);
-        var op = translate_binary_op(ast_op);
-        result = hir_mk_binary_op_expr(op, left, right, expr.type);
-    } else {
-        unreachable("elab_binary_expr");
+        case Tok_EqEq | Tok_BangEq | Tok_Lt | Tok_LtEq | Tok_Gt | Tok_GtEq | Tok_Amp | Tok_Bar | Tok_Caret | Tok_LtLt | Tok_GtGt | Tok_Plus | Tok_Minus | Tok_Star | Tok_Slash | Tok_Percent: {
+            var right = lower_expr(ctx, ast_right);
+            var op = translate_binary_op(ast_op);
+            result = hir_mk_binary_op_expr(op, left, right, expr.type);
+        }
+        case _: {
+            unreachable("elab_binary_expr");
+        }
     }
     return result;
 }
@@ -749,34 +787,49 @@ func lower_record_expr(ctx: *Context, expr: *RecordExpr): *HirExpr {
 }
 
 func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
-    if (expr.kind == Expr_Ident) {
-        return lower_ident_expr(ctx, expr as *IdentExpr);
-    } else if (expr.kind == Expr_Literal) {
-        return lower_literal_expr(ctx, expr as *LiteralExpr);
-    } else if (expr.kind == Expr_Array) {
-        return lower_array_expr(ctx, expr as *ArrayExpr);
-    } else if (expr.kind == Expr_Call) {
-        return lower_call_expr(ctx, expr as *CallExpr, dest: null);
-    } else if (expr.kind == Expr_Index) {
-        return lower_index_expr(ctx, expr as *IndexExpr);
-    } else if (expr.kind == Expr_Member) {
-        return lower_member_expr(ctx, expr as *MemberExpr);
-    } else if (expr.kind == Expr_Sizeof) {
-        return lower_sizeof_expr(ctx, expr as *SizeofExpr);
-    } else if (expr.kind == Expr_Unary) {
-        return lower_unary_expr(ctx, expr as *UnaryExpr);
-    } else if (expr.kind == Expr_Binary) {
-        return lower_binary_expr(ctx, expr as *BinaryExpr);
-    } else if (expr.kind == Expr_Ternary) {
-        return lower_ternary_expr(ctx, expr as *TernaryExpr);
-    } else if (expr.kind == Expr_Is) {
-        return lower_is_expr(ctx, expr as *IsExpr);
-    } else if (expr.kind == Expr_Cast) {
-        return lower_cast_expr(ctx, expr as *CastExpr);
-    } else if (expr.kind == Expr_Record) {
-        return lower_record_expr(ctx, expr as *RecordExpr);
-    } else {
-        unreachable("lower_expr");
+    match (expr.kind) {
+        case Expr_Ident: {
+            return lower_ident_expr(ctx, expr as *IdentExpr);
+        }
+        case Expr_Literal: {
+            return lower_literal_expr(ctx, expr as *LiteralExpr);
+        }
+        case Expr_Array: {
+            return lower_array_expr(ctx, expr as *ArrayExpr);
+        }
+        case Expr_Call: {
+            return lower_call_expr(ctx, expr as *CallExpr, dest: null);
+        }
+        case Expr_Index: {
+            return lower_index_expr(ctx, expr as *IndexExpr);
+        }
+        case Expr_Member: {
+            return lower_member_expr(ctx, expr as *MemberExpr);
+        }
+        case Expr_Sizeof: {
+            return lower_sizeof_expr(ctx, expr as *SizeofExpr);
+        }
+        case Expr_Unary: {
+            return lower_unary_expr(ctx, expr as *UnaryExpr);
+        }
+        case Expr_Binary: {
+            return lower_binary_expr(ctx, expr as *BinaryExpr);
+        }
+        case Expr_Ternary: {
+            return lower_ternary_expr(ctx, expr as *TernaryExpr);
+        }
+        case Expr_Is: {
+            return lower_is_expr(ctx, expr as *IsExpr);
+        }
+        case Expr_Cast: {
+            return lower_cast_expr(ctx, expr as *CastExpr);
+        }
+        case Expr_Record: {
+            return lower_record_expr(ctx, expr as *RecordExpr);
+        }
+        case _: {
+            unreachable("lower_expr");
+        }
     }
 }
 
@@ -882,15 +935,20 @@ func lower_assign_expr_array(ctx: *Context, dst: *HirExpr, ast_src: *ArrayExpr, 
 }
 
 func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
-    if (ast_src.kind == Expr_Record) {
-        return lower_assign_expr_record(ctx, dst, ast_src as *RecordExpr, pos);
-    } else if (ast_src.kind == Expr_Array) {
-        return lower_assign_expr_array(ctx, dst, ast_src as *ArrayExpr, pos);
-    } else if (ast_src.kind == Expr_Call) {
-        return lower_call_expr(ctx, ast_src as *CallExpr, dest: dst);
-    } else {
-        var src = lower_expr(ctx, ast_src);
-        return hir_mk_assign_expr(dst, src);
+    match (ast_src.kind) {
+        case Expr_Record: {
+            return lower_assign_expr_record(ctx, dst, ast_src as *RecordExpr, pos);
+        }
+        case Expr_Array: {
+            return lower_assign_expr_array(ctx, dst, ast_src as *ArrayExpr, pos);
+        }
+        case Expr_Call: {
+            return lower_call_expr(ctx, ast_src as *CallExpr, dest: dst);
+        }
+        case _: {
+            var src = lower_expr(ctx, ast_src);
+            return hir_mk_assign_expr(dst, src);
+        }
     }
 }
 
@@ -1051,31 +1109,44 @@ func lower_expr_stmt(ctx: *Context, stmt: *ExprStmt): *HirExpr {
 }
 
 func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
-    if (stmt.kind == Stmt_Block) {
-        return lower_block_stmt(ctx, stmt as *BlockStmt);
-    } else if (stmt.kind == Stmt_Const) {
-        // Nothing to do for const statements
-        return mk_skip_stmt(&stmt.pos);
-    } else if (stmt.kind == Stmt_Local) {
-        return lower_local_stmt(ctx, stmt as *LocalStmt);
-    } else if (stmt.kind == Stmt_If) {
-        return lower_if_stmt(ctx, stmt as *IfStmt);
-    } else if (stmt.kind == Stmt_Match) {
-        return lower_match_stmt(ctx, stmt as *MatchStmt);
-    } else if (stmt.kind == Stmt_While) {
-        return lower_while_stmt(ctx, stmt as *WhileStmt);
-    } else if (stmt.kind == Stmt_For) {
-        return lower_for_stmt(ctx, stmt as *ForStmt);
-    } else if (stmt.kind == Stmt_Return) {
-        return lower_return_stmt(ctx, stmt as *ReturnStmt);
-    } else if (stmt.kind == Stmt_Break) {
-        return lower_break_stmt(ctx, stmt);
-    } else if (stmt.kind == Stmt_Continue) {
-        return lower_continue_stmt(ctx, stmt);
-    } else if (stmt.kind == Stmt_Expr) {
-        return lower_expr_stmt(ctx, stmt as *ExprStmt);
-    } else {
-        unreachable("lower_stmt");
+    match (stmt.kind) {
+        case Stmt_Block: {
+            return lower_block_stmt(ctx, stmt as *BlockStmt);
+        }
+        case Stmt_Const: {
+            // Nothing to do for const statements
+            return mk_skip_stmt(&stmt.pos);
+        }
+        case Stmt_Local: {
+            return lower_local_stmt(ctx, stmt as *LocalStmt);
+        }
+        case Stmt_If: {
+            return lower_if_stmt(ctx, stmt as *IfStmt);
+        }
+        case Stmt_Match: {
+            return lower_match_stmt(ctx, stmt as *MatchStmt);
+        }
+        case Stmt_While: {
+            return lower_while_stmt(ctx, stmt as *WhileStmt);
+        }
+        case Stmt_For: {
+            return lower_for_stmt(ctx, stmt as *ForStmt);
+        }
+        case Stmt_Return: {
+            return lower_return_stmt(ctx, stmt as *ReturnStmt);
+        }
+        case Stmt_Break: {
+            return lower_break_stmt(ctx, stmt);
+        }
+        case Stmt_Continue: {
+            return lower_continue_stmt(ctx, stmt);
+        }
+        case Stmt_Expr: {
+            return lower_expr_stmt(ctx, stmt as *ExprStmt);
+        }
+        case _: {
+            unreachable("lower_stmt");
+        }
     }
 }
 

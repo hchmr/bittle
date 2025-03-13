@@ -210,18 +210,20 @@ func asm_write_instr(builder: *AsmInstrBuilder, op: *Char, n_args: Int): *AsmIns
 // Data Movement
 
 func asm_get_load_op(width: Int): *Char {
-    return
-        width == 1 ? "ldrsb" :
-        width == 2 ? "ldrsh" :
-        width == 4 ? "ldrsw" :
-        "ldr";
+    match (width) {
+        case 1: return "ldrsb";
+        case 2: return "ldrsh";
+        case 4: return "ldrsw";
+        case _: return "ldr";
+    }
 }
 
 func asm_get_store_op(width: Int): *Char {
-    return
-        width == 1 ? "strb" :
-        width == 2 ? "strh" :
-        "str";
+    match (width) {
+        case 1: return "strb";
+        case 2: return "strh";
+        case _: return "str";
+    }
 }
 
 func asm_write_mov_r(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg) {
@@ -482,49 +484,58 @@ func asm_print_reg(reg: Reg, width: Int) {
 }
 
 func asm_print_operand(fun: *AsmFunc, operand: *AsmOperand) {
-    if (operand.kind == AsmOperand_Reg) {
-        var operand = operand as *AsmRegOperand;
-        asm_print_reg(operand.reg, operand.width);
-        if (operand.shift != 0) {
-            printf(", lsl #%d", operand.shift);
-        }
-    } else if (operand.kind == AsmOperand_Mem) {
-        var operand = operand as *AsmMemOperand;
-        printf("[");
-        for (var i = 0; i < operand.n_args; i += 1) {
-            asm_print_operand(fun, operand.args[i]);
-            if (i < operand.n_args - 1) {
-                printf(", ");
+    match (operand.kind) {
+        case AsmOperand_Reg: {
+            var operand = operand as *AsmRegOperand;
+            asm_print_reg(operand.reg, operand.width);
+            if (operand.shift != 0) {
+                printf(", lsl #%d", operand.shift);
             }
         }
-        printf("]");
-    } else if (operand.kind == AsmOperand_Int) {
-        var operand = operand as *AsmIntOperand;
-        printf("#%d", operand.value);
-        if (operand.shift != 0) {
-            printf(", lsl #%d", operand.shift);
+        case AsmOperand_Mem: {
+            var operand = operand as *AsmMemOperand;
+            printf("[");
+            for (var i = 0; i < operand.n_args; i += 1) {
+                asm_print_operand(fun, operand.args[i]);
+                if (i < operand.n_args - 1) {
+                    printf(", ");
+                }
+            }
+            printf("]");
         }
-    } else if (operand.kind == AsmOperand_Label) {
-        var operand = operand as *AsmLabelOperand;
-        printf(".L%d", operand.counter);
-        if (operand.suffix != null) {
-            printf(".%s", operand.suffix);
+        case AsmOperand_Int: {
+            var operand = operand as *AsmIntOperand;
+            printf("#%d", operand.value);
+            if (operand.shift != 0) {
+                printf(", lsl #%d", operand.shift);
+            }
         }
-    } else if (operand.kind == AsmOperand_Global) {
-        var operand = operand as *AsmGlobalOperand;
-        printf("%s%s", operand.relocation_spec, operand.prefix);
-        if (operand.counter != -1) {
-            printf("%d", operand.counter);
+        case AsmOperand_Label: {
+            var operand = operand as *AsmLabelOperand;
+            printf(".L%d", operand.counter);
+            if (operand.suffix != null) {
+                printf(".%s", operand.suffix);
+            }
         }
-    } else if (operand.kind == AsmOperand_FpFromFrameStart) {
-        var operand = operand as *AsmFpFromFrameStartOperand;
-        printf("#%d", fun.spills_size + operand.offset);
-    } else if (operand.kind == AsmOperand_SpFromFp) {
-        var operand = operand as *AsmSpFromFpOperand;
-        printf("#%d", fun.frame_size - fun.spills_size + operand.fp_offset);
-    } else if (operand.kind == AsmOperand_Raw) {
-        var operand = operand as *AsmRawOperand;
-        printf("%s", operand.op);
+        case AsmOperand_Global: {
+            var operand = operand as *AsmGlobalOperand;
+            printf("%s%s", operand.relocation_spec, operand.prefix);
+            if (operand.counter != -1) {
+                printf("%d", operand.counter);
+            }
+        }
+        case AsmOperand_FpFromFrameStart: {
+            var operand = operand as *AsmFpFromFrameStartOperand;
+            printf("#%d", fun.spills_size + operand.offset);
+        }
+        case AsmOperand_SpFromFp: {
+            var operand = operand as *AsmSpFromFpOperand;
+            printf("#%d", fun.frame_size - fun.spills_size + operand.fp_offset);
+        }
+        case AsmOperand_Raw: {
+            var operand = operand as *AsmRawOperand;
+            printf("%s", operand.op);
+        }
     }
 }
 
@@ -618,7 +629,7 @@ func asm_print_string(id: Int, str: *StringBuffer) {
     var i = 0;
     for (var i = 0; i < sb_len(str); i += 1) {
         var c = sb_get(str, i);
-        if (!is_print(c) || c == '\"' || c == '\\') {
+        if (!is_print(c) || c is ('\"' | '\\')) {
             printf("\\%03o", c);
         } else {
             printf("%c", c);

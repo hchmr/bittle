@@ -40,7 +40,7 @@ func parser_new(lexer: *Lexer): *Parser {
     return self;
 }
 
-func at(self: *Parser, kind: Int32): Bool {
+func at(self: *Parser, kind: TokKind): Bool {
     return self.tok.kind == kind;
 }
 
@@ -56,11 +56,11 @@ func at_pattern_const_tok(self: *Parser): Bool {
     return at_literal_tok(self) || at(self, Tok_Ident);
 }
 
-func next_is(self: *Parser, kind: Int32): Bool {
+func next_is(self: *Parser, kind: TokKind): Bool {
     return self.lookahead.kind == kind;
 }
 
-func eat(self: *Parser, kind: Int32): Bool {
+func eat(self: *Parser, kind: TokKind): Bool {
     if (at(self, kind)) {
         advance(self);
         return true;
@@ -68,13 +68,13 @@ func eat(self: *Parser, kind: Int32): Bool {
     return false;
 }
 
-func expect(self: *Parser, kind: Int32) {
+func expect(self: *Parser, kind: TokKind) {
     if (!eat(self, kind)) {
         die_at(&self.tok.pos, "Unexpected token. Expected %s, but got %s.", pretty_tok_kind(kind), pretty_tok_kind(self.tok.kind));
     }
 }
 
-func expect_with_lexeme(self: *Parser, kind: Int32): *Char {
+func expect_with_lexeme(self: *Parser, kind: TokKind): *Char {
     var tok = self.tok;
     expect(self, kind);
     return tok.lexeme;
@@ -208,12 +208,17 @@ func p_type(self: *Parser): *TypeExpr {
 func parse_int_lexeme(lexeme: *Char): Int64 {
     if (lexeme[0] == '0') {
         var prefix = lexeme[1] | 32;
-        if (prefix == 'b') {
-            return strtol(&lexeme[2], null, 2);
-        } else if (prefix == 'o') {
-            return strtol(&lexeme[2], null, 8);
-        } else if (prefix == 'x') {
-            return strtol(&lexeme[2], null, 16);
+        match (prefix) {
+            case 'b': {
+                return strtol(&lexeme[2], null, 2);
+            }
+            case 'o': {
+                return strtol(&lexeme[2], null, 8);
+            }
+            case 'x': {
+                return strtol(&lexeme[2], null, 16);
+            }
+            case _: {}
         }
     }
     return strtol(lexeme, null, 10);
@@ -607,7 +612,7 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
     return result;
 }
 
-func p_unary_expr(self: *Parser, op: Int32): *Expr {
+func p_unary_expr(self: *Parser, op: TokKind): *Expr {
     var pos = self.tok.pos;
     var right = p_expr(self, Prec_Unary);
 
@@ -639,7 +644,7 @@ func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
     return result;
 }
 
-func p_binary_expr(self: *Parser, left: *Expr, op: Int32, prec: Int32): *Expr {
+func p_binary_expr(self: *Parser, left: *Expr, op: TokKind, prec: Int32): *Expr {
     var pos = self.tok.pos;
     var right = p_expr(self, prec);
 

@@ -37,12 +37,13 @@ func reg_is_callee_saved(reg: Reg): Bool {
 }
 
 func is_int_or_enum(t: *Type, max_size: Int): Bool {
-    if (t.kind == Type_Int) {
-        return (t as *IntType).size <= max_size;
-    } else if (t.kind == Type_Enum) {
-        return (t as *EnumType).sym.size <= max_size;
-    } else {
-        return false;
+    match (t.kind) {
+        case Type_Int:
+            return (t as *IntType).size <= max_size;
+        case Type_Enum:
+            return (t as *EnumType).sym.size <= max_size;
+        case _:
+            return false;
     }
 }
 
@@ -331,70 +332,80 @@ func asm_lower_expr_cmp(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr,
 }
 
 func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
-    if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Local) {
-        var e = e as *HirVarExpr;
-        var sym = e.sym as *LocalSym;
+    match (e.kind) {
+        case HirExpr_Var if (e as *HirVarExpr).sym.kind == Sym_Local: {
+            var e = e as *HirVarExpr;
+            var sym = e.sym as *LocalSym;
 
-        if (sym.is_indirect) {
-            write_slot_read(ctx, sym.type, sym.slot_id, xd);
-            asm_add_comment_to_last(ctx.builder, "local '%s' (indirect) @ %d", sym.name, sym.slot_id);
-        } else {
-            write_slot_addr(ctx, sym.type, sym.slot_id, xd);
-            asm_add_comment_to_last(ctx.builder, "local '%s' @ %d", sym.name, sym.slot_id);
+            if (sym.is_indirect) {
+                write_slot_read(ctx, sym.type, sym.slot_id, xd);
+                asm_add_comment_to_last(ctx.builder, "local '%s' (indirect) @ %d", sym.name, sym.slot_id);
+            } else {
+                write_slot_addr(ctx, sym.type, sym.slot_id, xd);
+                asm_add_comment_to_last(ctx.builder, "local '%s' @ %d", sym.name, sym.slot_id);
+            }
         }
-    } else if (e.kind == HirExpr_Var && (e as *HirVarExpr).sym.kind == Sym_Global) {
-        var e = e as *HirVarExpr;
-        var sym = e.sym as *GlobalSym;
-        if (sym.is_defined) {
-            // adrp {xd}, {name}
-            // add {xd}, {xd}, :lo12:{name}
-            asm_write_global_addr(ctx.builder, xd, sym.name);
-        } else {
-            // adrp {xd}, :got:{name}
-            // ldr {xd}, [{xd}, :got_lo12:{name}]
-            asm_write_got_global_addr(ctx.builder, xd, sym.name);
+        case HirExpr_Var if (e as *HirVarExpr).sym.kind == Sym_Global: {
+            var e = e as *HirVarExpr;
+            var sym = e.sym as *GlobalSym;
+            if (sym.is_defined) {
+                // adrp {xd}, {name}
+                // add {xd}, {xd}, :lo12:{name}
+                asm_write_global_addr(ctx.builder, xd, sym.name);
+            } else {
+                // adrp {xd}, :got:{name}
+                // ldr {xd}, [{xd}, :got_lo12:{name}]
+                asm_write_got_global_addr(ctx.builder, xd, sym.name);
+            }
         }
-    } else if (e.kind == HirExpr_Temp) {
-        var e = e as *HirTempExpr;
-        var temp = e.temp;
-
-        write_slot_addr(ctx, temp.type, temp.slot_id, xd);
-        asm_add_comment_to_last(ctx.builder, "temp @ %d", temp.slot_id);
-    } else if (e.kind == HirExpr_Member) {
-        var e = e as *HirMemberExpr;
-        var fields = (e.left.type as *RecordType).sym.fields;
-        var field: *RecordField = list_get(fields, e.field_index);
-
-        asm_lower_expr_addr(ctx, e.left, xd);
-        // add {xd}, {xd}, #{offset}
-        asm_write_add_ri(ctx.builder, 8, xd, xd, field.offset);
-        asm_add_comment_to_last(ctx.builder, "member '%s'", field.name);
-    } else if (e.kind == HirExpr_Deref) {
-        var e = e as *HirDerefExpr;
-        asm_lower_expr(ctx, e.expr, xd);
-    } else if (e.kind == HirExpr_Index) {
-        var e = e as *HirIndexExpr;
-        var x1 = next_reg_except_1(ctx, xd);
-        var x2 = next_reg_except_2(ctx, xd, x1);
-        if (e.indexee.type.kind == Type_Ptr) {
-            // xd <- ...
-            asm_lower_expr(ctx, e.indexee, xd);
-            // x1 <- ...
-            asm_lower_expr(ctx, e.index, x1);
-        } else if (e.indexee.type.kind == Type_Arr) {
-            // xd <- ...
-            asm_lower_expr_addr(ctx, e.indexee, xd);
-            // x1 <- ...
-            asm_lower_expr(ctx, e.index, x1);
-        } else {
-            unreachable("asm_lower_expr_addr: indexee should be a pointer or an array.");
+        case HirExpr_Temp: {
+            var e = e as *HirTempExpr;
+            var temp = e.temp;
+            write_slot_addr(ctx, temp.type, temp.slot_id, xd);
+            asm_add_comment_to_last(ctx.builder, "temp @ %d", temp.slot_id);
         }
-        var elem_size = type_size(e.type);
-        asm_write_mov_i(ctx.builder, 8, x2, elem_size);
-        asm_write_binary_op_rrr(ctx.builder, "madd", xd, x1, x2, xd);
-        free_reg(ctx, x1);
-    } else {
-        unreachable("asm_lower_expr_addr");
+        case HirExpr_Member: {
+            var e = e as *HirMemberExpr;
+            var fields = (e.left.type as *RecordType).sym.fields;
+            var field: *RecordField = list_get(fields, e.field_index);
+            asm_lower_expr_addr(ctx, e.left, xd);
+            // add {xd}, {xd}, #{offset}
+            asm_write_add_ri(ctx.builder, 8, xd, xd, field.offset);
+            asm_add_comment_to_last(ctx.builder, "member '%s'", field.name);
+        }
+        case HirExpr_Deref: {
+            var e = e as *HirDerefExpr;
+            asm_lower_expr(ctx, e.expr, xd);
+        }
+        case HirExpr_Index: {
+            var e = e as *HirIndexExpr;
+            var x1 = next_reg_except_1(ctx, xd);
+            var x2 = next_reg_except_2(ctx, xd, x1);
+            match (e.indexee.type.kind) {
+                case Type_Ptr: {
+                    // xd <- ...
+                    asm_lower_expr(ctx, e.indexee, xd);
+                    // x1 <- ...
+                    asm_lower_expr(ctx, e.index, x1);
+                }
+                case Type_Arr: {
+                    // xd <- ...
+                    asm_lower_expr_addr(ctx, e.indexee, xd);
+                    // x1 <- ...
+                    asm_lower_expr(ctx, e.index, x1);
+                }
+                case _: {
+                    unreachable("asm_lower_expr_addr: indexee should be a pointer or an array.");
+                }
+            }
+            var elem_size = type_size(e.type);
+            asm_write_mov_i(ctx.builder, 8, x2, elem_size);
+            asm_write_binary_op_rrr(ctx.builder, "madd", xd, x1, x2, xd);
+            free_reg(ctx, x1);
+        }
+        case _: {
+            unreachable("asm_lower_expr_addr");
+        }
     }
     lock_reg(ctx, xd);
 }
@@ -564,53 +575,70 @@ func asm_lower_binary_op_expr(ctx: *CodegenCtx, e: *HirBinaryOpExpr, xd: Reg) {
     var e1 = e.left;
     var e2 = e.right;
     var type = e.type;
+    match (op) {
+        case HirOp_Or: {
+            asm_lower_expr_binary(ctx, "orr", e1, e2, xd);
+        }
+        case HirOp_Xor: {
+            asm_lower_expr_binary(ctx, "eor", e1, e2, xd);
+        }
+        case HirOp_And: {
+            asm_lower_expr_binary(ctx, "and", e1, e2, xd);
+        }
+        case HirOp_Shl: {
+            asm_lower_expr_binary(ctx, "lsl", e1, e2, xd);
+        }
+        case HirOp_Shr: {
+            asm_lower_expr_binary(ctx, "lsr", e1, e2, xd);
+        }
+        case HirOp_Eq: {
+            asm_lower_expr_cmp(ctx, "eq", e1, e2, xd);
+        }
+        case HirOp_Ne: {
+            asm_lower_expr_cmp(ctx, "ne", e1, e2, xd);
+        }
+        case HirOp_Lt: {
+            asm_lower_expr_cmp(ctx, "lt", e1, e2, xd);
+        }
+        case HirOp_Le: {
+            asm_lower_expr_cmp(ctx, "le", e1, e2, xd);
+        }
+        case HirOp_Gt: {
+            asm_lower_expr_cmp(ctx, "gt", e1, e2, xd);
+        }
+        case HirOp_Ge: {
+            asm_lower_expr_cmp(ctx, "ge", e1, e2, xd);
+        }
+        case HirOp_Add: {
+            asm_lower_expr_binary(ctx, "add", e1, e2, xd);
+        }
+        case HirOp_Sub: {
+            asm_lower_expr_binary(ctx, "sub", e1, e2, xd);
+        }
+        case HirOp_Mul: {
+            asm_lower_expr_binary(ctx, "mul", e1, e2, xd);
+        }
+        case HirOp_Div: {
+            asm_lower_expr_binary(ctx, "sdiv", e1, e2, xd);
+        }
+        case HirOp_Rem: {
+            var x1 = next_reg_except_1(ctx, xd);
+            var x2 = next_reg_except_2(ctx, xd, x1);
+            // x1 <- ...
+            asm_lower_expr(ctx, e1, x1);
+            // x2 <- ...
+            asm_lower_expr(ctx, e2, x2);
+            // sdiv x0, x1, x2
+            asm_write_binary_op_rr(ctx.builder, "sdiv", xd, x1, x2);
+            // msub {xd}, x0, x2, x1
+            asm_write_binary_op_rrr(ctx.builder, "msub", xd, xd, x2, x1);
 
-    if (op == HirOp_Or) {
-        asm_lower_expr_binary(ctx, "orr", e1, e2, xd);
-    } else if (op == HirOp_Xor) {
-        asm_lower_expr_binary(ctx, "eor", e1, e2, xd);
-    } else if (op == HirOp_And) {
-        asm_lower_expr_binary(ctx, "and", e1, e2, xd);
-    } else if (op == HirOp_Shl) {
-        asm_lower_expr_binary(ctx, "lsl", e1, e2, xd);
-    } else if (op == HirOp_Shr) {
-        asm_lower_expr_binary(ctx, "lsr", e1, e2, xd);
-    } else if (op == HirOp_Eq) {
-        asm_lower_expr_cmp(ctx, "eq", e1, e2, xd);
-    } else if (op == HirOp_Ne) {
-        asm_lower_expr_cmp(ctx, "ne", e1, e2, xd);
-    } else if (op == HirOp_Lt) {
-        asm_lower_expr_cmp(ctx, "lt", e1, e2, xd);
-    } else if (op == HirOp_Le) {
-        asm_lower_expr_cmp(ctx, "le", e1, e2, xd);
-    } else if (op == HirOp_Gt) {
-        asm_lower_expr_cmp(ctx, "gt", e1, e2, xd);
-    } else if (op == HirOp_Ge) {
-        asm_lower_expr_cmp(ctx, "ge", e1, e2, xd);
-    } else if (op == HirOp_Add) {
-        asm_lower_expr_binary(ctx, "add", e1, e2, xd);
-    } else if (op == HirOp_Sub) {
-        asm_lower_expr_binary(ctx, "sub", e1, e2, xd);
-    } else if (op == HirOp_Mul) {
-        asm_lower_expr_binary(ctx, "mul", e1, e2, xd);
-    } else if (op == HirOp_Div) {
-        asm_lower_expr_binary(ctx, "sdiv", e1, e2, xd);
-    } else if (op == HirOp_Rem) {
-        var x1 = next_reg_except_1(ctx, xd);
-        var x2 = next_reg_except_2(ctx, xd, x1);
-        // x1 <- ...
-        asm_lower_expr(ctx, e1, x1);
-        // x2 <- ...
-        asm_lower_expr(ctx, e2, x2);
-        // sdiv x0, x1, x2
-        asm_write_binary_op_rr(ctx.builder, "sdiv", xd, x1, x2);
-        // msub {xd}, x0, x2, x1
-        asm_write_binary_op_rrr(ctx.builder, "msub", xd, xd, x2, x1);
-
-        free_reg(ctx, x2);
-        free_reg(ctx, x1);
-    } else {
-        unreachable("asm_lower_binary_op_expr");
+            free_reg(ctx, x2);
+            free_reg(ctx, x1);
+        }
+        case _: {
+            unreachable("asm_lower_binary_op_expr");
+        }
     }
 }
 
@@ -783,41 +811,58 @@ func asm_lower_cast_expr(ctx: *CodegenCtx, e: *HirCastExpr, xd: Reg) {
 }
 
 func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
-    if (hir_is_lvalue(e)) {
-        assert(is_scalar(e.type), "asm_lower_expr: lvalue must evaluate to a scalar.");
-        asm_lower_expr_addr(ctx, e, xd);
-        // ldr {xd}, [{xd}]
-        asm_write_ldrs_r(ctx.builder, type_size(e.type), xd, xd);
-    } else if (e.kind == HirExpr_Skip) {
-        // nop
-    } else if (e.kind == HirExpr_Seq) {
-        asm_lower_seq_expr(ctx, e as *HirSeqExpr, xd);
-    } else if (e.kind == HirExpr_Int) {
-        asm_lower_int_expr(ctx, e as *HirIntExpr, xd);
-    } else if (e.kind == HirExpr_Str) {
-        asm_lower_str_expr(ctx, e as *HirStrExpr, xd);
-    } else if (e.kind == HirExpr_Cond) {
-        asm_lower_cond_expr(ctx, e as *HirCondExpr, xd);
-    } else if (e.kind == HirExpr_Loop) {
-        asm_lower_loop_expr(ctx, e as *HirLoopExpr, xd);
-    } else if (e.kind == HirExpr_Jump) {
-        asm_lower_jump_expr(ctx, e as *HirJumpExpr, xd);
-    } else if (e.kind == HirExpr_Return) {
-        asm_lower_return_expr(ctx, e as *HirReturnExpr, xd);
-    } else if (e.kind == HirExpr_BinaryOp) {
-        asm_lower_binary_op_expr(ctx, e as *HirBinaryOpExpr, xd);
-    } else if (e.kind == HirExpr_Call) {
-        asm_lower_call_expr(ctx, e as *HirCallExpr, xd, is_composite_assign: false);
-    } else if (e.kind == HirExpr_Addr) {
-        asm_lower_addr_expr(ctx, e as *HirAddrExpr, xd);
-    } else if (e.kind == HirExpr_Assign) {
-        asm_lower_assign_expr(ctx, e as *HirAssignExpr, xd);
-    } else if (e.kind == HirExpr_Cast) {
-        asm_lower_cast_expr(ctx, e as *HirCastExpr, xd);
-    } else if (e.kind == HirExpr_Unreachable) {
-        asm_write_comment(ctx.builder, "<- unreachable");
-    } else {
-        unreachable("asm_lower_expr");
+    match (e.kind) {
+        case _ if hir_is_lvalue(e): {
+            assert(is_scalar(e.type), "asm_lower_expr: lvalue must evaluate to a scalar.");
+            asm_lower_expr_addr(ctx, e, xd);
+            // ldr {xd}, [{xd}]
+            asm_write_ldrs_r(ctx.builder, type_size(e.type), xd, xd);
+        }
+        case HirExpr_Skip: {
+            // nop
+        }
+        case HirExpr_Seq: {
+            asm_lower_seq_expr(ctx, e as *HirSeqExpr, xd);
+        }
+        case HirExpr_Int: {
+            asm_lower_int_expr(ctx, e as *HirIntExpr, xd);
+        }
+        case HirExpr_Str: {
+            asm_lower_str_expr(ctx, e as *HirStrExpr, xd);
+        }
+        case HirExpr_Cond: {
+            asm_lower_cond_expr(ctx, e as *HirCondExpr, xd);
+        }
+        case HirExpr_Loop: {
+            asm_lower_loop_expr(ctx, e as *HirLoopExpr, xd);
+        }
+        case HirExpr_Jump: {
+            asm_lower_jump_expr(ctx, e as *HirJumpExpr, xd);
+        }
+        case HirExpr_Return: {
+            asm_lower_return_expr(ctx, e as *HirReturnExpr, xd);
+        }
+        case HirExpr_BinaryOp: {
+            asm_lower_binary_op_expr(ctx, e as *HirBinaryOpExpr, xd);
+        }
+        case HirExpr_Call: {
+            asm_lower_call_expr(ctx, e as *HirCallExpr, xd, is_composite_assign: false);
+        }
+        case HirExpr_Addr: {
+            asm_lower_addr_expr(ctx, e as *HirAddrExpr, xd);
+        }
+        case HirExpr_Assign: {
+            asm_lower_assign_expr(ctx, e as *HirAssignExpr, xd);
+        }
+        case HirExpr_Cast: {
+            asm_lower_cast_expr(ctx, e as *HirCastExpr, xd);
+        }
+        case HirExpr_Unreachable: {
+            asm_write_comment(ctx.builder, "<- unreachable");
+        }
+        case _: {
+            unreachable("asm_lower_expr");
+        }
     }
     lock_reg(ctx, xd);
 }
@@ -1043,10 +1088,13 @@ func emit_sym(ctx: *CodegenCtx, sym: *Sym) {
     if (!sym.is_defined) {
         return;
     }
-    if (sym.kind == Sym_Func) {
-        emit_func(ctx, sym as *FuncSym);
-    } else if (sym.kind == Sym_Global) {
-        emit_global(ctx, sym as *GlobalSym);
+    match (sym.kind) {
+        case Sym_Func: {
+            emit_func(ctx, sym as *FuncSym);
+        }
+        case Sym_Global: {
+            emit_global(ctx, sym as *GlobalSym);
+        }
     }
 }
 
