@@ -1024,14 +1024,29 @@ func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr;
 //==============================================================================
 //== call_layout.btl
 
-struct ArgLocation {
-    is_reg: Bool,
-    is_stack: Bool,
-// if is_reg:
+enum ArgLocationKind {
+    ArgLocation_Reg,
+    ArgLocation_Stack,
+}
+
+struct ArgLocationBase {
+    kind: ArgLocationKind,
+}
+
+struct RegArgLocation: ArgLocationBase {
+    kind = ArgLocation_Reg,
     reg: Int,
     n_regs: Int,
-// if is_stack:
+}
+
+struct StackArgLocation: ArgLocationBase {
+    kind = ArgLocation_Stack,
     offset: Int,
+}
+
+union ArgLocation: ArgLocationBase {
+    Reg: RegArgLocation,
+    Stack: StackArgLocation,
 }
 
 struct RetLocation {

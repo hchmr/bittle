@@ -5,22 +5,15 @@ func call_layout_drop(self: *CallLayout) {
 }
 
 func mapped_to_regs(reg: Int, n_regs: Int): ArgLocation {
-    return ArgLocation {
-        is_reg: true,
-        is_stack: false,
+    return RegArgLocation {
         reg: reg,
         n_regs: n_regs,
-        offset: -1,
     };
 }
 
 func mapped_to_stack(offset: Int): ArgLocation {
-    return ArgLocation {
-        is_reg: false,
-        is_stack: true,
-        reg: -1,
-        n_regs: -1,
-        offset: offset,
+    return StackArgLocation {
+        offset,
     };
 }
 

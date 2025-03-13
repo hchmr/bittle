@@ -671,50 +671,62 @@ func asm_lower_call_expr(ctx: *CodegenCtx, e: *HirCallExpr, xd: Reg, is_composit
     for (var i = 0; i < layout.n_args; i += 1) {
         var arg: *HirExpr = e.args[i];
         var arg_loc = &layout.arg_locs[i];
-        if (arg_loc.is_reg && is_scalar(arg.type)) {
-            // Pass scalar in register.
-            // x{i} <- ...
-            asm_lower_expr(ctx, arg, arg_loc.reg as Reg);
-        } else if (arg_loc.is_reg && is_pass_by_ptr(arg.type) && hir_is_lvalue(arg)) {
-            // Pass composite by pointer in register.
-            // x{i} <- &...
-            asm_lower_expr_addr(ctx, arg, arg_loc.reg as Reg);
-        } else if (arg_loc.is_reg && hir_is_lvalue(arg)) {
-            // Pass 8 or 16 byte aggregate in consecutive registers.
-            //
-            // x{lo} <- &...
-            // ldr x{lo+n} [x{lo}, #8 * n]
-            // ...
-            // ldr x{lo+0} [x{lo}, #8 * 0]
-            var lo = arg_loc.reg;
-            var n = arg_loc.n_regs;
-            asm_lower_expr_addr(ctx, arg, lo as Reg);
-            for (var j = n - 1; j >= 0; j -= 1) {
-                asm_write_ldrs_ri(ctx.builder, 8, (lo + j) as Reg, lo as Reg, 8 * j);
+        match (arg_loc.kind) {
+            case ArgLocation_Reg if is_scalar(arg.type): {
+                var arg_loc = &arg_loc.Reg;
+                // Pass scalar in register.
+                // x{i} <- ...
+                asm_lower_expr(ctx, arg, arg_loc.reg as Reg);
             }
-        } else if (arg_loc.is_stack && is_scalar(arg.type)) {
-            // Pass scalar on stack.
-            // {x1} <- ...
-            // str {x1}, [sp, #{offset}]
-            var x1 = next_reg_except_1(ctx, SP);
-            asm_lower_expr(ctx, arg, x1);
-            asm_write_str_ri(ctx.builder, 8, x1, SP, arg_loc.offset);
-            free_reg(ctx, x1);
-        } else if (arg_loc.is_stack && hir_is_lvalue(arg)) {
-            // Pass aggregate on stack.
-            //
-            // x1 <- &...
-            // add x0, sp, #{offset}
-            // mov x2, #{size}
-            // bl memcpy
-            spill_before_call(ctx);
-            asm_lower_expr_addr(ctx, arg, Reg_X1);
-            asm_write_add_ri(ctx.builder, 8, Reg_X0, SP, arg_loc.offset);
-            asm_write_mov_i(ctx.builder, 8, Reg_X2, type_size(arg.type));
-            asm_write_bl(ctx.builder, "memcpy");
-            unspill_after_call(ctx);
-        } else {
-            unreachable("asm_lower_call_expr");
+            case ArgLocation_Reg if is_pass_by_ptr(arg.type) && hir_is_lvalue(arg): {
+                var arg_loc = &arg_loc.Reg;
+                // Pass composite by pointer in register.
+                // x{i} <- &...
+                asm_lower_expr_addr(ctx, arg, arg_loc.reg as Reg);
+            }
+            case ArgLocation_Reg if hir_is_lvalue(arg): {
+                var arg_loc = &arg_loc.Reg;
+                // Pass 8 or 16 byte aggregate in consecutive registers.
+                //
+                // x{lo} <- &...
+                // ldr x{lo+n} [x{lo}, #8 * n]
+                // ...
+                // ldr x{lo+0} [x{lo}, #8 * 0]
+                var lo = arg_loc.reg;
+                var n = arg_loc.n_regs;
+                asm_lower_expr_addr(ctx, arg, lo as Reg);
+                for (var j = n - 1; j >= 0; j -= 1) {
+                    asm_write_ldrs_ri(ctx.builder, 8, (lo + j) as Reg, lo as Reg, 8 * j);
+                }
+            }
+            case ArgLocation_Stack if is_scalar(arg.type): {
+                var arg_loc = &arg_loc.Stack;
+                // Pass scalar on stack.
+                // {x1} <- ...
+                // str {x1}, [sp, #{offset}]
+                var x1 = next_reg_except_1(ctx, SP);
+                asm_lower_expr(ctx, arg, x1);
+                asm_write_str_ri(ctx.builder, 8, x1, SP, arg_loc.offset);
+                free_reg(ctx, x1);
+            }
+            case ArgLocation_Stack if hir_is_lvalue(arg): {
+                var arg_loc = &arg_loc.Stack;
+                // Pass aggregate on stack.
+                //
+                // x1 <- &...
+                // add x0, sp, #{offset}
+                // mov x2, #{size}
+                // bl memcpy
+                spill_before_call(ctx);
+                asm_lower_expr_addr(ctx, arg, Reg_X1);
+                asm_write_add_ri(ctx.builder, 8, Reg_X0, SP, arg_loc.offset);
+                asm_write_mov_i(ctx.builder, 8, Reg_X2, type_size(arg.type));
+                asm_write_bl(ctx.builder, "memcpy");
+                unspill_after_call(ctx);
+            }
+            case _: {
+                unreachable("asm_lower_call_expr");
+            }
         }
     }
 
@@ -893,13 +905,15 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         var param: *FuncParam = list_get(sym.params, i);
         var local: *LocalSym = list_get(sym.locals, i);
         var arg_loc = &layout.arg_locs[i];
-        if (arg_loc.is_reg) {
+        if (arg_loc.kind == ArgLocation_Reg) {
+            var arg_loc = &arg_loc.Reg;
             for (var j = 0; j < arg_loc.n_regs; j += 1) {
                 var reg = (arg_loc.reg + j) as Reg;
                 write_slot_store_partial(ctx, param.type, local.slot_id, 8 * j, reg);
             }
             local.is_indirect = is_pass_by_ptr(param.type);
         } else if (type_size(param.type) <= 8) {
+            var arg_loc = &arg_loc.Stack;
             // ldr x0, [fp, #{spills_size + arg_offset}]
             asm_write_ldrs_r_fp_from_frame_start(ctx.builder, 8, Reg_X0, arg_loc.offset);
             // str x0, [fp, #{fp_offset}]
@@ -964,11 +978,12 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         var local: *LocalSym = list_get(sym.locals, i);
         var arg_loc = &layout.arg_locs[i];
 
-        if (arg_loc.is_reg) {
+        if (arg_loc.kind == ArgLocation_Reg) {
             // Already handled
         } else if (type_size(param.type) <= 8) {
             // Already handled
         } else {
+            var arg_loc = &arg_loc.Stack;
             // add x0, fp, #{??}
             // add x1, fp, #{spills_size + arg_offset}
             // mov x2, #{size}
