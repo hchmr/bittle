@@ -106,11 +106,13 @@ func p_grouped_type(self: *Parser): *TypeExpr {
 func p_ptr_type(self: *Parser): *TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_Star);
+    var is_mut = eat(self, Tok_Mut);
     var pointee = p_type(self);
 
     return box(sizeof(PtrTypeExpr), &PtrTypeExpr {
         pos,
         pointee,
+        is_mut,
     }) as *PtrTypeExpr;
 }
 

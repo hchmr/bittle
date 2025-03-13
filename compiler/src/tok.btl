@@ -25,6 +25,7 @@ func pretty_tok_kind(kind: TokKind): *Char {
         case Tok_Is: return "'is'";
         case Tok_Include: return "'include'";
         case Tok_Match: return "'match'";
+        case Tok_Mut: return "'mut'";
         case Tok_Null: return "'null'";
         case Tok_Return: return "'return'";
         case Tok_Sizeof: return "'sizeof'";

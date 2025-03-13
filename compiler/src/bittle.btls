@@ -298,6 +298,7 @@ enum TokKind {
     Tok_Include,
     Tok_Is,
     Tok_Match,
+    Tok_Mut,
     Tok_Null,
     Tok_Return,
     Tok_Sizeof,
@@ -393,6 +394,7 @@ struct NamedTypeExpr: TypeExpr {
 struct PtrTypeExpr: TypeExpr {
     kind = TypeExpr_Ptr,
     pointee: *TypeExpr,
+    is_mut: Bool,
 }
 
 struct ArrTypeExpr: TypeExpr {
