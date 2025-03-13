@@ -11,12 +11,12 @@ enum AsmOperandKind {
     AsmOperand_Raw,
 }
 
-struct AsmOperand {
+struct AsmOperandBase {
     kind: AsmOperandKind,
 }
 
 // e.g. x0
-struct AsmRegOperand : AsmOperand {
+struct AsmRegOperand: AsmOperandBase {
     kind = AsmOperand_Reg,
     width: Int,
     reg: Reg,
@@ -25,22 +25,22 @@ struct AsmRegOperand : AsmOperand {
 
 // e.g. [x0]
 // e.g. [x0, #42]
-struct AsmMemOperand : AsmOperand {
+struct AsmMemOperand: AsmOperandBase {
     kind = AsmOperand_Mem,
     n_args: Int,
-    args: **AsmOperand,
+    args: *AsmOperand,
 }
 
 // e.g. #42
 // e.g. #1, lsl 16
-struct AsmIntOperand : AsmOperand {
+struct AsmIntOperand: AsmOperandBase {
     kind = AsmOperand_Int,
     value: Int,
     shift: Int = 0,
 }
 
 // e.g. .L0
-struct AsmLabelOperand : AsmOperand {
+struct AsmLabelOperand: AsmOperandBase {
     kind = AsmOperand_Label,
     counter: Int, // Only used for auto-generated labels
     suffix: *Char,
@@ -48,33 +48,44 @@ struct AsmLabelOperand : AsmOperand {
 
 // e.g. :got:my_global
 // e.g. str3
-struct AsmGlobalOperand : AsmOperand {
+struct AsmGlobalOperand: AsmOperandBase {
     kind = AsmOperand_Global,
     relocation_spec: *Char, // :lo12, :got, :got_lo12
     prefix: *Char,
     counter: Int, // Only used for strings
 }
 
-struct AsmFpFromFrameStartOperand : AsmOperand {
+struct AsmFpFromFrameStartOperand: AsmOperandBase {
     kind = AsmOperand_FpFromFrameStart,
     offset: Int,
 }
 
-struct AsmSpFromFpOperand : AsmOperand {
+struct AsmSpFromFpOperand: AsmOperandBase {
     kind = AsmOperand_SpFromFp,
     fp_offset: Int,
 }
 
-struct AsmRawOperand : AsmOperand {
+struct AsmRawOperand: AsmOperandBase {
     kind = AsmOperand_Raw,
     op: *Char,
+}
+
+union AsmOperand: AsmOperandBase {
+    Reg: AsmRegOperand,
+    Mem: AsmMemOperand,
+    Int: AsmIntOperand,
+    Label: AsmLabelOperand,
+    Global: AsmGlobalOperand,
+    FpFromFrameStart: AsmFpFromFrameStartOperand,
+    SpFromFp: AsmSpFromFpOperand,
+    Raw: AsmRawOperand,
 }
 
 struct AsmInstr {
     op: *Char,
     n_args: Int,
-    args: **AsmOperand,
-    comment: *Char,
+    args: *AsmOperand,
+    comment: *Char = null,
 }
 
 struct AsmInstrBuilder {
@@ -85,77 +96,61 @@ func reg_width_from_size(size: Int): Int {
     return size < 8 ? 4 : 8;
 }
 
-func asm_mk_reg_operand(width: Int, reg: Reg, shift: Int = 0): *AsmRegOperand {
-    var operand: *AsmRegOperand = calloc(1, sizeof(AsmRegOperand));
-    *operand = AsmRegOperand {
+func asm_mk_reg_operand(width: Int, reg: Reg, shift: Int = 0): AsmRegOperand {
+    return AsmRegOperand {
         width: width,
         reg: reg,
         shift: shift,
     };
-    return operand;
 }
 
-func asm_mk_int_operand(value: Int): *AsmIntOperand {
-    var operand: *AsmIntOperand = calloc(1, sizeof(AsmIntOperand));
-    *operand = AsmIntOperand {
+func asm_mk_int_operand(value: Int): AsmIntOperand {
+    return AsmIntOperand {
         value: value,
     };
-    return operand;
 }
 
-func asm_mk_label_operand(counter: Int, suffix: *Char): *AsmLabelOperand {
-    var operand: *AsmLabelOperand = calloc(1, sizeof(AsmLabelOperand));
-    *operand = AsmLabelOperand {
+func asm_mk_label_operand(counter: Int, suffix: *Char): AsmLabelOperand {
+    return AsmLabelOperand {
         counter: counter,
         suffix: suffix,
     };
-    return operand;
 }
 
-func asm_mk_global_operand(relocation_spec: *Char, prefix: *Char, suffix: Int): *AsmGlobalOperand {
-    var operand: *AsmGlobalOperand = calloc(1, sizeof(AsmGlobalOperand));
-    *operand = AsmGlobalOperand {
+func asm_mk_global_operand(relocation_spec: *Char, prefix: *Char, suffix: Int): AsmGlobalOperand {
+    return AsmGlobalOperand {
         relocation_spec: relocation_spec,
         prefix: prefix,
         counter: suffix,
     };
-    return operand;
 }
 
-func asm_mk_fp_from_frame_start_operand(offset: Int): *AsmFpFromFrameStartOperand {
-    var operand: *AsmFpFromFrameStartOperand = calloc(1, sizeof(AsmFpFromFrameStartOperand));
-    *operand = AsmFpFromFrameStartOperand {
+func asm_mk_fp_from_frame_start_operand(offset: Int): AsmFpFromFrameStartOperand {
+    return AsmFpFromFrameStartOperand {
         offset: offset,
     };
-    return operand;
 }
 
-func asm_mk_sp_from_fp_operand(fp_offset: Int): *AsmSpFromFpOperand {
-    var operand: *AsmSpFromFpOperand = calloc(1, sizeof(AsmSpFromFpOperand));
-    *operand = AsmSpFromFpOperand {
+func asm_mk_sp_from_fp_operand(fp_offset: Int): AsmSpFromFpOperand {
+    return AsmSpFromFpOperand {
         fp_offset: fp_offset,
     };
-    return operand;
 }
 
-func asm_mk_raw_operand(op: *Char): *AsmRawOperand {
-    var operand: *AsmRawOperand = calloc(1, sizeof(AsmRawOperand));
-    *operand = AsmRawOperand {
+func asm_mk_raw_operand(op: *Char): AsmRawOperand {
+    return AsmRawOperand {
         op: op,
     };
-    return operand;
 }
 
-func asm_mk_mem_operand(n_args: Int): *AsmMemOperand {
-    var operand: *AsmMemOperand = calloc(1, sizeof(AsmMemOperand));
-    *operand = AsmMemOperand {
+func asm_mk_mem_operand(n_args: Int): AsmMemOperand {
+    return AsmMemOperand {
         n_args: n_args,
-        args: calloc(n_args, sizeof(*AsmOperand)),
+        args: calloc(n_args, sizeof(AsmOperand)),
     };
-    return operand;
 }
 
-func asm_mk_reg_mem_operand(reg: Reg, offset: Int): *AsmMemOperand {
+func asm_mk_reg_mem_operand(reg: Reg, offset: Int): AsmMemOperand {
     var operand = asm_mk_mem_operand(offset != 0 ? 2 : 1);
     operand.args[0] = asm_mk_reg_operand(8, reg);
     if (offset != 0) {
@@ -164,14 +159,14 @@ func asm_mk_reg_mem_operand(reg: Reg, offset: Int): *AsmMemOperand {
     return operand;
 }
 
-func asm_mk_fp_from_frame_start_mem_operand(offset: Int): *AsmMemOperand {
+func asm_mk_fp_from_frame_start_mem_operand(offset: Int): AsmMemOperand {
     var operand = asm_mk_mem_operand(2);
     operand.args[0] = asm_mk_reg_operand(8, FP);
     operand.args[1] = asm_mk_fp_from_frame_start_operand(offset);
     return operand;
 }
 
-func asm_mk_sp_from_fp_mem_operand(fp_offset: Int): *AsmMemOperand {
+func asm_mk_sp_from_fp_mem_operand(fp_offset: Int): AsmMemOperand {
     var operand = asm_mk_mem_operand(2);
     operand.args[0] = asm_mk_reg_operand(8, SP);
     operand.args[1] = asm_mk_sp_from_fp_operand(fp_offset);
@@ -183,8 +178,7 @@ func asm_mk_instr(op: *Char, n_args: Int): *AsmInstr {
     *instr = AsmInstr {
         op: op,
         n_args: n_args,
-        args: calloc(n_args, sizeof(*AsmOperand)),
-        comment: null,
+        args: calloc(n_args, sizeof(AsmOperand)),
     };
     return instr;
 }
@@ -251,7 +245,7 @@ func asm_write_mov_i(builder: *AsmInstrBuilder, width: Int, xd: Reg, value: Int)
             var instr = asm_write_instr(builder, op, n_args: 2);
             instr.args[0] = asm_mk_reg_operand(8, xd);
             instr.args[1] = asm_mk_int_operand(lo16);
-            (instr.args[1] as *AsmIntOperand).shift = i * 16;
+            instr.args[1].Int.shift = i * 16;
 
             n_gen += 1;
         }
@@ -262,7 +256,7 @@ func asm_write_mov_i(builder: *AsmInstrBuilder, width: Int, xd: Reg, value: Int)
     assert(n_gen > 0, "asm_write_mov_i: should generate at least one instruction.");
 }
 
-func asm_write_ldrs(builder: *AsmInstrBuilder, width: Int, dst: *AsmOperand, src: *AsmOperand) {
+func asm_write_ldrs(builder: *AsmInstrBuilder, width: Int, dst: AsmOperand, src: AsmOperand) {
     var op = asm_get_load_op(width);
     var instr = asm_write_instr(builder, op, n_args: 2);
     instr.args[0] = dst;
@@ -291,7 +285,7 @@ func asm_write_ldrs_r_sp_from_fp(builder: *AsmInstrBuilder, width: Int, xd: Reg,
     asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
-func asm_write_str(builder: *AsmInstrBuilder, width: Int, src: *AsmOperand, dst: *AsmOperand) {
+func asm_write_str(builder: *AsmInstrBuilder, width: Int, src: AsmOperand, dst: AsmOperand) {
     var op = asm_get_store_op(width);
     var instr = asm_write_instr(builder, op, n_args: 2);
     instr.args[0] = src;
@@ -485,17 +479,17 @@ func asm_print_reg(reg: Reg, width: Int) {
 func asm_print_operand(fun: *AsmFunc, operand: *AsmOperand) {
     match (operand.kind) {
         case AsmOperand_Reg: {
-            var operand = operand as *AsmRegOperand;
+            var operand = &operand.Reg;
             asm_print_reg(operand.reg, operand.width);
             if (operand.shift != 0) {
                 printf(", lsl #%d", operand.shift);
             }
         }
         case AsmOperand_Mem: {
-            var operand = operand as *AsmMemOperand;
+            var operand = &operand.Mem;
             printf("[");
             for (var i = 0; i < operand.n_args; i += 1) {
-                asm_print_operand(fun, operand.args[i]);
+                asm_print_operand(fun, &operand.args[i]);
                 if (i < operand.n_args - 1) {
                     printf(", ");
                 }
@@ -503,36 +497,36 @@ func asm_print_operand(fun: *AsmFunc, operand: *AsmOperand) {
             printf("]");
         }
         case AsmOperand_Int: {
-            var operand = operand as *AsmIntOperand;
+            var operand = &operand.Int;
             printf("#%d", operand.value);
             if (operand.shift != 0) {
                 printf(", lsl #%d", operand.shift);
             }
         }
         case AsmOperand_Label: {
-            var operand = operand as *AsmLabelOperand;
+            var operand = &operand.Label;
             printf(".L%d", operand.counter);
             if (operand.suffix != null) {
                 printf(".%s", operand.suffix);
             }
         }
         case AsmOperand_Global: {
-            var operand = operand as *AsmGlobalOperand;
+            var operand = &operand.Global;
             printf("%s%s", operand.relocation_spec, operand.prefix);
             if (operand.counter != -1) {
                 printf("%d", operand.counter);
             }
         }
         case AsmOperand_FpFromFrameStart: {
-            var operand = operand as *AsmFpFromFrameStartOperand;
+            var operand = &operand.FpFromFrameStart;
             printf("#%d", fun.spills_size + operand.offset);
         }
         case AsmOperand_SpFromFp: {
-            var operand = operand as *AsmSpFromFpOperand;
+            var operand = &operand.SpFromFp;
             printf("#%d", fun.frame_size - fun.spills_size + operand.fp_offset);
         }
         case AsmOperand_Raw: {
-            var operand = operand as *AsmRawOperand;
+            var operand = &operand.Raw;
             printf("%s", operand.op);
         }
     }
@@ -541,7 +535,7 @@ func asm_print_operand(fun: *AsmFunc, operand: *AsmOperand) {
 func asm_print_instr(fun: *AsmFunc, instr: *AsmInstr) {
     // special case for labels:
     if (instr.op == null) {
-        asm_print_operand(fun, instr.args[0]);
+        asm_print_operand(fun, &instr.args[0]);
         printf(":\n");
         return;
     }
@@ -549,14 +543,12 @@ func asm_print_instr(fun: *AsmFunc, instr: *AsmInstr) {
     printf("  %s", instr.op);
 
     for (var i = 0; i < instr.n_args; i += 1) {
-        var arg = instr.args[i];
-
         if (i == 0) {
             printf(" ");
         } else {
             printf(", ");
         }
-        asm_print_operand(fun, arg);
+        asm_print_operand(fun, &instr.args[i]);
     }
 
     if (instr.comment != null) {
