@@ -964,9 +964,6 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
 
     match (op) {
         case Tok_Eq | Tok_AmpEq | Tok_BarEq | Tok_CaretEq | Tok_LtLtEq | Tok_GtGtEq | Tok_PlusEq | Tok_MinusEq | Tok_StarEq | Tok_SlashEq | Tok_PercentEq: {
-            if (!is_lvalue(left)) {
-                die_at(&left.pos, "L-value expected");
-            }
             elab_expr_infer(ctx, left, type_hint: null);
             if (op != Tok_Eq) {
                 if (expr.left.type.kind != Type_Int) {
@@ -974,6 +971,9 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
                 }
             }
             elab_expr_expect(ctx, &right, left.type);
+            if (!is_lvalue(left)) {
+                die_at(&left.pos, "L-value expected");
+            }
             if (!is_sized(left.type)) {
                 die_at(&left.pos, "Cannot assign to an unsized type");
             }

@@ -1,7 +1,7 @@
 include "bittle.btls";
 
 func is_lvalue(expr: *Expr): Bool {
-    return expr.kind == Expr_Ident
+    return expr.kind == Expr_Ident && (expr as *IdentExpr).sym.kind is (Sym_Local | Sym_Global)
         || expr.kind == Expr_Index
         || expr.kind == Expr_Member
         || expr.kind == Expr_Unary && (expr as *UnaryExpr).op == Tok_Star;
