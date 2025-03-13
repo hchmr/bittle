@@ -342,6 +342,8 @@ stage "fix(compiler): Fix miscompilation when taking address of temporary"
 
 stage "feat(compiler): Add call signature checks for main function"
 
+stage "feat(compiler): Allow unions to inherit from multi-field structs"
+
 if [ "$extra_stage" = true ]; then
     stage "$head_commit"
 fi
