@@ -39,9 +39,8 @@ func translate_assign_op(tok_kind: TokKind): HirOpKind {
 }
 
 func mk_skip_stmt(pos: *Pos): *HirExpr {
-    var result: *HirExpr = calloc(1, sizeof(HirExpr));
-    *result = HirExpr {
-        kind: HirExpr_Skip,
+    var result: *HirSkipExpr = calloc(1, sizeof(HirSkipExpr));
+    *result = HirSkipExpr {
         type: mk_void_type(),
         pos: *pos,
     };
@@ -51,7 +50,6 @@ func mk_skip_stmt(pos: *Pos): *HirExpr {
 func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
     var result: *HirSeqExpr = calloc(1, sizeof(HirSeqExpr));
     *result = HirSeqExpr {
-        kind: HirExpr_Seq,
         type: second.type,
         pos: first.pos,
         first,
@@ -63,7 +61,6 @@ func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
 func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
     var result: *HirIntExpr = calloc(1, sizeof(HirIntExpr));
     *result = HirIntExpr {
-        kind: HirExpr_Int,
         type,
         pos: *pos,
         value,
@@ -78,7 +75,6 @@ func hir_mk_bool_expr(value: Bool, pos: *Pos): *HirIntExpr {
 func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
     var result: *HirStrExpr = calloc(1, sizeof(HirStrExpr));
     *result = HirStrExpr {
-        kind: HirExpr_Str,
         type: mk_ptr_type(mk_int_type(1)),
         pos: *pos,
         value,
@@ -89,7 +85,6 @@ func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
 func hir_mk_var_expr(sym: *Sym, type: *Type, pos: *Pos): *HirVarExpr {
     var result: *HirVarExpr = calloc(1, sizeof(HirVarExpr));
     *result = HirVarExpr {
-        kind: HirExpr_Var,
         type,
         pos: *pos,
         sym,
@@ -100,7 +95,6 @@ func hir_mk_var_expr(sym: *Sym, type: *Type, pos: *Pos): *HirVarExpr {
 func hir_mk_temp_expr(temp: *HirTemp, pos: *Pos): *HirTempExpr {
     var result: *HirTempExpr = calloc(1, sizeof(HirTempExpr));
     *result = HirTempExpr {
-        kind: HirExpr_Temp,
         type: temp.type,
         pos: *pos,
         temp,
@@ -111,7 +105,6 @@ func hir_mk_temp_expr(temp: *HirTemp, pos: *Pos): *HirTempExpr {
 func hir_mk_cond_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, pos: *Pos): *HirCondExpr {
     var result: *HirCondExpr = calloc(1, sizeof(HirCondExpr));
     *result = HirCondExpr {
-        kind: HirExpr_Cond,
         type: then_expr.type,
         pos: *pos,
         cond,
@@ -124,7 +117,6 @@ func hir_mk_cond_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, 
 func hir_mk_loop_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos): *HirLoopExpr {
     var result: *HirLoopExpr = calloc(1, sizeof(HirLoopExpr));
     *result = HirLoopExpr {
-        kind: HirExpr_Loop,
         type: body.type,
         pos: *pos,
         cond,
@@ -137,7 +129,6 @@ func hir_mk_loop_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos)
 func hir_mk_return_expr(expr: *HirExpr, pos: *Pos): *HirReturnExpr {
     var result: *HirReturnExpr = calloc(1, sizeof(HirReturnExpr));
     *result = HirReturnExpr {
-        kind: HirExpr_Return,
         type: mk_void_type(),
         pos: *pos,
         expr,
@@ -148,7 +139,6 @@ func hir_mk_return_expr(expr: *HirExpr, pos: *Pos): *HirReturnExpr {
 func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *HirJumpExpr {
     var result: *HirJumpExpr = calloc(1, sizeof(HirJumpExpr));
     *result = HirJumpExpr {
-        kind: HirExpr_Jump,
         type: mk_void_type(),
         pos: *pos,
         is_break,
@@ -159,7 +149,6 @@ func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *HirJumpExpr {
 func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
     var result: *HirAssignExpr = calloc(1, sizeof(HirAssignExpr));
     *result = HirAssignExpr {
-        kind: HirExpr_Assign,
         type: mk_void_type(),
         pos: dst.pos,
         dst,
@@ -171,7 +160,6 @@ func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
 func hir_mk_binary_op_expr(op: HirOpKind, left: *HirExpr, right: *HirExpr, type: *Type): *HirBinaryOpExpr {
     var result: *HirBinaryOpExpr = calloc(1, sizeof(HirBinaryOpExpr));
     *result = HirBinaryOpExpr {
-        kind: HirExpr_BinaryOp,
         type,
         pos: left.pos,
         op,
@@ -199,7 +187,6 @@ func hir_mk_bit_not_expr(expr: *HirExpr): *HirExpr {
 func hir_mk_call_expr(callee: *FuncSym, args: **HirExpr, n_args: Int, pos: *Pos): *HirCallExpr {
     var result: *HirCallExpr = calloc(1, sizeof(HirCallExpr));
     *result = HirCallExpr {
-        kind: HirExpr_Call,
         type: callee.return_type,
         pos: *pos,
         callee,
@@ -212,7 +199,6 @@ func hir_mk_call_expr(callee: *FuncSym, args: **HirExpr, n_args: Int, pos: *Pos)
 func hir_mk_member_expr(left: *HirExpr, name: *Char, field_index: Int, field_type: *Type): *HirMemberExpr {
     var result: *HirMemberExpr = calloc(1, sizeof(HirMemberExpr));
     *result = HirMemberExpr {
-        kind: HirExpr_Member,
         type: field_type,
         pos: left.pos,
         left,
@@ -233,7 +219,6 @@ func hir_mk_index_expr(indexee: *HirExpr, index: *HirExpr): *HirIndexExpr {
 
     var result: *HirIndexExpr = calloc(1, sizeof(HirIndexExpr));
     *result = HirIndexExpr {
-        kind: HirExpr_Index,
         type: result_type,
         pos: indexee.pos,
         indexee,
@@ -248,7 +233,6 @@ func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
 
     var result: *HirDerefExpr = calloc(1, sizeof(HirDerefExpr));
     *result = HirDerefExpr {
-        kind: HirExpr_Deref,
         type: deref_type,
         pos: *pos,
         expr,
@@ -259,7 +243,6 @@ func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
 func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
     var result: *HirAddrExpr = calloc(1, sizeof(HirAddrExpr));
     *result = HirAddrExpr {
-        kind: HirExpr_Addr,
         type: mk_ptr_type(expr.type),
         pos: *pos,
         expr,
@@ -270,7 +253,6 @@ func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
 func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
     var result: *HirCastExpr = calloc(1, sizeof(HirCastExpr));
     *result = HirCastExpr {
-        kind: HirExpr_Cast,
         type,
         pos: expr.pos,
         expr,
@@ -279,9 +261,8 @@ func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
 }
 
 func hir_mk_unreachable_expr(pos: *Pos, type: *Type): *HirExpr {
-    var result: *HirExpr = calloc(1, sizeof(HirExpr));
-    *result = HirExpr {
-        kind: HirExpr_Unreachable,
+    var result: *HirUnreachableExpr = calloc(1, sizeof(HirUnreachableExpr));
+    *result = HirUnreachableExpr {
         type,
         pos: *pos,
     };

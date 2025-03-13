@@ -20,37 +20,37 @@ func mk_bool_type(): *BoolType {
 
 func mk_int_type(size: Int): *IntType {
     var type: *IntType = calloc(1, sizeof(IntType));
-    *type = IntType { kind: Type_Int, size };
+    *type = IntType { size };
     return type;
 }
 
 func mk_ptr_type(pointee: *Type): *PtrType {
     var type: *PtrType = calloc(1, sizeof(PtrType));
-    *type = PtrType { kind: Type_Ptr, pointee };
+    *type = PtrType { pointee };
     return type;
 }
 
 func mk_array_type(elem: *Type, size: Int): *ArrType {
     var type: *ArrType = calloc(1, sizeof(ArrType));
-    *type = ArrType { kind: Type_Arr, elem, size };
+    *type = ArrType { elem, size };
     return type;
 }
 
 func mk_enum_type(sym: *EnumSym): *EnumType {
     var type: *EnumType = calloc(1, sizeof(EnumType));
-    *type = EnumType { kind: Type_Enum, sym };
+    *type = EnumType { sym };
     return type;
 }
 
 func mk_record_type(sym: *RecordSym): *RecordType {
     var type: *RecordType = calloc(1, sizeof(RecordType));
-    *type = RecordType { kind: Type_Record, sym };
+    *type = RecordType { sym };
     return type;
 }
 
 func mk_rest_param_type(): *Type {
-    var rest: *Type = calloc(1, sizeof(Type));
-    *rest = Type { kind: Type_RestParam };
+    var rest: *RestParamType = calloc(1, sizeof(RestParamType));
+    *rest = RestParamType { };
     return rest;
 }
 

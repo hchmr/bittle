@@ -3,7 +3,6 @@ include "bittle.btls";
 func mk_bool_const_value(value: Bool): *BoolConstValue {
     var result: *BoolConstValue = calloc(1, sizeof(BoolConstValue));
     *result = BoolConstValue {
-        kind: ConstValue_Bool,
         type: mk_bool_type(),
         bool: value,
     };
@@ -13,7 +12,6 @@ func mk_bool_const_value(value: Bool): *BoolConstValue {
 func mk_int_const_value(value: Int, type: *Type): *IntConstValue {
     var result: *IntConstValue = calloc(1, sizeof(IntConstValue));
     *result = IntConstValue {
-        kind: ConstValue_Int,
         type: type,
         int: value,
     };
@@ -23,7 +21,6 @@ func mk_int_const_value(value: Int, type: *Type): *IntConstValue {
 func mk_null_const_value(type: *Type): *NullConstValue {
     var result: *NullConstValue = calloc(1, sizeof(NullConstValue));
     *result = NullConstValue {
-        kind: ConstValue_Null,
         type: type,
     };
     return result;
@@ -32,7 +29,6 @@ func mk_null_const_value(type: *Type): *NullConstValue {
 func mk_string_const_value(value: *StringBuffer): *StringConstValue {
     var result: *StringConstValue = calloc(1, sizeof(StringConstValue));
     *result = StringConstValue {
-        kind: ConstValue_String,
         type: mk_ptr_type(mk_int_type(1)),
         string: value,
     };

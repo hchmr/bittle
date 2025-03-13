@@ -86,33 +86,45 @@ struct Type {
 }
 
 struct VoidType: Type {
+    kind = Type_Void,
 }
 
 struct BoolType: Type {
+    kind = Type_Bool,
 }
 
 struct IntType: Type {
+    kind = Type_Int,
     size: Int,
 }
 
 struct PtrType: Type {
+    kind = Type_Ptr,
     pointee: *Type,
 }
 
 struct ArrType: Type {
+    kind = Type_Arr,
     elem: *Type,
     size: Int,
 }
 
 struct EnumType: Type {
+    kind = Type_Enum,
     sym: *EnumSym,
 }
 
 struct RecordType: Type {
+    kind = Type_Record,
     sym: *RecordSym,
 }
 
 struct NeverType: Type {
+    kind = Type_Never,
+}
+
+struct RestParamType: Type {
+    kind = Type_RestParam,
 }
 
 func mk_type(kind: Int32): *Type;
@@ -155,16 +167,21 @@ struct ConstValue {
 }
 
 struct BoolConstValue: ConstValue {
+    kind = ConstValue_Bool,
     bool: Bool,
 }
 
 struct IntConstValue: ConstValue {
+    kind = ConstValue_Int,
     int: Int,
 }
 
-struct NullConstValue: ConstValue;
+struct NullConstValue: ConstValue {
+    kind = ConstValue_Null,
+}
 
 struct StringConstValue: ConstValue {
+    kind = ConstValue_String,
     string: *StringBuffer,
 }
 
@@ -207,10 +224,12 @@ struct RecordField {
 }
 
 struct EnumSym: Sym {
+    kind = Sym_Enum,
     size: Int,
 }
 
 struct RecordSym: Sym {
+    kind = Sym_Record,
     is_union: Bool,
     base: *RecordSym,
     fields: *List, // List<RecordField>
@@ -219,10 +238,12 @@ struct RecordSym: Sym {
 }
 
 struct GlobalSym: Sym {
+    kind = Sym_Global,
     type: *Type,
 }
 
 struct ConstSym: Sym {
+    kind = Sym_Const,
     value: *ConstValue,
 }
 
@@ -233,6 +254,7 @@ struct FuncParam {
 }
 
 struct FuncSym: Sym {
+    kind = Sym_Func,
     params: *List, // List<FuncParam>
     return_type: *Type,
     is_variadic: Bool,
@@ -243,6 +265,7 @@ struct FuncSym: Sym {
 }
 
 struct LocalSym: Sym {
+    kind = Sym_Local,
     type: *Type,
     slot_id: Int,
     is_indirect: Bool,
@@ -372,20 +395,32 @@ struct TypeExpr {
 }
 
 struct NamedTypeExpr: TypeExpr {
+    kind = TypeExpr_Named,
     name: *Char,
 }
 
 struct PtrTypeExpr: TypeExpr {
+    kind = TypeExpr_Ptr,
     pointee: *TypeExpr,
 }
 
 struct ArrTypeExpr: TypeExpr {
+    kind = TypeExpr_Arr,
     elem: *TypeExpr,
     size: *Expr,
 }
 
+struct NeverTypeExpr: TypeExpr {
+    kind = TypeExpr_Never,
+}
+
 struct TypeofTypeExpr: TypeExpr {
+    kind = TypeExpr_Typeof,
     expr: *Expr,
+}
+
+struct RestParamTypeExpr: TypeExpr {
+    kind = TypeExpr_RestParam,
 }
 
 // Literal
@@ -404,16 +439,24 @@ struct Literal {
     kind: LiteralKind,
 }
 
+struct NullLiteral: Literal {
+    kind = Literal_Null,
+}
+
 struct BoolLiteral: Literal {
+    kind = Literal_Bool,
     value: Bool,
 }
 struct IntLiteral: Literal {
+    kind = Literal_Int,
     value: Int,
 }
 struct CharLiteral: Literal {
+    kind = Literal_Char,
     value: Char,
 }
 struct StringLiteral: Literal {
+    kind = Literal_String,
     value: *StringBuffer,
 }
 
@@ -436,29 +479,35 @@ struct Pattern {
 }
 
 struct GroupedPattern: Pattern {
+    kind = Pattern_Grouped,
     pattern: *Pattern,
 }
 
 struct LiteralPattern: Pattern {
+    kind = Pattern_Literal,
     literal: *Literal,
     value: *ConstValue,
 }
 
 struct NamePattern: Pattern {
+    kind = Pattern_Name,
     name: *Char,
     sym: *ConstSym,
 }
 
 struct WildcardPattern: Pattern {
+    kind = Pattern_Wildcard,
 }
 
 struct VarPattern: Pattern {
+    kind = Pattern_Var,
     name: *Char,
     pattern: *Pattern,
     sym: *LocalSym,
 }
 
 struct RangePattern: Pattern {
+    kind = Pattern_Range,
     lower: *Expr,
     upper: *Expr,
     lower_value: *ConstValue,
@@ -466,6 +515,7 @@ struct RangePattern: Pattern {
 }
 
 struct OrPattern: Pattern {
+    kind = Pattern_Or,
     patterns: *List, // List<Pattern>
 }
 
@@ -495,19 +545,23 @@ struct Expr {
 }
 
 struct IdentExpr: Expr {
+    kind = Expr_Ident,
     name: *Char,
     sym: *Sym,
 }
 
 struct LiteralExpr: Expr {
+    kind = Expr_Literal,
     literal: *Literal,
 }
 
 struct ArrayExpr: Expr {
+    kind = Expr_Array,
     elems: *List, // List<Expr>
 }
 
 struct CallExpr: Expr {
+    kind = Expr_Call,
     callee: *Expr,
     args: *List, // List<CallArg>
     resolved_callee: *FuncSym,
@@ -520,44 +574,52 @@ struct CallArg {
 }
 
 struct IndexExpr: Expr {
+    kind = Expr_Index,
     indexee: *Expr,
     index: *Expr,
 }
 
 struct MemberExpr: Expr {
+    kind = Expr_Member,
     left: *Expr,
     name: *Char,
     resolved_field: Int,
 }
 
 struct SizeofExpr: Expr {
+    kind = Expr_Sizeof,
     type_expr: *TypeExpr,
     size: Int,
 }
 
 struct UnaryExpr: Expr {
+    kind = Expr_Unary,
     op: TokKind,
     right: *Expr,
 }
 
 struct BinaryExpr: Expr {
+    kind = Expr_Binary,
     op: TokKind,
     left: *Expr,
     right: *Expr,
 }
 
 struct TernaryExpr: Expr {
+    kind = Expr_Ternary,
     cond: *Expr,
     then_expr: *Expr,
     else_expr: *Expr,
 }
 
 struct IsExpr: Expr {
+    kind = Expr_Is,
     left: *Expr,
     pattern: *Pattern,
 }
 
 struct CastExpr: Expr {
+    kind = Expr_Cast,
     expr: *Expr,
     type_expr: *TypeExpr,
 }
@@ -569,6 +631,7 @@ struct FieldInitializer {
 }
 
 struct RecordExpr: Expr {
+    kind = Expr_Record,
     name: *Char,
     fields: *List, // List<FieldInit>
 }
@@ -597,14 +660,17 @@ struct Stmt {
 }
 
 struct BlockStmt: Stmt {
+    kind = Stmt_Block,
     stmts: *List, // List<Stmt>
 }
 
 struct ConstStmt: Stmt {
+    kind = Stmt_Const,
     decl: *ConstDecl,
 }
 
 struct LocalStmt: Stmt {
+    kind = Stmt_Local,
     name: *Char,
     type: *TypeExpr,
     init: *Expr,
@@ -612,6 +678,7 @@ struct LocalStmt: Stmt {
 }
 
 struct IfStmt: Stmt {
+    kind = Stmt_If,
     cond: *Expr,
     then_stmt: *Stmt,
     else_stmt: *Stmt,
@@ -624,16 +691,19 @@ struct MatchCase {
 }
 
 struct MatchStmt: Stmt {
+    kind = Stmt_Match,
     scrutinee: *Expr,
     cases: *List, // List<MatchCase>
 }
 
 struct WhileStmt: Stmt {
+    kind = Stmt_While,
     cond: *Expr,
     body: *Stmt,
 }
 
 struct ForStmt: Stmt {
+    kind = Stmt_For,
     init: *Stmt,
     cond: *Expr,
     step: *Expr,
@@ -641,10 +711,20 @@ struct ForStmt: Stmt {
 }
 
 struct ReturnStmt: Stmt {
+    kind = Stmt_Return,
     expr: *Expr,
 }
 
+struct BreakStmt: Stmt {
+    kind = Stmt_Break,
+}
+
+struct ContinueStmt: Stmt {
+    kind = Stmt_Continue,
+}
+
 struct ExprStmt: Stmt {
+    kind = Stmt_Expr,
     expr: *Expr,
 }
 
@@ -671,6 +751,7 @@ struct RecordFieldDecl {
 }
 
 struct RecordDecl: Decl {
+    kind = Decl_Record,
     is_union: Bool,
     name: *Char,
     base: *TypeExpr,
@@ -691,6 +772,7 @@ struct RestParamDecl {
 }
 
 struct FuncDecl: Decl {
+    kind = Decl_Func,
     is_extern: Bool,
     name: *Char,
     params: *List, // List<FuncParam>
@@ -708,12 +790,14 @@ struct EnumMember {
 }
 
 struct EnumDecl: Decl {
+    kind = Decl_Enum,
     name: *Char,
     members: *List, // List<EnumMember>
     sym: *EnumSym,
 }
 
 struct ConstDecl: Decl {
+    kind = Decl_Const,
     name: *Char,
     type: *TypeExpr,
     value: *Expr,
@@ -721,6 +805,7 @@ struct ConstDecl: Decl {
 }
 
 struct GlobalDecl: Decl {
+    kind = Decl_Global,
     is_extern: Bool,
     name: *Char,
     type: *TypeExpr,
@@ -801,85 +886,110 @@ struct HirExpr {
     pos: Pos,
 }
 
+struct HirSkipExpr: HirExpr {
+    kind = HirExpr_Skip,
+}
+
 struct HirSeqExpr: HirExpr {
+    kind = HirExpr_Seq,
     first: *HirExpr,
     second: *HirExpr,
 }
 
 struct HirIntExpr: HirExpr {
+    kind = HirExpr_Int,
     value: Int,
 }
 
 struct HirStrExpr: HirExpr {
+    kind = HirExpr_Str,
     value: *StringBuffer,
 }
 
 struct HirVarExpr: HirExpr {
+    kind = HirExpr_Var,
     sym: *Sym,
 }
 
 struct HirTempExpr: HirExpr {
+    kind = HirExpr_Temp,
     temp: *HirTemp,
 }
 
 struct HirCondExpr: HirExpr {
+    kind = HirExpr_Cond,
     cond: *HirExpr,
     then_expr: *HirExpr,
     else_expr: *HirExpr,
 }
 
 struct HirLoopExpr: HirExpr {
+    kind = HirExpr_Loop,
     cond: *HirExpr,
     body: *HirExpr,
     step: *HirExpr,
 }
 
 struct HirReturnExpr: HirExpr {
+    kind = HirExpr_Return,
     expr: *HirExpr,
 }
 
 struct HirJumpExpr: HirExpr {
+    kind = HirExpr_Jump,
     is_break: Bool,
 }
 
 struct HirAssignExpr: HirExpr {
+    kind = HirExpr_Assign,
     dst: *HirExpr,
     src: *HirExpr,
 }
 
 struct HirBinaryOpExpr: HirExpr {
+    kind = HirExpr_BinaryOp,
     op: HirOpKind,
     left: *HirExpr,
     right: *HirExpr,
 }
 
 struct HirCallExpr: HirExpr {
+    kind = HirExpr_Call,
     callee: *FuncSym,
     args: **HirExpr,
     n_args: Int,
 }
 
 struct HirMemberExpr: HirExpr {
+    kind = HirExpr_Member,
     left: *HirExpr,
     name: *Char,
     field_index: Int,
 }
 
 struct HirIndexExpr: HirExpr {
+    kind = HirExpr_Index,
     indexee: *HirExpr,
     index: *HirExpr,
 }
 
 struct HirDerefExpr: HirExpr {
+    kind = HirExpr_Deref,
     expr: *HirExpr,
 }
 
 struct HirAddrExpr: HirExpr {
+    kind = HirExpr_Addr,
     expr: *HirExpr,
 }
 
 struct HirCastExpr: HirExpr {
+    kind = HirExpr_Cast,
     expr: *HirExpr,
+}
+
+struct HirUnreachableExpr: HirExpr {
+    kind = HirExpr_Unreachable,
 }
 
 func hir_is_lvalue(e: *HirExpr): Bool;

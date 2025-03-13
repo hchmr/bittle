@@ -95,7 +95,6 @@ func declare_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
 
     var sym: *EnumSym = calloc(1, sizeof(EnumSym));
     *sym = EnumSym {
-        kind: Sym_Enum,
         name,
         is_defined: false,
         size: -1,
@@ -128,7 +127,6 @@ func declare_record(
 
     var sym: *RecordSym = calloc(1, sizeof(RecordSym));
     *sym = RecordSym {
-        kind: Sym_Record,
         name,
         is_defined: false,
         is_union,
@@ -160,7 +158,6 @@ func declare_const(ctx: *ElabCtx, pos: *Pos, name: *Char): *ConstSym {
 
     var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
     *sym = ConstSym {
-        kind: Sym_Const,
         is_defined: false,
         name,
         value: null,
@@ -233,7 +230,6 @@ func declare_func(
 
     var sym: *FuncSym = calloc(1, sizeof(FuncSym));
     *sym = FuncSym {
-        kind: Sym_Func,
         name,
         is_defined: false,
         params,
@@ -271,7 +267,6 @@ func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *Global
 
     var sym = calloc(1, sizeof(GlobalSym)) as *GlobalSym;
     *sym = GlobalSym {
-        kind: Sym_Global,
         name,
         type,
         is_defined: false,
@@ -301,7 +296,6 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
 
     var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
     *sym = LocalSym {
-        kind: Sym_Local,
         name,
         is_defined: true,
         type,
@@ -351,7 +345,6 @@ func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
         const_value = const_value_cast(e.const_value, target);
     }
     *cast = CastExpr {
-        kind: Expr_Cast,
         pos: e.pos,
         type: target,
         const_value,
@@ -399,7 +392,6 @@ func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
 
     var record_expr: *RecordExpr = calloc(1, sizeof(RecordExpr));
     *record_expr = RecordExpr {
-        kind: Expr_Record,
         pos: e.pos,
         type: target,
         const_value: null,
@@ -1341,13 +1333,13 @@ func elab_return_stmt(ctx: *ElabCtx, stmt: *ReturnStmt) {
     }
 }
 
-func elab_break_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+func elab_break_stmt(ctx: *ElabCtx, stmt: *BreakStmt) {
     if (!ctx.loop_depth) {
         die_at(&stmt.pos, "Break statement outside of loop");
     }
 }
 
-func elab_continue_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+func elab_continue_stmt(ctx: *ElabCtx, stmt: *ContinueStmt) {
     if (!ctx.loop_depth) {
         die_at(&stmt.pos, "Continue statement outside of loop");
     }
@@ -1385,10 +1377,10 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
             elab_return_stmt(ctx, stmt as *ReturnStmt);
         }
         case Stmt_Break: {
-            elab_break_stmt(ctx, stmt);
+            elab_break_stmt(ctx, stmt as *BreakStmt);
         }
         case Stmt_Continue: {
-            elab_continue_stmt(ctx, stmt);
+            elab_continue_stmt(ctx, stmt as *ContinueStmt);
         }
         case Stmt_Expr: {
             elab_expr_stmt(ctx, stmt as *ExprStmt);
@@ -1531,7 +1523,6 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
     }
 
     *record_sym = RecordSym {
-        kind: Sym_Record,
         is_union: record_sym.is_union,
         name: record_sym.name,
         is_defined: record_sym.is_defined,
