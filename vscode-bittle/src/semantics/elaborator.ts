@@ -1916,9 +1916,6 @@ export class Elaborator {
             return;
         }
 
-        if (expected.kind === TypeKind.Ptr && expected.pointeeType.kind === TypeKind.Void && actual.kind === TypeKind.Ptr) {
-            return;
-        }
         if (!typeLooseEq(actual, expected)) {
             this.reportTypeError(node, expected, actual);
         }
