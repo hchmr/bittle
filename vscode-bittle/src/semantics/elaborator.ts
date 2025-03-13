@@ -791,10 +791,6 @@ export class Elaborator {
             this.reportError(baseTypeNode, `Base type has incomplete type.`);
             return;
         }
-        if (baseType.sym.recordKind !== recordSym.recordKind && baseType.sym.fields.length !== 1) {
-            this.reportError(baseTypeNode, `Base type must be the same kind of record or have exactly one field.`);
-            return;
-        }
         if (baseType.sym.qualifiedName === recordSym.qualifiedName) {
             this.reportError(baseTypeNode, `Record cannot inherit from itself.`);
             return;
