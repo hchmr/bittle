@@ -299,10 +299,6 @@ func write_sign_extend(ctx: *CodegenCtx, source: *Type, xd: Reg, x1: Reg) {
     }
 }
 
-func asm_lower_expr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg);
-
-func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg);
-
 func asm_lower_expr_binary(ctx: *CodegenCtx, op: *Char, e1: *HirExpr, e2: *HirExpr, xd: Reg) {
     var x1 = next_reg_except_1(ctx, xd);
 

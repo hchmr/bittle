@@ -457,9 +457,6 @@ func check_pattern_type_int(p: **Pattern) {
 //==============================================================================
 //== Types
 
-func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
-func const_eval_int64(ctx: *ElabCtx, expr: *Expr): Int;
-
 func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     match (type_expr.kind) {
         case TypeExpr_Named: {
@@ -521,9 +518,6 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     }
 }
 
-func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
-func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type);
-
 func const_eval_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type): *ConstValue {
     elab_expr_infer(ctx, expr, type_hint);
     if (!expr.const_value) {
@@ -582,8 +576,6 @@ func elab_literal(ctx: *ElabCtx, literal: *Literal, type_hint: *Type): *ConstVal
 
 //==============================================================================
 //== Patterns
-
-func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type);
 
 func elab_pattern_expect(ctx: *ElabCtx, pattern: **Pattern, expected: *Type) {
     elab_pattern_infer(ctx, *pattern, expected);
@@ -709,8 +701,6 @@ func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type) {
 
 //==============================================================================
 //== Expressions
-
-func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type);
 
 func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type) {
     elab_expr_infer(ctx, *expr, type_hint: expected);
@@ -1187,10 +1177,6 @@ func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
 
 //==============================================================================
 //== Statements
-
-func elab_stmt(ctx: *ElabCtx, stmt: *Stmt);
-func seed_const_decl(ctx: *ElabCtx, decl: *ConstDecl);
-func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl);
 
 func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
     enter_scope(ctx);

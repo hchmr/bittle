@@ -316,8 +316,6 @@ func lower_const_value(value: *ConstValue, pos: *Pos): *HirExpr {
 //==============================================================================
 //== Patterns
 
-func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr;
-
 func lower_grouped_pattern(ctx: *Context, lhs: *HirExpr, pattern: *GroupedPattern): *HirExpr {
     return lower_pattern(ctx, lhs, pattern.pattern);
 }
@@ -452,10 +450,6 @@ func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr {
 
 //==============================================================================
 //== Expressions
-
-func lower_expr(ctx: *Context, expr: *Expr): *HirExpr;
-
-func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr;
 
 func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
     match (expr.sym.kind) {
@@ -934,8 +928,6 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
 
 //==============================================================================
 //== Statements
-
-func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr;
 
 func lower_block_stmt(ctx: *Context, stmt: *BlockStmt): *HirExpr {
     var current = mk_skip_stmt(&stmt.pos);

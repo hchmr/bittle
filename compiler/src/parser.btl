@@ -87,10 +87,6 @@ func p_ident(self: *Parser): *Char {
 //==============================================================================
 //== Types
 
-func p_expr(self: *Parser, max_prec: Int32): *Expr;
-
-func p_type(self: *Parser): *TypeExpr;
-
 func p_named_type(self: *Parser): *TypeExpr {
     var pos = self.tok.pos;
     var name = p_ident(self);
@@ -258,11 +254,6 @@ func p_literal(self: *Parser): *Literal {
 
 //==============================================================================
 //== Patterns
-
-func p_literal_expr(self: *Parser): *Expr;
-func p_name_expr(self: *Parser): *Expr;
-func p_inner_pattern(self: *Parser): *Pattern;
-func p_pattern(self: *Parser): *Pattern;
 
 func p_pattern_const(self: *Parser): *Expr {
     if (at_literal_tok(self)) {
@@ -435,8 +426,6 @@ enum {
     Prec_Postfix,
     Prec_Primary,
 }
-
-func p_expr(self: *Parser, max_prec: Int32): *Expr;
 
 func p_grouped_expr(self: *Parser): *Expr {
     expect(self, Tok_LParen);
@@ -835,10 +824,6 @@ func p_expr(self: *Parser, max_prec: Int32 = 0): *Expr {
 
 //==============================================================================
 //== Statements
-
-func p_stmt(self: *Parser): *Stmt;
-func p_const_decl(self: *Parser): *ConstDecl;
-func p_expr_stmt(self: *Parser): *Stmt;
 
 func p_block(self: *Parser): *Stmt {
     var pos = self.tok.pos;
@@ -1349,8 +1334,6 @@ func p_decl_decl(self: *Parser): *Decl {
 
 //==============================================================================
 //== Top-level
-
-func parse_file(self: *Parser, decls: *List);
 
 func p_include(self: *Parser, decls: *List) {
     var pos = self.tok.pos;

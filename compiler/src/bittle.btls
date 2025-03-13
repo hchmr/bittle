@@ -65,10 +65,6 @@ func parse_string(s: *Char): *StringBuffer;
 //==============================================================================
 //== type.btl
 
-struct Sym;
-struct RecordSym;
-struct EnumSym;
-
 enum TypeKind {
     Type_Void,
     Type_Bool,
@@ -197,9 +193,6 @@ func mk_string_const_value(value: *StringBuffer): *StringConstValue;
 
 //==============================================================================
 //== sym.btl
-
-struct Sym;
-struct Stmt;
 
 enum SymKind {
     Sym_Enum,
@@ -374,8 +367,6 @@ func pretty_tok_kind(kind: TokKind): *Char;
 //==============================================================================
 //== ast.btl
 
-struct Expr;
-
 // Type
 
 enum TypeExprKind {
@@ -386,8 +377,6 @@ enum TypeExprKind {
     TypeExpr_Typeof,
     TypeExpr_RestParam,
 }
-
-struct TypeExpr;
 
 struct TypeExpr {
     kind: TypeExprKind,
@@ -424,8 +413,6 @@ struct RestParamTypeExpr: TypeExpr {
 }
 
 // Literal
-
-struct Literal;
 
 enum LiteralKind {
     Literal_Null,
@@ -638,8 +625,6 @@ struct RecordExpr: Expr {
 
 // Stmt
 
-struct ConstDecl;
-
 enum StmtKind {
     Stmt_Block,
     Stmt_Const,
@@ -844,8 +829,6 @@ enum HirOpKind {
     HirOp_Div,
     HirOp_Rem,
 }
-
-struct HirExpr;
 
 enum HirExprKind {
     // Composition primitives
