@@ -479,8 +479,9 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
             }
         }
         case TypeExpr_Ptr: {
-            var pointee = eval_type(ctx, (type_expr as *PtrTypeExpr).pointee);
-            return mk_ptr_type(pointee);
+            var type_expr = type_expr as *PtrTypeExpr;
+            var pointee = eval_type(ctx, type_expr.pointee);
+            return mk_ptr_type(pointee, is_mut: type_expr.is_mut);
         }
         case TypeExpr_Arr: {
             var type_expr = type_expr as *ArrTypeExpr;
@@ -535,7 +536,7 @@ func const_eval_int32(ctx: *ElabCtx, expr: *Expr): Int32 {
 func elab_literal(ctx: *ElabCtx, literal: *Literal, type_hint: *Type): *ConstValue {
     match (literal.kind) {
         case Literal_Null: {
-            var type = type_hint && type_hint.kind == Type_Ptr ? type_hint : mk_ptr_type(mk_void_type());
+            var type = type_hint && type_hint.kind == Type_Ptr ? type_hint : mk_ptr_type(mk_void_type(), is_mut: true);
             return mk_null_const_value(type);
         }
         case Literal_Bool: {
@@ -920,7 +921,7 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
             expr.right = right;
         }
         case Tok_Star: {
-            var right_type_hint = mk_ptr_type(type_hint);
+            var right_type_hint = mk_ptr_type(type_hint, is_mut: true);
             elab_expr_infer(ctx, right, type_hint: right_type_hint);
             var pointee_type = right.type;
             if (pointee_type.kind != Type_Ptr) {
@@ -934,7 +935,8 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
                 right_type_hint = (type_hint as *PtrType).pointee;
             }
             elab_expr_infer(ctx, right, right_type_hint);
-            expr.type = mk_ptr_type(right.type);
+            var is_mut = is_mutable_lvalue(right);
+            expr.type = mk_ptr_type(right.type, is_mut);
         }
         case _: {
             unreachable("elab_unary_expr");
@@ -964,6 +966,12 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
             }
             if (!is_sized(left.type)) {
                 die_at(&left.pos, "Cannot assign to an unsized type");
+            }
+            if (!is_lvalue(left)) {
+                die_at(&left.pos, "L-value expected");
+            }
+            if (!is_mutable_lvalue(left)) {
+                die_at(&left.pos, "Target is not mutable");
             }
             expr.type = mk_void_type();
             expr.left = left;
@@ -1617,7 +1625,7 @@ func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
                 }
             }
             case 1: {
-                if (!type_eq(param.type, mk_ptr_type(mk_ptr_type(mk_int_type(1))))) {
+                if (!type_eq(param.type, mk_ptr_type(mk_ptr_type(mk_int_type(1), is_mut: false), is_mut: false))) {
                     die_at(&param_decl.pos, "The arg vector parameter of 'main' must have type '**Char'");
                 }
             }

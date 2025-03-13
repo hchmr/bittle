@@ -99,6 +99,7 @@ struct IntType: Type {
 struct PtrType: Type {
     kind = Type_Ptr,
     pointee: *Type,
+    is_mut: Bool,
 }
 
 struct ArrType: Type {
@@ -130,7 +131,7 @@ func mk_void_type(): *VoidType;
 func mk_never_type(): *NeverType;
 func mk_bool_type(): *BoolType;
 func mk_int_type(size: Int): *IntType;
-func mk_ptr_type(pointee: *Type): *PtrType;
+func mk_ptr_type(pointee: *Type, is_mut: Bool): *PtrType;
 func mk_array_type(elem: *Type, size: Int): *ArrType;
 func mk_enum_type(sym: *EnumSym): *EnumType;
 func mk_record_type(sym: *RecordSym): *RecordType;
@@ -806,6 +807,7 @@ struct Ast {
 }
 
 func is_lvalue(expr: *Expr): Bool;
+func is_mutable_lvalue(expr: *Expr): Bool;
 
 //==============================================================================
 //== hir.btl

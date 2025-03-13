@@ -22,7 +22,7 @@ func mk_null_const_value(type: *Type): *NullConstValue {
 
 func mk_string_const_value(value: *StringBuffer): *StringConstValue {
     return box(sizeof(StringConstValue), &StringConstValue {
-        type: mk_ptr_type(mk_int_type(1)),
+        type: mk_ptr_type(mk_int_type(1), is_mut: false),
         string: value,
     }) as *StringConstValue;
 }

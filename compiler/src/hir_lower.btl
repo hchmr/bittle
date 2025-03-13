@@ -68,7 +68,7 @@ func hir_mk_bool_expr(value: Bool, pos: *Pos): *HirIntExpr {
 
 func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
     return box(sizeof(HirStrExpr), &HirStrExpr {
-        type: mk_ptr_type(mk_int_type(1)),
+        type: mk_ptr_type(mk_int_type(1), is_mut: false),
         pos: *pos,
         value,
     }) as *HirStrExpr;
@@ -210,7 +210,7 @@ func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
 
 func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
     return box(sizeof(HirAddrExpr), &HirAddrExpr {
-        type: mk_ptr_type(expr.type),
+        type: mk_ptr_type(expr.type, is_mut: false),
         pos: *pos,
         expr,
     }) as *HirAddrExpr;
@@ -635,7 +635,7 @@ func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
                     *t1 = *t1 op right;
             */
             var addr_left = hir_mk_addr_expr(left, &expr.pos);
-            var typeof_addr_left = mk_ptr_type(addr_left.type);
+            var typeof_addr_left = mk_ptr_type(addr_left.type, is_mut: true);
 
             var temp_var = mk_temp_var(ctx, typeof_addr_left);
             var temp = hir_mk_temp_expr(temp_var, &expr.pos);

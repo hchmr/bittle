@@ -33,7 +33,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayou
         // Stage B – Pre-padding and extension of arguments
 
         if (is_pass_by_ptr(type)) {
-            type = mk_ptr_type(type);
+            type = mk_ptr_type(type, is_mut: true);
             arg_size = 8;
             arg_align = 8;
         } else if (is_composite(type)) {

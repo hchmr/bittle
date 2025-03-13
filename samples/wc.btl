@@ -63,7 +63,7 @@ struct Stats {
     max_len: Int32 = 0,
 }
 
-func stats_accum(total: *Stats, other: Stats) {
+func stats_accum(total: *mut Stats, other: Stats) {
     total.lines += other.lines;
     total.words += other.words;
     total.bytes += other.bytes;
