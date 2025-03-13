@@ -1029,7 +1029,7 @@ func elab_is_expr(ctx: *ElabCtx, expr: *IsExpr) {
     var pattern = expr.pattern;
 
     elab_expr_infer(ctx, left, type_hint: null);
-    elab_pattern_infer(ctx, pattern, left.type);
+    elab_pattern_expect(ctx, pattern, left.type);
 
     expr.type = mk_bool_type();
 }

@@ -55,11 +55,11 @@ func read_file(file: *File): *Char;
 func get_directory(path: *Char): *Char;
 func join_paths(dir: *Char, file: *Char): *Char;
 
-func is_whitespace(c: Int32): Bool;
-func is_digit(c: Int32, base: Int): Bool;
-func is_word_start(c: Int32): Bool;
-func is_word_part(c: Int32): Bool;
-func is_print(c: Int32): Bool;
+func is_whitespace(c: Char): Bool;
+func is_digit(c: Char, base: Int): Bool;
+func is_word_start(c: Char): Bool;
+func is_word_part(c: Char): Bool;
+func is_print(c: Char): Bool;
 
 func parse_char(s: *Char): Char;
 func parse_string(s: *Char): *StringBuffer;

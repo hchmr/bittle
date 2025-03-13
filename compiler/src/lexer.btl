@@ -130,11 +130,11 @@ func at_printable(self: *Lexer): Bool {
     return is_print(curr_char(self));
 }
 
-func at_char(self: *Lexer, c: Int32): Bool {
+func at_char(self: *Lexer, c: Char): Bool {
     return curr_char(self) == c;
 }
 
-func eat_char(self: *Lexer, c: Int32): Bool {
+func eat_char(self: *Lexer, c: Char): Bool {
     if (at_char(self, c)) {
         next_char(self);
         return true;
