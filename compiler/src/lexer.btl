@@ -54,7 +54,7 @@ struct Lexer {
 }
 
 func lexer_new(file_name: *Char, input: *Char): *Lexer {
-    var self: *Lexer = calloc(1, sizeof(Lexer));
+    var self = calloc(1, sizeof(Lexer)) as *Lexer;
 
     var pos = Pos { file: file_name, row: 1, col: 1 };
 
@@ -72,7 +72,7 @@ func lexer_new(file_name: *Char, input: *Char): *Lexer {
 
 func make_lexeme(self: *Lexer): *Char {
     var len = self.index - self.tok_index;
-    var lexeme: *Char = malloc(len + 1);
+    var lexeme = malloc(len + 1) as *Char;
     memcpy(lexeme, &self.input[self.index - len], len);
     lexeme[len] = '\0';
     return lexeme;

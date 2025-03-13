@@ -4,27 +4,27 @@ func mk_bool_const_value(value: Bool): *BoolConstValue {
     return box(sizeof(BoolConstValue), &BoolConstValue {
         type: mk_bool_type(),
         bool: value,
-    });
+    }) as *BoolConstValue;
 }
 
 func mk_int_const_value(value: Int, type: *Type): *IntConstValue {
     return box(sizeof(IntConstValue), &IntConstValue {
         type: type,
         int: value,
-    });
+    }) as *IntConstValue;
 }
 
 func mk_null_const_value(type: *Type): *NullConstValue {
     return box(sizeof(NullConstValue), &NullConstValue {
         type: type,
-    });
+    }) as *NullConstValue;
 }
 
 func mk_string_const_value(value: *StringBuffer): *StringConstValue {
     return box(sizeof(StringConstValue), &StringConstValue {
         type: mk_ptr_type(mk_int_type(1)),
         string: value,
-    });
+    }) as *StringConstValue;
 }
 
 func is_cmp_op(op: TokKind): Bool {

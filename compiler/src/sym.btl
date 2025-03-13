@@ -6,7 +6,7 @@ func find_record_field_by_name(sym: *Sym, name: *Char): Int {
         return -1;
     }
     for (var i = 0; i < list_len(fields); i += 1) {
-        var field: *RecordField = list_get(fields, i);
+        var field = list_get(fields, i) as *RecordField;
         if (str_eq(field.name, name)) {
             return i;
         }
@@ -20,7 +20,7 @@ func find_record_field_by_type(sym: *Sym, type: *Type): Int {
         return -1;
     }
     for (var i = 0; i < list_len(fields); i += 1) {
-        var field: *RecordField = list_get(fields, i);
+        var field = list_get(fields, i) as *RecordField;
         if (type_eq(field.type, type)) {
             return i;
         }
@@ -30,7 +30,7 @@ func find_record_field_by_type(sym: *Sym, type: *Type): Int {
 
 func find_param_by_name(sym: *FuncSym, name: *Int8): Int {
     for (var i = 0; i < list_len(sym.params); i += 1) {
-        var param: *FuncParam = list_get(sym.params, i);
+        var param = list_get(sym.params, i) as *FuncParam;
         if (str_eq(param.name, name)) {
             return i;
         }

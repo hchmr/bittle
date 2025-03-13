@@ -1,39 +1,39 @@
 include "bittle.btls";
 
 func mk_void_type(): *VoidType {
-    return box(sizeof(VoidType), &VoidType{ });
+    return box(sizeof(VoidType), &VoidType { }) as *VoidType;
 }
 
 func mk_never_type(): *NeverType {
-    return box(sizeof(NeverType), &NeverType{ });
+    return box(sizeof(NeverType), &NeverType { }) as *NeverType;
 }
 
 func mk_bool_type(): *BoolType {
-    return box(sizeof(BoolType), &BoolType{ });
+    return box(sizeof(BoolType), &BoolType { }) as *BoolType;
 }
 
 func mk_int_type(size: Int): *IntType {
-    return box(sizeof(IntType), &IntType { size });
+    return box(sizeof(IntType), &IntType { size }) as *IntType;
 }
 
 func mk_ptr_type(pointee: *Type): *PtrType {
-    return box(sizeof(PtrType), &PtrType { pointee });
+    return box(sizeof(PtrType), &PtrType { pointee }) as *PtrType;
 }
 
 func mk_array_type(elem: *Type, size: Int): *ArrType {
-    return box(sizeof(ArrType), &ArrType { elem, size });
+    return box(sizeof(ArrType), &ArrType { elem, size }) as *ArrType;
 }
 
 func mk_enum_type(sym: *EnumSym): *EnumType {
-    return box(sizeof(EnumType), &EnumType { sym });
+    return box(sizeof(EnumType), &EnumType { sym }) as *EnumType;
 }
 
 func mk_record_type(sym: *RecordSym): *RecordType {
-    return box(sizeof(RecordType), &RecordType { sym });
+    return box(sizeof(RecordType), &RecordType { sym }) as *RecordType;
 }
 
 func mk_rest_param_type(): *Type {
-    return box(sizeof(RestParamType), &RestParamType { });
+    return box(sizeof(RestParamType), &RestParamType { }) as *Type;
 }
 
 func type_eq(t1: *Type, t2: *Type): Bool {

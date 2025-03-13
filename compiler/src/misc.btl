@@ -41,7 +41,7 @@ func die_at(pos: *Pos, msg: *Char, ...args): ! {
 }
 
 func sb_new(): *StringBuffer {
-    return calloc(1, sizeof(StringBuffer));
+    return calloc(1, sizeof(StringBuffer)) as *StringBuffer;
 }
 
 func sb_free(self: *StringBuffer) {
@@ -70,12 +70,12 @@ func sb_ensure_cap(self: *StringBuffer, cap: Int) {
     while (new_cap < cap) {
         new_cap *= 2;
     }
-    self.buf = realloc(self.buf, new_cap);
+    self.buf = realloc(self.buf, new_cap) as *Char;
     self.cap = new_cap;
 }
 
 func sb_shrink_to_fit(self: *StringBuffer) {
-    self.buf = realloc(self.buf, self.len + 1);
+    self.buf = realloc(self.buf, self.len + 1) as *Char;
     self.cap = self.len + 1;
 }
 
@@ -117,16 +117,16 @@ func list_ensure_cap(self: *List, cap: Int) {
     while (new_cap < cap) {
         new_cap *= 2;
     }
-    self.elems = realloc(self.elems, new_cap * sizeof(*Void));
+    self.elems = realloc(self.elems, new_cap * sizeof(*Void)) as **Void;
     self.cap = new_cap;
 }
 
 func list_new(): *List {
-    return calloc(1, sizeof(List));
+    return calloc(1, sizeof(List)) as *List;
 }
 
 func list_new_with_cap(cap: Int64): *List {
-    var list = calloc(1, sizeof(List));
+    var list = calloc(1, sizeof(List)) as *List;
     list_ensure_cap(list, cap);
     return list;
 }

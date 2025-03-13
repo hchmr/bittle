@@ -17,7 +17,7 @@ func scope_new(parent: *Scope): *Scope {
     return box(sizeof(Scope), &Scope {
         entries: list_new(),
         parent: parent
-    });
+    }) as *Scope;
 }
 
 func scope_drop(scope: *Scope) {
@@ -30,7 +30,7 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
         return -1;
     }
     for (var i = list_len(scope.entries) - 1; i >= 0; i -= 1) {
-        var entry: *ScopeEntry = list_get(scope.entries, i);
+        var entry = list_get(scope.entries, i) as *ScopeEntry;
         if (str_eq(entry.name, name)) {
             return entry.sym_index;
         }
@@ -67,7 +67,7 @@ func lookup(ctx: *ElabCtx, name: *Char): *Sym {
     if (sym_index == -1) {
         return null;
     }
-    return list_get(ctx.syms, sym_index);
+    return list_get(ctx.syms, sym_index) as *Sym;
 }
 
 func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
@@ -75,14 +75,14 @@ func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
     if (sym_index == -1) {
         return null;
     }
-    return list_get(ctx.syms, sym_index);
+    return list_get(ctx.syms, sym_index) as *Sym;
 }
 
 func add_sym(ctx: *ElabCtx, sym: *Sym) {
-    var entry: *ScopeEntry = box(sizeof(ScopeEntry), &ScopeEntry {
+    var entry = box(sizeof(ScopeEntry), &ScopeEntry {
         name: sym.name,
         sym_index: list_len(ctx.syms)
-    });
+    }) as *ScopeEntry;
     list_push(ctx.syms, sym);
     list_push(ctx.scope.entries, entry);
 }
@@ -96,11 +96,11 @@ func declare_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
         return existing as *EnumSym;
     }
 
-    var sym: *EnumSym = box(sizeof(EnumSym), &EnumSym {
+    var sym = box(sizeof(EnumSym), &EnumSym {
         name,
         is_defined: false,
         size: -1,
-    });
+    }) as *EnumSym;
     add_sym(ctx, sym);
     return sym;
 }
@@ -127,7 +127,7 @@ func declare_record(
         return existing as *RecordSym;
     }
 
-    var sym: *RecordSym = box(sizeof(RecordSym), &RecordSym {
+    var sym = box(sizeof(RecordSym), &RecordSym {
         name,
         is_defined: false,
         is_union,
@@ -135,7 +135,7 @@ func declare_record(
         fields: null,
         unpadded_size: 0,
         align: 0,
-    });
+    }) as *RecordSym;
     add_sym(ctx, sym);
     return sym;
 }
@@ -180,8 +180,8 @@ func params_eq(xs: *List, ys: *List): Bool {
         return false;
     }
     for (var i = 0; i < list_len(xs); i += 1) {
-        var param1: *FuncParam = list_get(xs, i);
-        var param2: *FuncParam = list_get(ys, i);
+        var param1 = list_get(xs, i) as *FuncParam;
+        var param2 = list_get(ys, i) as *FuncParam;
         if (!str_eq(param1.name, param2.name)) {
             return false;
         }
@@ -229,7 +229,7 @@ func declare_func(
         return existing;
     }
 
-    var sym: *FuncSym = box(sizeof(FuncSym), &FuncSym {
+    var sym = box(sizeof(FuncSym), &FuncSym {
         name,
         is_defined: false,
         params,
@@ -239,7 +239,7 @@ func declare_func(
         locals: list_new(),
         temps: list_new(),
         body: null
-    });
+    }) as *FuncSym;
     add_sym(ctx, sym);
     return sym;
 }
@@ -310,8 +310,8 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
 
 func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
     for (var i = 0; i < list_len(params); i += 1) {
-        var param_decl: *FuncParamDecl = list_get(param_decls, i);
-        var param: *FuncParam = list_get(params, i);
+        var param_decl = list_get(param_decls, i) as *FuncParamDecl;
+        var param = list_get(params, i) as *FuncParam;
         define_local(ctx, &param_decl.pos, param.name, param.type);
     }
 }
@@ -333,13 +333,13 @@ func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
         const_value = const_value_cast(e.const_value, target);
     }
 
-    var cast: *CastExpr = box(sizeof(CastExpr), &CastExpr {
+    var cast = box(sizeof(CastExpr), &CastExpr {
         pos: e.pos,
         type: target,
         const_value,
         expr: e,
         type_expr: null
-    });
+    }) as *CastExpr;
     *out = cast;
     return true;
 }
@@ -367,24 +367,24 @@ func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
         return false;
     }
 
-    var field: *RecordField = list_get(sym.fields, field_index);
+    var field = list_get(sym.fields, field_index) as *RecordField;
 
-    var field_init: *FieldInitializer = box(sizeof(FieldInitializer), &FieldInitializer {
+    var field_init = box(sizeof(FieldInitializer), &FieldInitializer {
         pos: e.pos,
         name: field.name,
         expr: e
-    });
+    }) as *FieldInitializer;
 
-    var field_inits: *List = list_new();
+    var field_inits = list_new();
     list_push(field_inits, field_init);
 
-    var record_expr: *RecordExpr = box(sizeof(RecordExpr), &RecordExpr {
+    var record_expr = box(sizeof(RecordExpr), &RecordExpr {
         pos: e.pos,
         type: target,
         const_value: null,
         name: sym.name,
         fields: field_inits,
-    });
+    }) as *RecordExpr;
     *out = record_expr;
     return true;
 }
@@ -447,7 +447,7 @@ func check_pattern_type_int(p: *Pattern) {
 func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     match (type_expr.kind) {
         case TypeExpr_Named: {
-            var name: *Char = (type_expr as *NamedTypeExpr).name;
+            var name = (type_expr as *NamedTypeExpr).name;
             if (str_eq(name, "Void")) {
                 return mk_void_type();
             } else if (str_eq(name, "Bool")) {
@@ -643,11 +643,11 @@ func elab_or_pattern(ctx: *ElabCtx, pattern: *OrPattern, type_hint: *Type) {
 
     var patterns = pattern.patterns;
 
-    var first_pattern: *Pattern = list_get(patterns, 0);
+    var first_pattern = list_get(patterns, 0) as *Pattern;
     elab_pattern_infer(ctx, first_pattern, type_hint);
 
     for (var i = 1; i < list_len(patterns); i += 1) {
-        var next_pattern: *Pattern = list_get(patterns, i);
+        var next_pattern = list_get(patterns, i) as *Pattern;
         elab_pattern_expect(ctx, next_pattern, first_pattern.type);
     }
 
@@ -753,12 +753,12 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
     var elem_count = list_len(elems);
 
     for (var i = 0; i < elem_count; i += 1) {
-        var elem: *Expr = list_get(elems, i);
+        var elem = list_get(elems, i) as *Expr;
         elab_expr_infer(ctx, elem, elem_type_hint);
         if (i == 0) {
             elem_type = elem.type;
         } else {
-            var prev_expr: *Expr = list_get(elems, i - 1);
+            var prev_expr = list_get(elems, i - 1) as *Expr;
             check_expr_type(&elem, elem_type);
             list_set(elems, i, elem);
             list_set(elems, i - 1, prev_expr);
@@ -795,11 +795,11 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     var param_count = list_len(sym.params);
     var arg_count = list_len(args);
 
-    var is_initialized: *Bool = calloc(param_count, sizeof(*Bool));
+    var is_initialized = calloc(param_count, sizeof(*Bool)) as *Bool;
     var seen_named_arg = false;
 
     for (var i = 0; i < arg_count; i += 1) {
-        var arg: *CallArg = list_get(args, i);
+        var arg = list_get(args, i) as *CallArg;
         if (arg.label) {
             var param_index = find_param_by_name(sym, arg.label);
             if (param_index == -1) {
@@ -807,7 +807,7 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
             } else if (is_initialized[param_index]) {
                 die_at(&arg.expr.pos, "Parameter '%s' is already initialized", arg.label);
             }
-            var param: *FuncParam = list_get(sym.params, param_index);
+            var param = list_get(sym.params, param_index) as *FuncParam;
             elab_expr_expect(ctx, &arg.expr, param.type);
 
             is_initialized[param_index] = true;
@@ -825,7 +825,7 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
             }
             arg.positional_index = i;
         } else {
-            var param: *FuncParam = list_get(sym.params, i);
+            var param = list_get(sym.params, i) as *FuncParam;
             elab_expr_expect(ctx, &arg.expr, param.type);
 
             is_initialized[i] = true;
@@ -834,9 +834,9 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     }
 
     for (var i = 0; i < param_count; i += 1) {
-        var param: *FuncParam = list_get(sym.params, i);
+        var param = list_get(sym.params, i) as *FuncParam;
         if (!is_initialized[i] && !param.default_value) {
-            var param: *FuncParam = list_get(sym.params, i);
+            var param = list_get(sym.params, i) as *FuncParam;
             die_at(&expr.pos, "Parameter '%s' is not initialized", param.name);
         }
     }
@@ -887,7 +887,7 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
         die_at(&expr.pos, "Unknown field");
     }
 
-    var field: *RecordField = list_get(record_sym.fields, field_index);
+    var field = list_get(record_sym.fields, field_index) as *RecordField;
     expr.resolved_field = field;
     expr.type = field.type;
 }
@@ -920,7 +920,7 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
             expr.right = right;
         }
         case Tok_Star: {
-            var right_type_hint: *Type = mk_ptr_type(type_hint);
+            var right_type_hint = mk_ptr_type(type_hint);
             elab_expr_infer(ctx, right, type_hint: right_type_hint);
             var pointee_type = right.type;
             if (pointee_type.kind != Type_Ptr) {
@@ -1071,16 +1071,16 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     var initializers = expr.fields;
     var n_initializers = list_len(initializers);
 
-    var is_initialized: *Bool = calloc(n_fields, sizeof(*Bool));
+    var is_initialized = calloc(n_fields, sizeof(*Bool)) as *Bool;
 
     for (var i = 0; i < n_initializers; i += 1) {
-        var initializer: *FieldInitializer = list_get(initializers, i);
+        var initializer = list_get(initializers, i) as *FieldInitializer;
         var field_name = initializer.name;
         var field_index = find_record_field_by_name(sym, field_name);
         if (field_index == -1) {
             die_at(&initializer.pos, "Unknown field");
         }
-        var field: *RecordField = list_get(fields, field_index);
+        var field = list_get(fields, field_index) as *RecordField;
 
         if (is_initialized[field_index]) {
             die_at(&initializer.pos, "Field is already initialized");
@@ -1090,14 +1090,14 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     }
 
     for (var i = 0; i < n_fields; i += 1) {
-        var field: *RecordField = list_get(fields, i);
+        var field = list_get(fields, i) as *RecordField;
         is_initialized[i] = is_initialized[i] || field.default_value;
     }
 
     if (!sym.is_union) {
         for (var i = 0; i < n_fields; i += 1) {
             if (!is_initialized[i]) {
-                var field: *RecordField = list_get(fields, i);
+                var field = list_get(fields, i) as *RecordField;
                 die_at(&expr.pos, "Field '%s' is not initialized.", field.name);
             }
         }
@@ -1174,7 +1174,7 @@ func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
 func elab_block_stmt(ctx: *ElabCtx, stmt: *BlockStmt) {
     enter_scope(ctx);
     for (var i = 0; i < list_len(stmt.stmts); i += 1) {
-        var stmt = list_get(stmt.stmts, i);
+        var stmt = list_get(stmt.stmts, i) as *Stmt;
         elab_stmt(ctx, stmt);
     }
     exit_scope(ctx);
@@ -1191,7 +1191,7 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *LocalStmt) {
     var typeExpr = stmt.type;
     var init = stmt.init;
 
-    var type: *Type = typeExpr ? eval_type(ctx, typeExpr) : null;
+    var type = typeExpr ? eval_type(ctx, typeExpr) : null;
     if (init) {
         if (!type) {
             elab_expr_infer(ctx, init, type_hint: null);
@@ -1251,7 +1251,7 @@ func elab_match_stmt(ctx: *ElabCtx, stmt: *MatchStmt) {
     elab_expr_infer(ctx, scrutinee, type_hint: null);
 
     for (var i = 0; i < list_len(match_cases); i += 1) {
-        var match_case: *MatchCase = list_get(match_cases, i);
+        var match_case = list_get(match_cases, i) as *MatchCase;
         elab_match_case(ctx, match_case, scrutinee.type);
     }
 }
@@ -1388,7 +1388,8 @@ func seed_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     }
     var member_decls = decl.members;
     for (var i = 0; i < list_len(member_decls); i += 1) {
-        seed_enum_member(ctx, list_get(member_decls, i));
+        var member_decl = list_get(member_decls, i) as *EnumMember;
+        seed_enum_member(ctx, member_decl);
     }
 }
 
@@ -1407,7 +1408,7 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     var next_value: Int32 = 0;
     var member_decls = decl.members;
     for (var i = 0; i < list_len(member_decls); i += 1) {
-        var member_decl: *EnumMember = list_get(member_decls, i);
+        var member_decl = list_get(member_decls, i) as *EnumMember;
         var value = elab_enum_member(ctx, member_decl, type, next_value);
         next_value = value + 1;
     }
@@ -1433,12 +1434,12 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
         ? 0
         : align_up(sym.unpadded_size, field_align);
 
-    var field: *RecordField = box(sizeof(RecordField), &RecordField {
+    var field = box(sizeof(RecordField), &RecordField {
         name: field_name,
         type: field_type,
         default_value,
         offset: field_offset,
-    });
+    }) as *RecordField;
 
     list_push(sym.fields, field);
     if (sym.is_union) {
@@ -1455,7 +1456,7 @@ func add_default_value_to_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *Rec
         die_at(&field_decl.pos, "No existing field to add default value to");
     }
 
-    var field: *RecordField = list_get(sym.fields, field_index);
+    var field = list_get(sym.fields, field_index) as *RecordField;
     if (field.default_value) {
         die_at(&field_decl.pos, "Field already has a default value");
     }
@@ -1488,8 +1489,8 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
     var base_fields = baseSym.fields;
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
-        var field: *RecordField = list_get(base_fields, i);
-        var copy: *RecordField = box(sizeof(RecordField), field);
+        var field = list_get(base_fields, i) as *RecordField;
+        var copy = box(sizeof(RecordField), field) as *RecordField;
         list_push(fields, copy);
     }
 
@@ -1521,7 +1522,8 @@ func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
             sym.fields = list_new();
         }
         for (var i = 0; i < list_len(decl.fields); i += 1) {
-            elab_record_field_decl(ctx, list_get(decl.fields, i), sym);
+            var field_decl = list_get(decl.fields, i) as *RecordFieldDecl;
+            elab_record_field_decl(ctx, field_decl, sym);
         }
         if (list_len(sym.fields) == 0) {
             die_at(&decl.pos, "Empty record");
@@ -1535,7 +1537,7 @@ func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
 
 func string_list_contains(list: *List, value: *Char): Bool {
     for (var i = 0; i < list_len(list); i += 1) {
-        var item: *Char = list_get(list, i);
+        var item = list_get(list, i) as *Char;
         if (str_eq(item, value)) {
             return true;
         }
@@ -1546,7 +1548,7 @@ func string_list_contains(list: *List, value: *Char): Bool {
 func ensure_unique_params(ctx: *ElabCtx, decl: *FuncDecl) {
     var seen = list_new();
     for (var i = 0; i < list_len(decl.params); i += 1) {
-        var param_decl: *FuncParamDecl = list_get(decl.params, i);
+        var param_decl = list_get(decl.params, i) as *FuncParamDecl;
         if (string_list_contains(seen, param_decl.name)) {
             die_at(&param_decl.pos, "Duplicate parameter name");
         }
@@ -1576,14 +1578,14 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
         name,
         type,
         default_value
-    });
+    }) as *FuncParam;
 }
 
 func check_default_params_order(param_decls: *List, rest_param: *RestParamDecl) {
     var seen_default = false;
     var n_params = list_len(param_decls);
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl: *FuncParamDecl = list_get(param_decls, i);
+        var param_decl = list_get(param_decls, i) as *FuncParamDecl;
         if (!param_decl.default_value && seen_default) {
             die_at(&param_decl.pos, "Non-default parameter follows default parameter");
         }
@@ -1606,8 +1608,8 @@ func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
     }
 
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl: *FuncParamDecl = list_get(param_decls, i);
-        var param: *FuncParam = list_get(params, i);
+        var param_decl = list_get(param_decls, i) as *FuncParamDecl;
+        var param = list_get(params, i) as *FuncParam;
         match (i) {
             case 0: {
                 if (!type_eq(param.type, mk_int_type(4))) {
@@ -1634,7 +1636,7 @@ func seed_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     var n_params = list_len(decl.params);
     var params = list_new();
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl = list_get(decl.params, i);
+        var param_decl = list_get(decl.params, i) as *FuncParamDecl;
         var param = elab_param(ctx, param_decl);
         list_push(params, param);
     }
@@ -1769,17 +1771,17 @@ func elab_decl(ctx: *ElabCtx, decl: *Decl) {
 }
 
 func elab(ast: *Ast): *List { // *List<*Sym>
-    var ctx: *ElabCtx = box(sizeof(ElabCtx), &ElabCtx {
+    var ctx = box(sizeof(ElabCtx), &ElabCtx {
         syms: list_new(),
         scope: scope_new(null),
         current_func: null,
         loop_depth: 0,
         or_pattern_depth: 0,
-    });
+    }) as *ElabCtx;
 
     for (var pass = 0; pass < 4; pass += 1) {
         for (var i = 0; i < list_len(ast.decls); i += 1) {
-            var decl: *Decl = list_get(ast.decls, i);
+            var decl = list_get(ast.decls, i) as *Decl;
             match (decl.kind) {
                 case Decl_Record | Decl_Enum | Decl_Const if pass == 0: {
                     seed_decl(ctx, decl);

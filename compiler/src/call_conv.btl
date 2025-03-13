@@ -19,7 +19,7 @@ func mapped_to_stack(offset: Int): ArgLocation {
 
 // Simplified implementation of aapcs64 2024Q3.
 func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayout {
-    var arg_locs: *ArgLocation = calloc(n_args, sizeof(ArgLocation));
+    var arg_locs = calloc(n_args, sizeof(ArgLocation)) as *ArgLocation;
 
     var ngrn = 0;
     var nsaa = 0;
@@ -95,7 +95,7 @@ func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayou
 }
 
 func get_call_layout_for_call(e: *HirCallExpr): CallLayout {
-    var arg_types: **Type = calloc(e.n_args, sizeof(*Type));
+    var arg_types = calloc(e.n_args, sizeof(*Type)) as **Type;
     for (var i = 0; i < e.n_args; i += 1) {
         arg_types[i] = e.args[i].type;
     }
@@ -106,9 +106,9 @@ func get_call_layout_for_call(e: *HirCallExpr): CallLayout {
 
 func get_call_layout_for_func(f: *FuncSym): CallLayout {
     var n_params = list_len(f.params);
-    var param_types: **Type = calloc(n_params, sizeof(*Type));
+    var param_types = calloc(n_params, sizeof(*Type)) as **Type;
     for (var i = 0; i < n_params; i += 1) {
-        var param: *FuncParam = list_get(f.params, i);
+        var param = list_get(f.params, i) as *FuncParam;
         param_types[i] = param.type;
     }
     var layout = get_call_layout(n_params, param_types, f.return_type);
