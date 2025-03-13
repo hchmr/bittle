@@ -26,6 +26,7 @@ func find_element(arr: *Int, len: Int32, target: Int): Option {
     }
     return None {};
 }
+
 func print_option(option: Option) {
     if (option.is_some) {
         printf("Found at index: %d\n", option.some.value);

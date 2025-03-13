@@ -611,7 +611,6 @@ func asm_print_func(fun: *AsmFunc) {
     printf("  ret\n");
 }
 
-
 func asm_print_global(name: *Char, size: Int, align: Int) {
     printf("  .global %s\n", name);
     printf("  .bss\n");

@@ -565,7 +565,6 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
         hir_args[ast_arg.positional_index] = hir_arg;
     }
 
-
     for (var i = 0; i < n_hir_args; i += 1) {
         if (i >= n_params) {
             assert(hir_args[i], "lower_call_expr: variadic argument should be initialized");

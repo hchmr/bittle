@@ -959,7 +959,6 @@ func asm_lower_func(ctx: *CodegenCtx, sym: *FuncSym, hir_body: *HirExpr) {
         asm_write_comment(ctx.builder, "va_list initialized");
     }
 
-
     for (var i = 0; i < layout.n_args; i += 1) {
         var param: *FuncParam = list_get(sym.params, i);
         var local: *LocalSym = list_get(sym.locals, i);

@@ -60,7 +60,6 @@ func parse_int(s: *Char): IntResult {
     return int_result_ok(value * sign);
 }
 
-
 func print_result(input: *Char, result: IntResult) {
     printf("\"%s\" => ", input);
     if (result.is_ok) {

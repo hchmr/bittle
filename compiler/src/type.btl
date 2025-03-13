@@ -89,6 +89,7 @@ func type_eq(t1: *Type, t2: *Type): Bool {
         }
     }
 }
+
 func record_le(s1: *RecordSym, s2: *RecordSym): Bool {
     if (s1 == s2) {
         return true;
@@ -211,6 +212,7 @@ func type_align(type: *Type): Int {
         }
     }
 }
+
 func is_scalar(type: *Type): Bool {
     return type.kind is (Type_Bool | Type_Int | Type_Ptr | Type_Enum);
 }

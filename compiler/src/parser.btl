@@ -1043,7 +1043,6 @@ func p_for_stmt(self: *Parser): *Stmt {
     return result;
 }
 
-
 func p_return_stmt(self: *Parser): *Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Return);
