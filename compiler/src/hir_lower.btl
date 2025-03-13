@@ -196,14 +196,14 @@ func hir_mk_call_expr(callee: *FuncSym, args: **HirExpr, n_args: Int, pos: *Pos)
     return result;
 }
 
-func hir_mk_member_expr(left: *HirExpr, name: *Char, field_index: Int, field_type: *Type): *HirMemberExpr {
+func hir_mk_member_expr(left: *HirExpr, name: *Char, field: *RecordField, field_type: *Type): *HirMemberExpr {
     var result: *HirMemberExpr = calloc(1, sizeof(HirMemberExpr));
     *result = HirMemberExpr {
         type: field_type,
         pos: left.pos,
         left,
         name,
-        field_index,
+        field,
     };
     return result;
 }
@@ -584,14 +584,14 @@ func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
 func lower_member_expr(ctx: *Context, expr: *MemberExpr): *HirExpr {
     var ast_left = expr.left;
     var name = expr.name;
-    var field_index = expr.resolved_field;
+    var field = expr.resolved_field;
 
     var hir_left = lower_expr(ctx, ast_left);
     if (hir_left.type.kind == Type_Ptr) {
         hir_left = hir_mk_deref_expr(hir_left, &expr.pos);
     }
 
-    return hir_mk_member_expr(hir_left, name, field_index, expr.type);
+    return hir_mk_member_expr(hir_left, name, field, expr.type);
 }
 
 func lower_sizeof_expr(ctx: *Context, expr: *SizeofExpr): *HirExpr {
@@ -843,7 +843,7 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
         var field: *RecordField = list_get(record_type.sym.fields, field_index);
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
-        var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
+        var field_access = hir_mk_member_expr(temp_deref, field.name, field, field.type);
         var assignment = lower_assign_expr(ctx, field_access, initializer.expr, &initializer.expr.pos);
         body = hir_mk_seq_expr(body, assignment);
     }
@@ -858,7 +858,7 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
         }
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
-        var field_access = hir_mk_member_expr(temp_deref, field.name, field_index, field.type);
+        var field_access = hir_mk_member_expr(temp_deref, field.name, field, field.type);
         var default_value = lower_const_value(field.default_value, pos);
         var assignment = hir_mk_assign_expr(field_access, default_value);
         body = hir_mk_seq_expr(body, assignment);

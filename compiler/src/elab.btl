@@ -901,7 +901,7 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
     }
 
     var field: *RecordField = list_get(record_sym.fields, field_index);
-    expr.resolved_field = field_index;
+    expr.resolved_field = field;
     expr.type = field.type;
 }
 

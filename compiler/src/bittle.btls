@@ -570,7 +570,7 @@ struct MemberExpr: Expr {
     kind = Expr_Member,
     left: *Expr,
     name: *Char,
-    resolved_field: Int,
+    resolved_field: *RecordField,
 }
 
 struct SizeofExpr: Expr {
@@ -947,7 +947,7 @@ struct HirMemberExpr: HirExpr {
     kind = HirExpr_Member,
     left: *HirExpr,
     name: *Char,
-    field_index: Int,
+    field: *RecordField,
 }
 
 struct HirIndexExpr: HirExpr {

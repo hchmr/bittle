@@ -576,7 +576,7 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
         const_value: null,
         left,
         name,
-        resolved_field: -1,
+        resolved_field: null,
     };
     return result;
 }

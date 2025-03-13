@@ -147,7 +147,7 @@ func hir_dump_child(name: *Char, e: *HirExpr) {
                 begin_block("Member");
                 hir_dump_child("left", e.left);
                 begin_inline_child("field");
-                fprintf(stderr, "%d\n", e.field_index);
+                fprintf(stderr, "%s\n", e.name);
                 end_block();
             }
             case HirExpr_Index: {

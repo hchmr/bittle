@@ -362,8 +362,7 @@ func asm_lower_expr_addr(ctx: *CodegenCtx, e: *HirExpr, xd: Reg) {
         }
         case HirExpr_Member: {
             var e = e as *HirMemberExpr;
-            var fields = (e.left.type as *RecordType).sym.fields;
-            var field: *RecordField = list_get(fields, e.field_index);
+            var field = e.field;
             asm_lower_expr_addr(ctx, e.left, xd);
             // add {xd}, {xd}, #{offset}
             asm_write_add_ri(ctx.builder, 8, xd, xd, field.offset);
