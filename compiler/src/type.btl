@@ -84,7 +84,6 @@ func record_le(s1: *RecordSym, s2: *RecordSym): Bool {
 
 func pointee_type_le(t1: *Type, t2: *Type): Bool {
     return type_eq(t1, t2)
-        || t1.kind == Type_Void
         || t2.kind == Type_Void
         || t1.kind == Type_Record && t2.kind == Type_Record
             && record_le((t1 as *RecordType).sym, (t2 as *RecordType).sym);
