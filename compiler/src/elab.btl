@@ -441,14 +441,14 @@ func unify_expr_types(e1: **Expr, e2: **Expr) {
     check_expr_type(e2, (*e1).type);
 }
 
-func check_pattern_type(p: **Pattern, expected: *Type) {
-    if (!types_compatible((*p).type, expected)) {
-        report_type_mismatch(&(*p).pos, expected, (*p).type);
+func check_pattern_type(p: *Pattern, expected: *Type) {
+    if (!types_compatible(p.type, expected)) {
+        report_type_mismatch(&p.pos, expected, p.type);
     }
 }
 
-func check_pattern_type_int(p: **Pattern) {
-    if ((*p).type.kind != Type_Int) {
+func check_pattern_type_int(p: *Pattern) {
+    if (p.type.kind != Type_Int) {
         die_at(&(*p).pos, "Integer pattern expected");
     }
 }
@@ -576,8 +576,8 @@ func elab_literal(ctx: *ElabCtx, literal: *Literal, type_hint: *Type): *ConstVal
 //==============================================================================
 //== Patterns
 
-func elab_pattern_expect(ctx: *ElabCtx, pattern: **Pattern, expected: *Type) {
-    elab_pattern_infer(ctx, *pattern, expected);
+func elab_pattern_expect(ctx: *ElabCtx, pattern: *Pattern, expected: *Type) {
+    elab_pattern_infer(ctx, pattern, expected);
     check_pattern_type(pattern, expected);
 }
 
@@ -660,7 +660,7 @@ func elab_or_pattern(ctx: *ElabCtx, pattern: *OrPattern, type_hint: *Type) {
 
     for (var i = 1; i < list_len(patterns); i += 1) {
         var next_pattern: *Pattern = list_get(patterns, i);
-        elab_pattern_expect(ctx, &next_pattern, first_pattern.type);
+        elab_pattern_expect(ctx, next_pattern, first_pattern.type);
     }
 
     pattern.type = first_pattern.type;
@@ -1246,7 +1246,7 @@ func elab_match_case(ctx: *ElabCtx, match_case: *MatchCase, scrutinee_type: *Typ
     var body = match_case.body;
 
     enter_scope(ctx);
-    elab_pattern_expect(ctx, &pattern, scrutinee_type);
+    elab_pattern_expect(ctx, pattern, scrutinee_type);
     if (guard) {
         elab_expr_bool(ctx, &guard);
     }
@@ -1442,8 +1442,8 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
     var field_size = type_size(field_type);
     var field_align = type_align(field_type);
     var field_offset = sym.is_union
-    ? 0
-    : align_up(sym.unpadded_size, field_align);
+        ? 0
+        : align_up(sym.unpadded_size, field_align);
 
     var field: *RecordField = box(sizeof(RecordField), &RecordField {
         name: field_name,
