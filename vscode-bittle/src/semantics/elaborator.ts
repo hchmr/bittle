@@ -1437,8 +1437,8 @@ export class Elaborator {
                 const leftNode = node.left;
                 const rightNode = node.right;
                 const leftType = this.elabExprInferInt(leftNode, { typeHint });
-                const _rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
-                return this.unifyExprTypes(node, leftNode, rightNode);
+                const rightType = this.elabExprInferInt(rightNode, { typeHint: leftType });
+                return this.unifyTypesWithCoercion(node, leftType, rightType);
             }
             case '==':
             case '!=':
@@ -1449,8 +1449,8 @@ export class Elaborator {
                 const leftNode = node.left;
                 const rightNode = node.right;
                 const leftType = this.elabExprInfer(leftNode, { typeHint: undefined });
-                const _rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
-                const cmpType = this.unifyExprTypes(node, leftNode, rightNode);
+                const rightType = this.elabExprInfer(rightNode, { typeHint: leftType });
+                const cmpType = this.unifyTypesWithCoercion(node, leftType, rightType);
                 if (cmpType.kind !== TypeKind.Err && !isScalarType(cmpType)) {
                     this.reportError(node, `${prettyType(cmpType)} is not comparable.`);
                 }
@@ -1474,8 +1474,8 @@ export class Elaborator {
         const thenNode = node.then;
         const elseNode = node.else;
         const thenType = this.elabExprInfer(thenNode, { typeHint });
-        const _elseType = this.elabExprInfer(elseNode, { typeHint: thenType });
-        return this.unifyExprTypes(node, thenNode, elseNode);
+        const elseType = this.elabExprInfer(elseNode, { typeHint: thenType });
+        return this.unifyTypesWithCoercion(node, thenType, elseType);
     }
 
     private elabIsExpr(node: IsExprNode): Type {
@@ -1835,9 +1835,7 @@ export class Elaborator {
 
         const lowerType = lowerNode ? this.getType(lowerNode) : mkErrorType();
         const upperType = upperNode ? this.getType(upperNode) : mkErrorType();
-        const type = tryUnifyTypes(lowerType, upperType, () => {
-            this.reportTypeUnificationError(node, lowerType, upperType);
-        });
+        const type = this.unifyTypes(node, lowerType, upperType);
 
         if (isNonIntegerType(type)) {
             this.reportError(node, `Integer range pattern expected.`);
@@ -1898,16 +1896,20 @@ export class Elaborator {
     //==============================================================================
     //== Type checking
 
-    private canCoerceExpr(node: ExprNode, expected: Type) {
-        return canCoerce(this.getType(node), expected);
-    }
-
-    private unifyExprTypes(node: AstNode, e1: ExprNode | Nullish, e2: ExprNode | Nullish): Type {
-        const t1 = e1 ? this.getType(e1) : mkErrorType();
-        const t2 = e2 ? this.getType(e2) : mkErrorType();
+    private unifyTypesWithCoercion(node: AstNode, t1: Type, t2: Type): Type {
         return tryUnifyTypesWithCoercion(t1, t2, () => {
             this.reportTypeUnificationError(node, t1, t2);
         });
+    }
+
+    private unifyTypes(node: AstNode, t1: Type, t2: Type): Type {
+        return tryUnifyTypes(t1, t2, () => {
+            this.reportTypeUnificationError(node, t1, t2);
+        });
+    }
+
+    private canCoerceExpr(node: ExprNode, expected: Type) {
+        return canCoerce(this.getType(node), expected);
     }
 
     private checkExprType(node: ExprNode, expected: Type) {
