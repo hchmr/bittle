@@ -4,13 +4,13 @@ include "bittle.btls";
 //== Parser core
 
 struct Parser {
-    lexer: *Lexer,
+    lexer: *mut Lexer,
     tok: Tok,
     lookahead: Tok,
-    includes: *List, // List<*Char>
+    includes: *mut List, // List<*Char>
 }
 
-func try_add_include(self: *Parser, file_path: *Char): Bool {
+func try_add_include(self: *mut Parser, file_path: *Char): Bool {
     var n_includes = list_len(self.includes);
     for (var i = 0; i < n_includes; i += 1) {
         if (str_eq(file_path, list_get(self.includes, i) as *Char)) {
@@ -22,17 +22,17 @@ func try_add_include(self: *Parser, file_path: *Char): Bool {
     return true;
 }
 
-func advance(self: *Parser) {
+func advance(self: *mut Parser) {
     self.tok = self.lookahead;
     self.lookahead = lexer_next(self.lexer);
 }
 
-func peek(self: *Parser): *Tok {
+func peek(self: *mut Parser): *mut Tok {
     return &self.lookahead;
 }
 
-func parser_new(lexer: *Lexer): *Parser {
-    var self = calloc(1, sizeof(Parser)) as *Parser;
+func parser_new(lexer: *mut Lexer): *mut Parser {
+    var self = calloc(1, sizeof(Parser)) as *mut Parser;
     self.lexer = lexer;
     self.includes = list_new();
     advance(self);
@@ -40,27 +40,27 @@ func parser_new(lexer: *Lexer): *Parser {
     return self;
 }
 
-func at(self: *Parser, kind: TokKind): Bool {
+func at(self: *mut Parser, kind: TokKind): Bool {
     return self.tok.kind == kind;
 }
 
-func at_eof(self: *Parser): Bool {
+func at_eof(self: *mut Parser): Bool {
     return at(self, Tok_Eof);
 }
 
-func at_literal_tok(self: *Parser): Bool {
+func at_literal_tok(self: *mut Parser): Bool {
     return at(self, Tok_Null) || at(self, Tok_True) || at(self, Tok_False) || at(self, Tok_Int) || at(self, Tok_Char) || at(self, Tok_String);
 }
 
-func at_pattern_const_tok(self: *Parser): Bool {
+func at_pattern_const_tok(self: *mut Parser): Bool {
     return at_literal_tok(self) || at(self, Tok_Ident);
 }
 
-func next_is(self: *Parser, kind: TokKind): Bool {
+func next_is(self: *mut Parser, kind: TokKind): Bool {
     return self.lookahead.kind == kind;
 }
 
-func eat(self: *Parser, kind: TokKind): Bool {
+func eat(self: *mut Parser, kind: TokKind): Bool {
     if (at(self, kind)) {
         advance(self);
         return true;
@@ -68,42 +68,42 @@ func eat(self: *Parser, kind: TokKind): Bool {
     return false;
 }
 
-func expect(self: *Parser, kind: TokKind) {
+func expect(self: *mut Parser, kind: TokKind) {
     if (!eat(self, kind)) {
         die_at(&self.tok.pos, "Unexpected token. Expected %s, but got %s.", pretty_tok_kind(kind), pretty_tok_kind(self.tok.kind));
     }
 }
 
-func expect_with_lexeme(self: *Parser, kind: TokKind): *Char {
+func expect_with_lexeme(self: *mut Parser, kind: TokKind): *Char {
     var tok = self.tok;
     expect(self, kind);
     return tok.lexeme;
 }
 
-func p_ident(self: *Parser): *Char {
+func p_ident(self: *mut Parser): *Char {
     return expect_with_lexeme(self, Tok_Ident);
 }
 
 //==============================================================================
 //== Types
 
-func p_named_type(self: *Parser): *TypeExpr {
+func p_named_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     var name = p_ident(self);
     return box(sizeof(NamedTypeExpr), &NamedTypeExpr {
         pos,
         name,
-    }) as *NamedTypeExpr;
+    }) as *mut TypeExpr;
 }
 
-func p_grouped_type(self: *Parser): *TypeExpr {
+func p_grouped_type(self: *mut Parser): *mut TypeExpr {
     expect(self, Tok_LParen);
     var result = p_type(self);
     expect(self, Tok_RParen);
     return result;
 }
 
-func p_ptr_type(self: *Parser): *TypeExpr {
+func p_ptr_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_Star);
     var is_mut = eat(self, Tok_Mut);
@@ -113,10 +113,10 @@ func p_ptr_type(self: *Parser): *TypeExpr {
         pos,
         pointee,
         is_mut,
-    }) as *PtrTypeExpr;
+    }) as *mut TypeExpr;
 }
 
-func p_arr_type(self: *Parser): *TypeExpr {
+func p_arr_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_LBracket);
     var elem = p_type(self);
@@ -128,19 +128,19 @@ func p_arr_type(self: *Parser): *TypeExpr {
         pos,
         elem,
         size,
-    }) as *ArrTypeExpr;
+    }) as *mut TypeExpr;
 }
 
-func p_never_type(self: *Parser): *TypeExpr {
+func p_never_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_Bang);
 
     return box(sizeof(NeverTypeExpr), &NeverTypeExpr {
         pos,
-    }) as *NeverTypeExpr;
+    }) as *mut TypeExpr;
 }
 
-func p_typeof_type(self: *Parser): *TypeExpr {
+func p_typeof_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_Typeof);
     expect(self, Tok_LParen);
@@ -150,19 +150,19 @@ func p_typeof_type(self: *Parser): *TypeExpr {
     return box(sizeof(TypeofTypeExpr), &TypeofTypeExpr {
         pos,
         expr,
-    }) as *TypeofTypeExpr;
+    }) as *mut TypeExpr;
 }
 
-func p_rest_param_type(self: *Parser): *TypeExpr {
+func p_rest_param_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     expect(self, Tok_DotDotDot);
 
     return box(sizeof(RestParamTypeExpr), &RestParamTypeExpr {
         pos,
-    }) as *RestParamTypeExpr;
+    }) as *mut TypeExpr;
 }
 
-func p_type(self: *Parser): *TypeExpr {
+func p_type(self: *mut Parser): *mut TypeExpr {
     if (at(self, Tok_Ident)) {
         return p_named_type(self);
     } else if (at(self, Tok_LParen)) {
@@ -204,29 +204,29 @@ func parse_int_lexeme(lexeme: *Char): Int64 {
     return strtol(lexeme, null, 10);
 }
 
-func p_literal(self: *Parser): *Literal {
+func p_literal(self: *mut Parser): *Literal {
     var result: *Literal;
 
     if (at(self, Tok_Null)) {
-        var literal = box(sizeof(NullLiteral), &NullLiteral { }) as *NullLiteral;
+        var literal = box(sizeof(NullLiteral), &NullLiteral { }) as *Literal;
         result = literal;
     } else if (at(self, Tok_True)) {
-        var literal = box(sizeof(BoolLiteral), &BoolLiteral { value: true }) as *BoolLiteral;
+        var literal = box(sizeof(BoolLiteral), &BoolLiteral { value: true }) as *Literal;
         result = literal;
     } else if (at(self, Tok_False)) {
-        var literal = box(sizeof(BoolLiteral), &BoolLiteral { value: false }) as *BoolLiteral;
+        var literal = box(sizeof(BoolLiteral), &BoolLiteral { value: false }) as *Literal;
         result = literal;
     } else if (at(self, Tok_Int)) {
         var value = parse_int_lexeme(self.tok.lexeme);
-        var literal = box(sizeof(IntLiteral), &IntLiteral { value }) as *IntLiteral;
+        var literal = box(sizeof(IntLiteral), &IntLiteral { value }) as *Literal;
         result = literal;
     } else if (at(self, Tok_Char)) {
         var value = parse_char(self.tok.lexeme);
-        var literal = box(sizeof(CharLiteral), &CharLiteral { value }) as *CharLiteral;
+        var literal = box(sizeof(CharLiteral), &CharLiteral { value }) as *Literal;
         result = literal;
     } else if (at(self, Tok_String)) {
         var value = parse_string(self.tok.lexeme);
-        var literal = box(sizeof(StringLiteral), &StringLiteral { value }) as *StringLiteral;
+        var literal = box(sizeof(StringLiteral), &StringLiteral { value }) as *Literal;
         result = literal;
     } else {
         die_at(&self.tok.pos, "Unexpected start of literal.");
@@ -239,7 +239,7 @@ func p_literal(self: *Parser): *Literal {
 //==============================================================================
 //== Patterns
 
-func p_pattern_const(self: *Parser): *Expr {
+func p_pattern_const(self: *mut Parser): *mut Expr {
     if (at_literal_tok(self)) {
         return p_literal_expr(self);
     } else {
@@ -247,7 +247,7 @@ func p_pattern_const(self: *Parser): *Expr {
     }
 }
 
-func p_grouped_pattern(self: *Parser): *Pattern {
+func p_grouped_pattern(self: *mut Parser): *mut Pattern {
     var pos = self.tok.pos;
     expect(self, Tok_LParen);
     var pattern = p_pattern(self);
@@ -257,10 +257,10 @@ func p_grouped_pattern(self: *Parser): *Pattern {
         pos,
         type: null,
         pattern,
-    }) as *GroupedPattern;
+    }) as *mut Pattern;
 }
 
-func p_literal_pattern(self: *Parser): *Pattern {
+func p_literal_pattern(self: *mut Parser): *mut Pattern {
     var pos = self.tok.pos;
     var literal = p_literal(self);
 
@@ -269,10 +269,10 @@ func p_literal_pattern(self: *Parser): *Pattern {
         type: null,
         literal,
         value: null,
-    }) as *LiteralPattern;
+    }) as *mut Pattern;
 }
 
-func p_name_pattern(self: *Parser): *Pattern {
+func p_name_pattern(self: *mut Parser): *mut Pattern {
     var pos = self.tok.pos;
     var name = p_ident(self);
 
@@ -281,20 +281,20 @@ func p_name_pattern(self: *Parser): *Pattern {
         type: null,
         name,
         sym: null,
-    }) as *NamePattern;
+    }) as *mut Pattern;
 }
 
-func p_wildcard_pattern(self: *Parser): *Pattern {
+func p_wildcard_pattern(self: *mut Parser): *mut Pattern {
     var pos = self.tok.pos;
     expect(self, Tok_Underscore);
 
     return box(sizeof(WildcardPattern), &WildcardPattern {
         pos,
         type: null,
-    }) as *WildcardPattern;
+    }) as *mut Pattern;
 }
 
-func p_var_pattern(self: *Parser): *Pattern {
+func p_var_pattern(self: *mut Parser): *mut Pattern {
     var pos = self.tok.pos;
     var name = p_ident(self);
     expect(self, Tok_At);
@@ -306,12 +306,12 @@ func p_var_pattern(self: *Parser): *Pattern {
         name,
         pattern,
         sym: null,
-    }) as *VarPattern;
+    }) as *mut Pattern;
 }
 
-func p_range_pattern(self: *Parser): *Pattern {
+func p_range_pattern(self: *mut Parser): *mut Pattern {
     var pos = self.tok.pos;
-    var lower: *Expr = null;
+    var lower: *mut Expr = null;
 
     if (!at(self, Tok_DotDotDot)) {
         lower = p_pattern_const(self);
@@ -319,7 +319,7 @@ func p_range_pattern(self: *Parser): *Pattern {
 
     expect(self, Tok_DotDotDot);
 
-    var upper: *Expr = null;
+    var upper: *mut Expr = null;
     if (at_pattern_const_tok(self)) {
         upper = p_pattern_const(self);
     }
@@ -331,10 +331,10 @@ func p_range_pattern(self: *Parser): *Pattern {
         upper,
         lower_value: null,
         upper_value: null,
-    }) as *RangePattern;
+    }) as *mut Pattern;
 }
 
-func p_inner_pattern(self: *Parser): *Pattern {
+func p_inner_pattern(self: *mut Parser): *mut Pattern {
     if (at(self, Tok_LParen)) {
         return p_grouped_pattern(self);
     } else if (at(self, Tok_DotDotDot) || (at_pattern_const_tok(self) && next_is(self, Tok_DotDotDot))) {
@@ -352,7 +352,7 @@ func p_inner_pattern(self: *Parser): *Pattern {
     }
 }
 
-func p_or_pattern(self: *Parser, left: *Pattern): *Pattern {
+func p_or_pattern(self: *mut Parser, left: *mut Pattern): *mut Pattern {
     var patterns = list_new();
     list_push(patterns, left);
     while (eat(self, Tok_Bar)) {
@@ -364,10 +364,10 @@ func p_or_pattern(self: *Parser, left: *Pattern): *Pattern {
         pos: left.pos,
         type: null,
         patterns,
-    }) as *OrPattern;
+    }) as *mut Pattern;
 }
 
-func p_pattern(self: *Parser): *Pattern {
+func p_pattern(self: *mut Parser): *mut Pattern {
     var result = p_inner_pattern(self);
     if (at(self, Tok_Bar)) {
         result = p_or_pattern(self, result);
@@ -397,14 +397,14 @@ enum {
     Prec_Primary,
 }
 
-func p_grouped_expr(self: *Parser): *Expr {
+func p_grouped_expr(self: *mut Parser): *mut Expr {
     expect(self, Tok_LParen);
     var expr = p_expr(self);
     expect(self, Tok_RParen);
     return expr;
 }
 
-func p_name_expr(self: *Parser): *Expr {
+func p_name_expr(self: *mut Parser): *mut Expr {
     var pos = self.tok.pos;
     var name = p_ident(self);
 
@@ -414,10 +414,10 @@ func p_name_expr(self: *Parser): *Expr {
         const_value: null,
         name,
         sym: null,
-    }) as *IdentExpr;
+    }) as *mut Expr;
 }
 
-func p_literal_expr(self: *Parser): *Expr {
+func p_literal_expr(self: *mut Parser): *mut Expr {
     var pos = self.tok.pos;
     var literal = p_literal(self);
 
@@ -426,10 +426,10 @@ func p_literal_expr(self: *Parser): *Expr {
         type: null,
         const_value: null,
         literal,
-    }) as *LiteralExpr;
+    }) as *mut Expr;
 }
 
-func p_sizeof_expr(self: *Parser): *Expr {
+func p_sizeof_expr(self: *mut Parser): *mut Expr {
     var pos = self.tok.pos;
     expect(self, Tok_Sizeof);
     expect(self, Tok_LParen);
@@ -442,10 +442,10 @@ func p_sizeof_expr(self: *Parser): *Expr {
         type: null,
         const_value: null,
         size: -1,
-    }) as *SizeofExpr;
+    }) as *mut Expr;
 }
 
-func p_array_expr(self: *Parser): *Expr {
+func p_array_expr(self: *mut Parser): *mut Expr {
     var pos = self.tok.pos;
 
     expect(self, Tok_LBracket);
@@ -464,10 +464,10 @@ func p_array_expr(self: *Parser): *Expr {
         type: null,
         const_value: null,
         elems,
-    }) as *ArrayExpr;
+    }) as *mut Expr;
 }
 
-func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
+func p_index_expr(self: *mut Parser, indexee: *mut Expr): *mut Expr {
     var pos = self.tok.pos;
     expect(self, Tok_LBracket);
     var index = p_expr(self);
@@ -479,10 +479,10 @@ func p_index_expr(self: *Parser, indexee: *Expr): *Expr {
         const_value: null,
         indexee,
         index,
-    }) as *IndexExpr;
+    }) as *mut Expr;
 }
 
-func p_call_arg(self: *Parser, max_prec: Int32): *CallArg {
+func p_call_arg(self: *mut Parser, max_prec: Int32): *mut CallArg {
     var label: *Char = null;
     if (at(self, Tok_Ident) && next_is(self, Tok_Colon)) {
         label = p_ident(self);
@@ -494,10 +494,10 @@ func p_call_arg(self: *Parser, max_prec: Int32): *CallArg {
         label,
         expr,
         positional_index: -1,
-    }) as *CallArg;
+    }) as *mut CallArg;
 }
 
-func p_call_expr(self: *Parser, callee: *Expr): *Expr {
+func p_call_expr(self: *mut Parser, callee: *mut Expr): *mut Expr {
     var pos = self.tok.pos;
     expect(self, Tok_LParen);
     var args = list_new();
@@ -517,10 +517,10 @@ func p_call_expr(self: *Parser, callee: *Expr): *Expr {
         callee,
         args,
         resolved_callee: null,
-    }) as *CallExpr;
+    }) as *mut Expr;
 }
 
-func p_member_expr(self: *Parser, left: *Expr): *Expr {
+func p_member_expr(self: *mut Parser, left: *mut Expr): *mut Expr {
     var pos = self.tok.pos;
     expect(self, Tok_Dot);
     var name = p_ident(self);
@@ -532,10 +532,10 @@ func p_member_expr(self: *Parser, left: *Expr): *Expr {
         left,
         name,
         resolved_field: null,
-    }) as *MemberExpr;
+    }) as *mut Expr;
 }
 
-func p_unary_expr(self: *Parser, op: TokKind): *Expr {
+func p_unary_expr(self: *mut Parser, op: TokKind): *mut Expr {
     var pos = self.tok.pos;
     var right = p_expr(self, Prec_Unary);
 
@@ -545,10 +545,10 @@ func p_unary_expr(self: *Parser, op: TokKind): *Expr {
         const_value: null,
         op,
         right,
-    }) as *UnaryExpr;
+    }) as *mut Expr;
 }
 
-func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
+func p_cast_expr(self: *mut Parser, expr: *mut Expr): *mut Expr {
     var pos = self.tok.pos;
     var type = p_type(self);
 
@@ -558,10 +558,10 @@ func p_cast_expr(self: *Parser, expr: *Expr): *Expr {
         const_value: null,
         expr,
         type_expr: type,
-    }) as *CastExpr;
+    }) as *mut Expr;
 }
 
-func p_binary_expr(self: *Parser, left: *Expr, op: TokKind, prec: Int32): *Expr {
+func p_binary_expr(self: *mut Parser, left: *mut Expr, op: TokKind, prec: Int32): *mut Expr {
     var pos = self.tok.pos;
     var right = p_expr(self, prec);
 
@@ -572,10 +572,10 @@ func p_binary_expr(self: *Parser, left: *Expr, op: TokKind, prec: Int32): *Expr 
         op,
         left,
         right,
-    }) as *BinaryExpr;
+    }) as *mut Expr;
 }
 
-func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
+func p_ternary_expr(self: *mut Parser, cond: *mut Expr): *mut Expr {
     var pos = self.tok.pos;
     expect(self, Tok_Question);
     var then_expr = p_expr(self, Prec_Cond);
@@ -589,10 +589,10 @@ func p_ternary_expr(self: *Parser, cond: *Expr): *Expr {
         cond,
         then_expr,
         else_expr,
-    }) as *TernaryExpr;
+    }) as *mut Expr;
 }
 
-func p_is_expr(self: *Parser, left: *Expr): *Expr {
+func p_is_expr(self: *mut Parser, left: *mut Expr): *mut Expr {
     var pattern = p_inner_pattern(self);
 
     return box(sizeof(IsExpr), &IsExpr {
@@ -601,10 +601,10 @@ func p_is_expr(self: *Parser, left: *Expr): *Expr {
         const_value: null,
         left,
         pattern,
-    }) as *IsExpr;
+    }) as *mut Expr;
 }
 
-func p_field_initializer(self: *Parser): *FieldInitializer {
+func p_field_initializer(self: *mut Parser): *mut FieldInitializer {
     var pos = self.tok.pos;
 
     if (!at(self, Tok_Ident)) {
@@ -623,10 +623,10 @@ func p_field_initializer(self: *Parser): *FieldInitializer {
         pos,
         name,
         expr,
-    }) as *FieldInitializer;
+    }) as *mut FieldInitializer;
 }
 
-func p_record_expr(self: *Parser): *Expr {
+func p_record_expr(self: *mut Parser): *mut Expr {
     var pos = self.tok.pos;
     var name = p_ident(self);
     var field_initializers = list_new();
@@ -646,10 +646,10 @@ func p_record_expr(self: *Parser): *Expr {
         const_value: null,
         name: name,
         fields: field_initializers,
-    }) as *RecordExpr;
+    }) as *mut Expr;
 }
 
-func p_ident_expr(self: *Parser): *Expr {
+func p_ident_expr(self: *mut Parser): *mut Expr {
     if (next_is(self, Tok_LBrace)) {
         return p_record_expr(self);
     } else {
@@ -657,8 +657,8 @@ func p_ident_expr(self: *Parser): *Expr {
     }
 }
 
-func p_expr(self: *Parser, max_prec: Int32 = 0): *Expr {
-    var lhs: *Expr;
+func p_expr(self: *mut Parser, max_prec: Int32 = 0): *mut Expr {
+    var lhs: *mut Expr;
 
     if (at(self, Tok_LParen)) {
         lhs = p_grouped_expr(self);
@@ -765,7 +765,7 @@ func p_expr(self: *Parser, max_prec: Int32 = 0): *Expr {
 //==============================================================================
 //== Statements
 
-func p_block(self: *Parser): *Stmt {
+func p_block(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_LBrace);
     var stmts = list_new();
@@ -778,28 +778,28 @@ func p_block(self: *Parser): *Stmt {
     return box(sizeof(BlockStmt), &BlockStmt {
         pos,
         stmts,
-    }) as *BlockStmt;
+    }) as *mut Stmt;
 }
 
-func p_const_stmt(self: *Parser): *Stmt {
+func p_const_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
-    var decl = p_const_decl(self);
+    var decl = p_const_decl(self) as *mut ConstDecl;
 
     return box(sizeof(ConstStmt), &ConstStmt {
         pos,
         decl,
-    }) as *ConstStmt;
+    }) as *mut Stmt;
 }
 
-func p_local_stmt(self: *Parser): *Stmt {
+func p_local_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Var);
     var name = p_ident(self);
-    var type: *TypeExpr = null;
+    var type: *mut TypeExpr = null;
     if (eat(self, Tok_Colon)) {
         type = p_type(self);
     }
-    var init: *Expr = null;
+    var init: *mut Expr = null;
     if (eat(self, Tok_Eq)) {
         init = p_expr(self);
     }
@@ -811,17 +811,17 @@ func p_local_stmt(self: *Parser): *Stmt {
         type,
         init,
         sym: null,
-    }) as *LocalStmt;
+    }) as *mut Stmt;
 }
 
-func p_if_stmt(self: *Parser): *Stmt {
+func p_if_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_If);
     expect(self, Tok_LParen);
     var cond = p_expr(self);
     expect(self, Tok_RParen);
     var then_stmt = p_stmt(self);
-    var else_stmt: *Stmt = null;
+    var else_stmt: *mut Stmt = null;
     if (eat(self, Tok_Else)) {
         else_stmt = p_stmt(self);
     }
@@ -831,13 +831,13 @@ func p_if_stmt(self: *Parser): *Stmt {
         cond,
         then_stmt,
         else_stmt,
-    }) as *IfStmt;
+    }) as *mut Stmt;
 }
 
-func p_match_case(self: *Parser): *MatchCase {
+func p_match_case(self: *mut Parser): *mut MatchCase {
     expect(self, Tok_Case);
     var pattern = p_pattern(self);
-    var guard: *Expr = null;
+    var guard: *mut Expr = null;
     if (eat(self, Tok_If)) {
         guard = p_expr(self);
     }
@@ -848,10 +848,10 @@ func p_match_case(self: *Parser): *MatchCase {
         pattern,
         guard,
         body,
-    }) as *MatchCase;
+    }) as *mut MatchCase;
 }
 
-func p_match_stmt(self: *Parser): *Stmt {
+func p_match_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Match);
     expect(self, Tok_LParen);
@@ -868,10 +868,10 @@ func p_match_stmt(self: *Parser): *Stmt {
         pos,
         scrutinee,
         cases,
-    }) as *MatchStmt;
+    }) as *mut Stmt;
 }
 
-func p_while_stmt(self: *Parser): *Stmt {
+func p_while_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_While);
     expect(self, Tok_LParen);
@@ -883,14 +883,14 @@ func p_while_stmt(self: *Parser): *Stmt {
         pos,
         cond,
         body,
-    }) as *WhileStmt;
+    }) as *mut Stmt;
 }
 
-func p_for_stmt(self: *Parser): *Stmt {
+func p_for_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_For);
     expect(self, Tok_LParen);
-    var init: *Stmt = null;
+    var init: *mut Stmt = null;
     if (!eat(self, Tok_Semicolon)) {
         if (at(self, Tok_Var)) {
             init = p_local_stmt(self);
@@ -898,12 +898,12 @@ func p_for_stmt(self: *Parser): *Stmt {
             init = p_expr_stmt(self);
         }
     }
-    var cond: *Expr = null;
+    var cond: *mut Expr = null;
     if (!at(self, Tok_Semicolon)) {
         cond = p_expr(self);
     }
     expect(self, Tok_Semicolon);
-    var step: *Expr = null;
+    var step: *mut Expr = null;
     if (!at(self, Tok_RParen)) {
         step = p_expr(self);
     }
@@ -916,13 +916,13 @@ func p_for_stmt(self: *Parser): *Stmt {
         cond,
         step,
         body,
-    }) as *ForStmt;
+    }) as *mut Stmt;
 }
 
-func p_return_stmt(self: *Parser): *Stmt {
+func p_return_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Return);
-    var expr: *Expr = null;
+    var expr: *mut Expr = null;
     if (!eat(self, Tok_Semicolon)) {
         expr = p_expr(self);
         expect(self, Tok_Semicolon);
@@ -931,30 +931,30 @@ func p_return_stmt(self: *Parser): *Stmt {
     return box(sizeof(ReturnStmt), &ReturnStmt {
         pos,
         expr,
-    }) as *ReturnStmt;
+    }) as *mut Stmt;
 }
 
-func p_break_stmt(self: *Parser): *Stmt {
+func p_break_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Break);
     expect(self, Tok_Semicolon);
 
     return box(sizeof(BreakStmt), &BreakStmt {
         pos,
-    }) as *BreakStmt;
+    }) as *mut Stmt;
 }
 
-func p_continue_stmt(self: *Parser): *Stmt {
+func p_continue_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     expect(self, Tok_Continue);
     expect(self, Tok_Semicolon);
 
     return box(sizeof(ContinueStmt), &ContinueStmt {
         pos,
-    }) as *ContinueStmt;
+    }) as *mut Stmt;
 }
 
-func p_expr_stmt(self: *Parser): *Stmt {
+func p_expr_stmt(self: *mut Parser): *mut Stmt {
     var pos = self.tok.pos;
     var expr = p_expr(self);
     expect(self, Tok_Semicolon);
@@ -962,10 +962,10 @@ func p_expr_stmt(self: *Parser): *Stmt {
     return box(sizeof(ExprStmt), &ExprStmt {
         pos,
         expr,
-    }) as *ExprStmt;
+    }) as *mut Stmt;
 }
 
-func p_stmt(self: *Parser): *Stmt {
+func p_stmt(self: *mut Parser): *mut Stmt {
     if (at(self, Tok_LBrace)) {
         return p_block(self);
     } else if (at(self, Tok_Const)) {
@@ -994,14 +994,14 @@ func p_stmt(self: *Parser): *Stmt {
 //==============================================================================
 //== Declarations
 
-func p_record_field(self: *Parser): *RecordFieldDecl {
+func p_record_field(self: *mut Parser): *mut RecordFieldDecl {
     var pos = self.tok.pos;
     var name = p_ident(self);
-    var type: *TypeExpr = null;
+    var type: *mut TypeExpr = null;
     if (eat(self, Tok_Colon)) {
         type = p_type(self);
     }
-    var default_value: *Expr = null;
+    var default_value: *mut Expr = null;
     if (eat(self, Tok_Eq)) {
         default_value = p_expr(self);
     }
@@ -1011,10 +1011,10 @@ func p_record_field(self: *Parser): *RecordFieldDecl {
         name,
         default_value,
         type,
-    }) as *RecordFieldDecl;
+    }) as *mut RecordFieldDecl;
 }
 
-func p_record_decl(self: *Parser): *Decl {
+func p_record_decl(self: *mut Parser): *mut Decl {
     var pos = self.tok.pos;
     var is_union = at(self, Tok_Union);
     if (!is_union) {
@@ -1023,11 +1023,11 @@ func p_record_decl(self: *Parser): *Decl {
         expect(self, Tok_Union);
     }
     var name = p_ident(self);
-    var base: *TypeExpr = null;
+    var base: *mut TypeExpr = null;
     if (eat(self, Tok_Colon)) {
         base = p_type(self);
     }
-    var body: *List;
+    var body: *mut List;
     if (eat(self, Tok_LBrace)) {
         body = list_new();
         while (!at_eof(self) && !at(self, Tok_RBrace)) {
@@ -1050,15 +1050,15 @@ func p_record_decl(self: *Parser): *Decl {
         base,
         fields: body,
         sym: null,
-    }) as *RecordDecl;
+    }) as *mut Decl;
 }
 
-func p_param(self: *Parser): *FuncParamDecl {
+func p_param(self: *mut Parser): *mut FuncParamDecl {
     var pos = self.tok.pos;
     var name = p_ident(self);
     expect(self, Tok_Colon);
     var type = p_type(self);
-    var default_value: *Expr = null;
+    var default_value: *mut Expr = null;
     if (eat(self, Tok_Eq)) {
         default_value = p_expr(self);
     }
@@ -1068,10 +1068,10 @@ func p_param(self: *Parser): *FuncParamDecl {
         name,
         type,
         default_value,
-    }) as *FuncParamDecl;
+    }) as *mut FuncParamDecl;
 }
 
-func p_rest_param(self: *Parser): *RestParamDecl {
+func p_rest_param(self: *mut Parser): *mut RestParamDecl {
     var pos = self.tok.pos;
     expect(self, Tok_DotDotDot);
     var name: *Char = null;
@@ -1082,10 +1082,10 @@ func p_rest_param(self: *Parser): *RestParamDecl {
     return box(sizeof(RestParamDecl), &RestParamDecl {
         pos,
         name,
-    }) as *RestParamDecl;
+    }) as *mut RestParamDecl;
 }
 
-func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
+func p_func_decl(self: *mut Parser, is_extern: Bool): *mut Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Func);
     var name = p_ident(self);
@@ -1098,16 +1098,16 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
             expect(self, Tok_Comma);
         }
     }
-    var rest_param: *RestParamDecl = null;
+    var rest_param: *mut RestParamDecl = null;
     if (at(self, Tok_DotDotDot)) {
         rest_param = p_rest_param(self);
     }
     expect(self, Tok_RParen);
-    var return_type: *TypeExpr = null;
+    var return_type: *mut TypeExpr = null;
     if (eat(self, Tok_Colon)) {
         return_type = p_type(self);
     }
-    var body: *Stmt = null;
+    var body: *mut Stmt = null;
     if (at(self, Tok_LBrace)) {
         body = p_stmt(self);
     } else {
@@ -1123,13 +1123,13 @@ func p_func_decl(self: *Parser, is_extern: Bool): *Decl {
         return_type,
         body,
         sym: null,
-    }) as *FuncDecl;
+    }) as *mut Decl;
 }
 
-func p_enum_member(self: *Parser): *EnumMember {
+func p_enum_member(self: *mut Parser): *mut EnumMember {
     var pos = self.tok.pos;
     var name = p_ident(self);
-    var value: *Expr = null;
+    var value: *mut Expr = null;
     if (eat(self, Tok_Eq)) {
         value = p_expr(self);
     }
@@ -1139,10 +1139,10 @@ func p_enum_member(self: *Parser): *EnumMember {
         name,
         value,
         sym: null,
-    }) as *EnumMember;
+    }) as *mut EnumMember;
 }
 
-func p_enum_decl(self: *Parser): *Decl {
+func p_enum_decl(self: *mut Parser): *mut Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Enum);
     var name: *Char = null;
@@ -1165,14 +1165,14 @@ func p_enum_decl(self: *Parser): *Decl {
         name,
         members,
         sym: null,
-    }) as *EnumDecl;
+    }) as *mut Decl;
 }
 
-func p_const_decl(self: *Parser): *ConstDecl {
+func p_const_decl(self: *mut Parser): *mut Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Const);
     var name = p_ident(self);
-    var type: *TypeExpr = null;
+    var type: *mut TypeExpr = null;
     if (eat(self, Tok_Colon)) {
         type = p_type(self);
     }
@@ -1186,10 +1186,10 @@ func p_const_decl(self: *Parser): *ConstDecl {
         type,
         value,
         sym: null,
-    }) as *ConstDecl;
+    }) as *mut Decl;
 }
 
-func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
+func p_global_decl(self: *mut Parser, is_extern: Bool): *mut Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Var);
     var name = p_ident(self);
@@ -1203,10 +1203,10 @@ func p_global_decl(self: *Parser, is_extern: Bool): *Decl {
         name,
         type,
         sym: null,
-    }) as *GlobalDecl;
+    }) as *mut Decl;
 }
 
-func p_decl_decl(self: *Parser): *Decl {
+func p_decl_decl(self: *mut Parser): *mut Decl {
     if (at(self, Tok_Struct) || at(self, Tok_Union)) {
         return p_record_decl(self);
     } else if (at(self, Tok_Func)) {
@@ -1233,7 +1233,7 @@ func p_decl_decl(self: *Parser): *Decl {
 //==============================================================================
 //== Top-level
 
-func p_include(self: *Parser, decls: *List) {
+func p_include(self: *mut Parser, decls: *mut List) {
     var pos = self.tok.pos;
     var string_literal = expect_with_lexeme(self, Tok_String);
     var file_name = parse_string(string_literal);
@@ -1258,7 +1258,7 @@ func p_include(self: *Parser, decls: *List) {
     parse_file(file_parser, decls);
 }
 
-func parse_file(self: *Parser, decls: *List) {
+func parse_file(self: *mut Parser, decls: *mut List) {
     while (!at_eof(self)) {
         if (eat(self, Tok_Include)) {
             p_include(self, decls);
@@ -1268,10 +1268,10 @@ func parse_file(self: *Parser, decls: *List) {
     }
 }
 
-func parser_run(self: *Parser): *Ast {
+func parser_run(self: *mut Parser): *mut Ast {
     var decls = list_new();
     parse_file(self, decls);
     return box(sizeof(Ast), &Ast {
         decls,
-    }) as *Ast;
+    }) as *mut Ast;
 }

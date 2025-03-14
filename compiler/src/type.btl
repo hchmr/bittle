@@ -24,11 +24,11 @@ func mk_array_type(elem: *Type, size: Int): *ArrType {
     return box(sizeof(ArrType), &ArrType { elem, size }) as *ArrType;
 }
 
-func mk_enum_type(sym: *EnumSym): *EnumType {
+func mk_enum_type(sym: *mut EnumSym): *EnumType {
     return box(sizeof(EnumType), &EnumType { sym }) as *EnumType;
 }
 
-func mk_record_type(sym: *RecordSym): *RecordType {
+func mk_record_type(sym: *mut RecordSym): *RecordType {
     return box(sizeof(RecordType), &RecordType { sym }) as *RecordType;
 }
 
@@ -262,7 +262,7 @@ func is_sized(type: *Type): Bool {
     return type_size(type) != -1;
 }
 
-func sb_pretty_type(sb: *StringBuffer, type: *Type) {
+func sb_pretty_type(sb: *mut StringBuffer, type: *Type) {
     match (type.kind) {
         case Type_Void: {
             sb_printf(sb, "Void");
@@ -276,7 +276,7 @@ func sb_pretty_type(sb: *StringBuffer, type: *Type) {
         case Type_Ptr: {
             sb_printf(sb, "*");
             if ((type as *PtrType).is_mut) {
-                sb_printf(sb, "mut ");
+                sb_printf(sb, "");
             }
             sb_pretty_type(sb, (type as *PtrType).pointee);
         }
@@ -306,7 +306,7 @@ func sb_pretty_type(sb: *StringBuffer, type: *Type) {
     }
 }
 
-func pretty_type(type: *Type): *Char {
+func pretty_type(type: *Type): *mut Char {
     var sb = sb_new();
     sb_pretty_type(sb, type);
     return sb_finish(sb);

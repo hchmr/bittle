@@ -20,28 +20,28 @@ func error_at(pos: *Pos);
 func die(msg: *Char): !;
 func die_at(pos: *Pos, msg: *Char, ...args): !;
 
-func sb_new(): *StringBuffer;
-func sb_free(self: *StringBuffer);
+func sb_new(): *mut StringBuffer;
+func sb_free(self: *mut StringBuffer);
 func sb_len(self: *StringBuffer): Int;
 func sb_get(self: *StringBuffer, i: Int): Char;
 func sb_cstr(self: *StringBuffer): *Char;
-func sb_ensure_cap(self: *StringBuffer, cap: Int);
-func sb_shrink_to_fit(self: *StringBuffer);
-func sb_vprintf(self: *StringBuffer, fmt: *Char, args: ...);
-func sb_printf(self: *StringBuffer, fmt: *Char, ...args);
-func sb_push(self: *StringBuffer, c: Char);
-func sb_append(self: *StringBuffer, s: *Char);
-func sb_finish(self: *StringBuffer): *Char;
+func sb_ensure_cap(self: *mut StringBuffer, cap: Int);
+func sb_shrink_to_fit(self: *mut StringBuffer);
+func sb_vprintf(self: *mut StringBuffer, fmt: *Char, args: ...);
+func sb_printf(self: *mut StringBuffer, fmt: *Char, ...args);
+func sb_push(self: *mut StringBuffer, c: Char);
+func sb_append(self: *mut StringBuffer, s: *Char);
+func sb_finish(self: *mut StringBuffer): *mut Char;
 
-func list_new(): *List;
-func list_new_with_cap(cap: Int): *List;
+func list_new(): *mut List;
+func list_new_with_cap(cap: Int): *mut List;
 func list_len(self: *List): Int;
 func list_get(self: *List, i: Int): *Void;
-func list_set(self: *List, i: Int, elem: *Void);
-func list_push(self: *List, elem: *Void);
-func list_pop(self: *List): *Void;
+func list_set(self: *mut List, i: Int, elem: *Void);
+func list_push(self: *mut List, elem: *Void);
+func list_pop(self: *mut List): *Void;
 
-func box(size: Int, data: *Void): *Void;
+func box(size: Int, data: *Void): *mut Void;
 
 func str_eq(a: *Char, b: *Char): Bool;
 
@@ -51,9 +51,9 @@ func iabs(n: Int): Int;
 func int_min(a: Int, b: Int): Int;
 func int_max(a: Int, b: Int): Int;
 
-func read_file(file: *File): *Char;
-func get_directory(path: *Char): *Char;
-func join_paths(dir: *Char, file: *Char): *Char;
+func read_file(file: *mut File): *mut Char;
+func get_directory(path: *Char): *mut Char;
+func join_paths(dir: *Char, file: *Char): *mut Char;
 
 func is_whitespace(c: Char): Bool;
 func is_digit(c: Char, base: Int): Bool;
@@ -62,7 +62,7 @@ func is_word_part(c: Char): Bool;
 func is_print(c: Char): Bool;
 
 func parse_char(s: *Char): Char;
-func parse_string(s: *Char): *StringBuffer;
+func parse_string(s: *Char): *mut StringBuffer;
 
 //==============================================================================
 //== type.btl
@@ -110,12 +110,12 @@ struct ArrType: Type {
 
 struct EnumType: Type {
     kind = Type_Enum,
-    sym: *EnumSym,
+    sym: *mut EnumSym,
 }
 
 struct RecordType: Type {
     kind = Type_Record,
-    sym: *RecordSym,
+    sym: *mut RecordSym,
 }
 
 struct NeverType: Type {
@@ -133,8 +133,8 @@ func mk_bool_type(): *BoolType;
 func mk_int_type(size: Int): *IntType;
 func mk_ptr_type(pointee: *Type, is_mut: Bool): *PtrType;
 func mk_array_type(elem: *Type, size: Int): *ArrType;
-func mk_enum_type(sym: *EnumSym): *EnumType;
-func mk_record_type(sym: *RecordSym): *RecordType;
+func mk_enum_type(sym: *mut EnumSym): *EnumType;
+func mk_record_type(sym: *mut RecordSym): *RecordType;
 func mk_rest_param_type(): *Type;
 
 func type_eq(t1: *Type, t2: *Type): Bool;
@@ -147,8 +147,8 @@ func is_composite(type: *Type): Bool;
 func is_pass_by_ptr(type: *Type): Bool;
 func is_sized(type: *Type): Bool;
 
-func sb_pretty_type(sb: *StringBuffer, type: *Type);
-func pretty_type(type: *Type): *Char;
+func sb_pretty_type(sb: *mut StringBuffer, type: *Type);
+func pretty_type(type: *Type): *mut Char;
 
 //==============================================================================
 //== const.btl
@@ -227,8 +227,8 @@ struct EnumSym: Sym {
 struct RecordSym: Sym {
     kind = Sym_Record,
     is_union: Bool,
-    base: *RecordSym,
-    fields: *List, // List<RecordField>
+    base: *mut RecordSym,
+    fields: *mut List, // List<RecordField>
     unpadded_size: Int,
     align: Int,
 }
@@ -251,13 +251,13 @@ struct FuncParam {
 
 struct FuncSym: Sym {
     kind = Sym_Func,
-    params: *List, // List<FuncParam>
+    params: *mut List, // List<FuncParam>
     return_type: *Type,
     is_variadic: Bool,
     rest_param_name: *Char,
-    locals: *List, // List<Sym>
-    temps: *List, // List<HirTemp>
-    body: *Stmt,
+    locals: *mut List, // List<Sym>
+    temps: *mut List, // List<HirTemp>
+    body: *mut Stmt,
 }
 
 struct LocalSym: Sym {
@@ -394,14 +394,14 @@ struct NamedTypeExpr: TypeExpr {
 
 struct PtrTypeExpr: TypeExpr {
     kind = TypeExpr_Ptr,
-    pointee: *TypeExpr,
+    pointee: *mut TypeExpr,
     is_mut: Bool,
 }
 
 struct ArrTypeExpr: TypeExpr {
     kind = TypeExpr_Arr,
-    elem: *TypeExpr,
-    size: *Expr,
+    elem: *mut TypeExpr,
+    size: *mut Expr,
 }
 
 struct NeverTypeExpr: TypeExpr {
@@ -410,7 +410,7 @@ struct NeverTypeExpr: TypeExpr {
 
 struct TypeofTypeExpr: TypeExpr {
     kind = TypeExpr_Typeof,
-    expr: *Expr,
+    expr: *mut Expr,
 }
 
 struct RestParamTypeExpr: TypeExpr {
@@ -472,7 +472,7 @@ struct Pattern {
 
 struct GroupedPattern: Pattern {
     kind = Pattern_Grouped,
-    pattern: *Pattern,
+    pattern: *mut Pattern,
 }
 
 struct LiteralPattern: Pattern {
@@ -484,7 +484,7 @@ struct LiteralPattern: Pattern {
 struct NamePattern: Pattern {
     kind = Pattern_Name,
     name: *Char,
-    sym: *ConstSym,
+    sym: *mut ConstSym,
 }
 
 struct WildcardPattern: Pattern {
@@ -494,21 +494,21 @@ struct WildcardPattern: Pattern {
 struct VarPattern: Pattern {
     kind = Pattern_Var,
     name: *Char,
-    pattern: *Pattern,
-    sym: *LocalSym,
+    pattern: *mut Pattern,
+    sym: *mut LocalSym,
 }
 
 struct RangePattern: Pattern {
     kind = Pattern_Range,
-    lower: *Expr,
-    upper: *Expr,
+    lower: *mut Expr,
+    upper: *mut Expr,
     lower_value: *ConstValue,
     upper_value: *ConstValue,
 }
 
 struct OrPattern: Pattern {
     kind = Pattern_Or,
-    patterns: *List, // List<Pattern>
+    patterns: *mut List, // List<Pattern>
 }
 
 // Expr
@@ -539,7 +539,7 @@ struct Expr {
 struct IdentExpr: Expr {
     kind = Expr_Ident,
     name: *Char,
-    sym: *Sym,
+    sym: *mut Sym,
 }
 
 struct LiteralExpr: Expr {
@@ -549,83 +549,83 @@ struct LiteralExpr: Expr {
 
 struct ArrayExpr: Expr {
     kind = Expr_Array,
-    elems: *List, // List<Expr>
+    elems: *mut List, // List<Expr>
 }
 
 struct CallExpr: Expr {
     kind = Expr_Call,
-    callee: *Expr,
-    args: *List, // List<CallArg>
-    resolved_callee: *FuncSym,
+    callee: *mut Expr,
+    args: *mut List, // List<CallArg>
+    resolved_callee: *mut FuncSym,
 }
 
 struct CallArg {
     label: *Char,
-    expr: *Expr,
+    expr: *mut Expr,
     positional_index: Int,
 }
 
 struct IndexExpr: Expr {
     kind = Expr_Index,
-    indexee: *Expr,
-    index: *Expr,
+    indexee: *mut Expr,
+    index: *mut Expr,
 }
 
 struct MemberExpr: Expr {
     kind = Expr_Member,
-    left: *Expr,
+    left: *mut Expr,
     name: *Char,
-    resolved_field: *RecordField,
+    resolved_field: *mut RecordField,
 }
 
 struct SizeofExpr: Expr {
     kind = Expr_Sizeof,
-    type_expr: *TypeExpr,
+    type_expr: *mut TypeExpr,
     size: Int,
 }
 
 struct UnaryExpr: Expr {
     kind = Expr_Unary,
     op: TokKind,
-    right: *Expr,
+    right: *mut Expr,
 }
 
 struct BinaryExpr: Expr {
     kind = Expr_Binary,
     op: TokKind,
-    left: *Expr,
-    right: *Expr,
+    left: *mut Expr,
+    right: *mut Expr,
 }
 
 struct TernaryExpr: Expr {
     kind = Expr_Ternary,
-    cond: *Expr,
-    then_expr: *Expr,
-    else_expr: *Expr,
+    cond: *mut Expr,
+    then_expr: *mut Expr,
+    else_expr: *mut Expr,
 }
 
 struct IsExpr: Expr {
     kind = Expr_Is,
-    left: *Expr,
-    pattern: *Pattern,
+    left: *mut Expr,
+    pattern: *mut Pattern,
 }
 
 struct CastExpr: Expr {
     kind = Expr_Cast,
-    expr: *Expr,
-    type_expr: *TypeExpr,
+    expr: *mut Expr,
+    type_expr: *mut TypeExpr,
 }
 
 struct FieldInitializer {
     pos: Pos,
     name: *Char,
-    expr: *Expr,
+    expr: *mut Expr,
 }
 
 struct RecordExpr: Expr {
     kind = Expr_Record,
     name: *Char,
-    fields: *List, // List<FieldInit>
+    fields: *mut List, // List<FieldInit>
 }
 
 // Stmt
@@ -651,58 +651,58 @@ struct Stmt {
 
 struct BlockStmt: Stmt {
     kind = Stmt_Block,
-    stmts: *List, // List<Stmt>
+    stmts: *mut List, // List<Stmt>
 }
 
 struct ConstStmt: Stmt {
     kind = Stmt_Const,
-    decl: *ConstDecl,
+    decl: *mut ConstDecl,
 }
 
 struct LocalStmt: Stmt {
     kind = Stmt_Local,
     name: *Char,
-    type: *TypeExpr,
-    init: *Expr,
-    sym: *LocalSym,
+    type: *mut TypeExpr,
+    init: *mut Expr,
+    sym: *mut LocalSym,
 }
 
 struct IfStmt: Stmt {
     kind = Stmt_If,
-    cond: *Expr,
-    then_stmt: *Stmt,
-    else_stmt: *Stmt,
+    cond: *mut Expr,
+    then_stmt: *mut Stmt,
+    else_stmt: *mut Stmt,
 }
 
 struct MatchCase {
-    pattern: *Pattern,
-    guard: *Expr,
-    body: *Stmt,
+    pattern: *mut Pattern,
+    guard: *mut Expr,
+    body: *mut Stmt,
 }
 
 struct MatchStmt: Stmt {
     kind = Stmt_Match,
-    scrutinee: *Expr,
-    cases: *List, // List<MatchCase>
+    scrutinee: *mut Expr,
+    cases: *mut List, // List<MatchCase>
 }
 
 struct WhileStmt: Stmt {
     kind = Stmt_While,
-    cond: *Expr,
-    body: *Stmt,
+    cond: *mut Expr,
+    body: *mut Stmt,
 }
 
 struct ForStmt: Stmt {
     kind = Stmt_For,
-    init: *Stmt,
-    cond: *Expr,
-    step: *Expr,
-    body: *Stmt,
+    init: *mut Stmt,
+    cond: *mut Expr,
+    step: *mut Expr,
+    body: *mut Stmt,
 }
 
 struct ReturnStmt: Stmt {
     kind = Stmt_Return,
-    expr: *Expr,
+    expr: *mut Expr,
 }
 
 struct BreakStmt: Stmt {
@@ -715,7 +715,7 @@ struct ContinueStmt: Stmt {
 
 struct ExprStmt: Stmt {
     kind = Stmt_Expr,
-    expr: *Expr,
+    expr: *mut Expr,
 }
 
 // Decl
@@ -736,24 +736,24 @@ struct Decl {
 struct RecordFieldDecl {
     pos: Pos,
     name: *Char,
-    default_value: *Expr,
-    type: *TypeExpr,
+    default_value: *mut Expr,
+    type: *mut TypeExpr,
 }
 
 struct RecordDecl: Decl {
     kind = Decl_Record,
     is_union: Bool,
     name: *Char,
-    base: *TypeExpr,
-    fields: *List, // List<RecordFieldDecl>
-    sym: *RecordSym,
+    base: *mut TypeExpr,
+    fields: *mut List, // List<RecordFieldDecl>
+    sym: *mut RecordSym,
 }
 
 struct FuncParamDecl {
     pos: Pos,
     name: *Char,
-    type: *TypeExpr,
-    default_value: *Expr,
+    type: *mut TypeExpr,
+    default_value: *mut Expr,
 }
 
 struct RestParamDecl {
@@ -765,45 +765,45 @@ struct FuncDecl: Decl {
     kind = Decl_Func,
     is_extern: Bool,
     name: *Char,
-    params: *List, // List<FuncParam>
-    rest_param: *RestParamDecl,
-    return_type: *TypeExpr,
-    body: *Stmt,
-    sym: *FuncSym,
+    params: *mut List, // List<FuncParam>
+    rest_param: *mut RestParamDecl,
+    return_type: *mut TypeExpr,
+    body: *mut Stmt,
+    sym: *mut FuncSym,
 }
 
 struct EnumMember {
     pos: Pos,
     name: *Char,
-    value: *Expr,
-    sym: *ConstSym,
+    value: *mut Expr,
+    sym: *mut ConstSym,
 }
 
 struct EnumDecl: Decl {
     kind = Decl_Enum,
     name: *Char,
-    members: *List, // List<EnumMember>
-    sym: *EnumSym,
+    members: *mut List, // List<EnumMember>
+    sym: *mut EnumSym,
 }
 
 struct ConstDecl: Decl {
     kind = Decl_Const,
     name: *Char,
-    type: *TypeExpr,
-    value: *Expr,
-    sym: *ConstSym,
+    type: *mut TypeExpr,
+    value: *mut Expr,
+    sym: *mut ConstSym,
 }
 
 struct GlobalDecl: Decl {
     kind = Decl_Global,
     is_extern: Bool,
     name: *Char,
-    type: *TypeExpr,
-    sym: *GlobalSym,
+    type: *mut TypeExpr,
+    sym: *mut GlobalSym,
 }
 
 struct Ast {
-    decls: *List, // List<Decl>
+    decls: *mut List, // List<Decl>
 }
 
 func is_lvalue(expr: *Expr): Bool;
@@ -881,8 +881,8 @@ struct HirSkipExpr: HirExpr {
 
 struct HirSeqExpr: HirExpr {
     kind = HirExpr_Seq,
-    first: *HirExpr,
-    second: *HirExpr,
+    first: *mut HirExpr,
+    second: *mut HirExpr,
 }
 
 struct HirIntExpr: HirExpr {
@@ -897,31 +897,31 @@ struct HirStrExpr: HirExpr {
 
 struct HirVarExpr: HirExpr {
     kind = HirExpr_Var,
-    sym: *Sym,
+    sym: *mut Sym,
 }
 
 struct HirTempExpr: HirExpr {
     kind = HirExpr_Temp,
-    temp: *HirTemp,
+    temp: *mut HirTemp,
 }
 
 struct HirCondExpr: HirExpr {
     kind = HirExpr_Cond,
-    cond: *HirExpr,
-    then_expr: *HirExpr,
-    else_expr: *HirExpr,
+    cond: *mut HirExpr,
+    then_expr: *mut HirExpr,
+    else_expr: *mut HirExpr,
 }
 
 struct HirLoopExpr: HirExpr {
     kind = HirExpr_Loop,
-    cond: *HirExpr,
-    body: *HirExpr,
-    step: *HirExpr,
+    cond: *mut HirExpr,
+    body: *mut HirExpr,
+    step: *mut HirExpr,
 }
 
 struct HirReturnExpr: HirExpr {
     kind = HirExpr_Return,
-    expr: *HirExpr,
+    expr: *mut HirExpr,
 }
 
 struct HirJumpExpr: HirExpr {
@@ -931,50 +931,50 @@ struct HirJumpExpr: HirExpr {
 
 struct HirAssignExpr: HirExpr {
     kind = HirExpr_Assign,
-    dst: *HirExpr,
-    src: *HirExpr,
+    dst: *mut HirExpr,
+    src: *mut HirExpr,
 }
 
 struct HirBinaryOpExpr: HirExpr {
     kind = HirExpr_BinaryOp,
     op: HirOpKind,
-    left: *HirExpr,
-    right: *HirExpr,
+    left: *mut HirExpr,
+    right: *mut HirExpr,
 }
 
 struct HirCallExpr: HirExpr {
     kind = HirExpr_Call,
-    callee: *FuncSym,
-    args: **HirExpr,
+    callee: *mut FuncSym,
+    args: *mut *mut HirExpr,
     n_args: Int,
 }
 
 struct HirMemberExpr: HirExpr {
     kind = HirExpr_Member,
-    left: *HirExpr,
+    left: *mut HirExpr,
     name: *Char,
-    field: *RecordField,
+    field: *mut RecordField,
 }
 
 struct HirIndexExpr: HirExpr {
     kind = HirExpr_Index,
-    indexee: *HirExpr,
-    index: *HirExpr,
+    indexee: *mut HirExpr,
+    index: *mut HirExpr,
 }
 
 struct HirDerefExpr: HirExpr {
     kind = HirExpr_Deref,
-    expr: *HirExpr,
+    expr: *mut HirExpr,
 }
 
 struct HirAddrExpr: HirExpr {
     kind = HirExpr_Addr,
-    expr: *HirExpr,
+    expr: *mut HirExpr,
 }
 
 struct HirCastExpr: HirExpr {
     kind = HirExpr_Cast,
-    expr: *HirExpr,
+    expr: *mut HirExpr,
 }
 
 struct HirUnreachableExpr: HirExpr {
@@ -989,26 +989,26 @@ func hir_dump(e: *HirExpr);
 
 struct Lexer;
 
-func lexer_new(file_name: *Char, input: *Char): *Lexer;
-func lexer_next(self: *Lexer): Tok;
+func lexer_new(file_name: *Char, input: *Char): *mut Lexer;
+func lexer_next(self: *mut Lexer): Tok;
 
 //==============================================================================
 //== parser.btl
 
 struct Parser;
 
-func parser_new(lexer: *Lexer): *Parser;
-func parser_run(self: *Parser): *Ast;
+func parser_new(lexer: *mut Lexer): *mut Parser;
+func parser_run(self: *mut Parser): *mut Ast;
 
 //==============================================================================
 //== elab.btl
 
-func elab(ast: *Ast): *List; // *List<*Sym>
+func elab(ast: *mut Ast): *mut List; // *List<*Sym>
 
 //==============================================================================
 //== hir_lower.btl
 
-func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr;
+func hir_lower(func_: *mut FuncSym, body: *Stmt): *mut HirExpr;
 
 //==============================================================================
 //== call_layout.btl
@@ -1047,13 +1047,13 @@ struct RetLocation {
 
 struct CallLayout {
     n_args: Int,
-    arg_locs: *ArgLocation,
+    arg_locs: *mut ArgLocation,
     ret_loc: RetLocation,
     stack_space: Int,
     next_gpr: Int,
 }
 
-func call_layout_drop(self: *CallLayout);
+func call_layout_drop(self: *mut CallLayout);
 func get_call_layout(n_args: Int, arg_types: **Type, ret_type: *Type): CallLayout;
 func get_call_layout_for_call(e: *HirCallExpr): CallLayout;
 func get_call_layout_for_func(f: *FuncSym): CallLayout;
@@ -1076,7 +1076,7 @@ struct AsmInstrBuilder;
 
 struct AsmFunc {
     name: *Char,
-    builder: *AsmInstrBuilder,
+    builder: *mut AsmInstrBuilder,
     frame_size: Int,
     n_spills: Int,
     spills: [Reg; N_REGS],
@@ -1087,85 +1087,85 @@ struct AsmFunc {
 //== Instruction building
 
 
-func asm_builder_new(): *AsmInstrBuilder;
+func asm_builder_new(): *mut AsmInstrBuilder;
 
 
 // Data Movement
 
 
 // mov {xd}, {x1}
-func asm_write_mov_r(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg);
+func asm_write_mov_r(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg);
 
 // mov {xd}, #{value}
 //
 // movz {xd}, #{value & 0xffff}
 // ...
 // movk {xd}, #{value >> 48}, lsl 48
-func asm_write_mov_i(builder: *AsmInstrBuilder, width: Int, xd: Reg, value: Int);
+func asm_write_mov_i(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, value: Int);
 
 // ldr {xd}, [{xs}, #{offset}]
-func asm_write_ldrs_ri(builder: *AsmInstrBuilder, width: Int, xd: Reg, xs: Reg, offset: Int);
+func asm_write_ldrs_ri(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, xs: Reg, offset: Int);
 
 // ldr {xd}, [{xs}]
-func asm_write_ldrs_r(builder: *AsmInstrBuilder, width: Int, xd: Reg, xs: Reg);
+func asm_write_ldrs_r(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, xs: Reg);
 
 // ldr {xd}, [fp, #{frame_start_from_fp + offset}]
-func asm_write_ldrs_r_fp_from_frame_start(builder: *AsmInstrBuilder, width: Int, xd: Reg, offset: Int);
+func asm_write_ldrs_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, offset: Int);
 
 // ldr {xd}, [sp, #{stack_size + fp_offset}]
-func asm_write_ldrs_r_sp_from_fp(builder: *AsmInstrBuilder, width: Int, xd: Reg, fp_offset: Int);
+func asm_write_ldrs_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, fp_offset: Int);
 
 // str {xs}, [{xd}, #{offset}]
-func asm_write_str_ri(builder: *AsmInstrBuilder, width: Int, xs: Reg, xd: Reg, offset: Int);
+func asm_write_str_ri(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, xd: Reg, offset: Int);
 
 // str {xs}, [{xd}]
-func asm_write_str_r(builder: *AsmInstrBuilder, width: Int, xs: Reg, xd: Reg);
+func asm_write_str_r(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, xd: Reg);
 
 // str {xs}, [sp, #{stack_size + fp_offset}]
-func asm_write_str_r_sp_from_fp(builder: *AsmInstrBuilder, width: Int, xs: Reg, fp_offset: Int);
+func asm_write_str_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, fp_offset: Int);
 
 
 // Arithmetic, Logic and Comparison
 
 
 // sxt {xd}, {x1}
-func asm_write_sxt(builder: *AsmInstrBuilder, dst_size: Int, src_size: Int, xd: Reg, x1: Reg);
+func asm_write_sxt(builder: *mut AsmInstrBuilder, dst_size: Int, src_size: Int, xd: Reg, x1: Reg);
 
 // {op} {xd}, {x1}, {x2}
-func asm_write_binary_op_rr(builder: *AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg);
+func asm_write_binary_op_rr(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg);
 
 // {op} {xd}, {x1}, #{imm}
-func asm_write_binary_op_ri(builder: *AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, imm: Int);
+func asm_write_binary_op_ri(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, imm: Int);
 
 // {op} {xd}, {x1}, {x2}, {x3}
-func asm_write_binary_op_rrr(builder: *AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg, x3: Reg);
+func asm_write_binary_op_rrr(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg, x3: Reg);
 
 // add {xd}, {x1}, #{imm}
-func asm_write_add_ri(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, imm: Int);
+func asm_write_add_ri(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, imm: Int);
 
 // add {xd}, fp, #{frame_start_from_fp + offset}
-func asm_write_add_r_fp_from_frame_start(builder: *AsmInstrBuilder, width: Int, xd: Reg, offset: Int);
+func asm_write_add_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, offset: Int);
 
 // add {xd}, {x1}, {x2}
-func asm_write_add_rr(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, x2: Reg);
+func asm_write_add_rr(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, x2: Reg);
 
 // cmp {xd}, {x1}
-func asm_write_cmp_rr(builder: *AsmInstrBuilder, width: Int, xd: Reg, x1: Reg);
+func asm_write_cmp_rr(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg);
 
 // cset {xd}, {op}
-func asm_write_cset(builder: *AsmInstrBuilder, width: Int, xd: Reg, op: *Char);
+func asm_write_cset(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, op: *Char);
 
 
 // Control Flow
 
 // cbz {xd}, {label}
-func asm_write_cbz(builder: *AsmInstrBuilder, xd: Reg, counter: Int, label_suffix: *Char);
+func asm_write_cbz(builder: *mut AsmInstrBuilder, xd: Reg, counter: Int, label_suffix: *Char);
 
 // b {label}
-func asm_write_b(builder: *AsmInstrBuilder, counter: Int, suffix: *Char);
+func asm_write_b(builder: *mut AsmInstrBuilder, counter: Int, suffix: *Char);
 
 // bl {name}
-func asm_write_bl(builder: *AsmInstrBuilder, name: *Char);
+func asm_write_bl(builder: *mut AsmInstrBuilder, name: *Char);
 
 
 // Addressing
@@ -1173,31 +1173,31 @@ func asm_write_bl(builder: *AsmInstrBuilder, name: *Char);
 
 // addrp {xd}, {name}
 // add {xd}, {xd}, :lo12:{name}
-func asm_write_global_addr(builder: *AsmInstrBuilder, xd: Reg, name: *Char);
+func asm_write_global_addr(builder: *mut AsmInstrBuilder, xd: Reg, name: *Char);
 
 // addrp {xd}, :got:{name}
 // ldr {xd}, [{xd}, :got_lo12:{name}]
-func asm_write_got_global_addr(builder: *AsmInstrBuilder, xd: Reg, name: *Char);
+func asm_write_got_global_addr(builder: *mut AsmInstrBuilder, xd: Reg, name: *Char);
 
 // addrp {xd}, str{id}
 // add {xd}, {xd}, :lo12:str{id}
-func asm_write_string_addr(builder: *AsmInstrBuilder, xd: Reg, id: Int);
+func asm_write_string_addr(builder: *mut AsmInstrBuilder, xd: Reg, id: Int);
 
 
 // Miscellaneous
 
 
 // .L{counter}.{suffix}:
-func asm_write_label(builder: *AsmInstrBuilder, counter: Int, suffix: *Char);
+func asm_write_label(builder: *mut AsmInstrBuilder, counter: Int, suffix: *Char);
 
 // {raw}
-func asm_write_raw(builder: *AsmInstrBuilder, raw: *Char);
+func asm_write_raw(builder: *mut AsmInstrBuilder, raw: *Char);
 
 // // {comment}
-func asm_write_comment(builder: *AsmInstrBuilder, fmt: *Char, ...args);
+func asm_write_comment(builder: *mut AsmInstrBuilder, fmt: *Char, ...args);
 
 // \b // {comment}
-func asm_add_comment_to_last(builder: *AsmInstrBuilder, fmt: *Char, ...args);
+func asm_add_comment_to_last(builder: *mut AsmInstrBuilder, fmt: *Char, ...args);
 
 
 //== Printing Assembly

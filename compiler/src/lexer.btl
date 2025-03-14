@@ -3,7 +3,7 @@ include "bittle.btls";
 //==============================================================================
 //== Helper functions
 
-func try_keyword(lexeme: *Char, keyword: *Char, out: *TokKind, kind: TokKind): Bool {
+func try_keyword(lexeme: *Char, keyword: *Char, out: *mut TokKind, kind: TokKind): Bool {
     if (str_eq(lexeme, keyword)) {
         *out = kind;
         return true;
@@ -12,7 +12,7 @@ func try_keyword(lexeme: *Char, keyword: *Char, out: *TokKind, kind: TokKind): B
     }
 }
 
-func lookup_keyword(lexeme: *Char, out: *TokKind): Bool {
+func lookup_keyword(lexeme: *Char, out: *mut TokKind): Bool {
     return try_keyword(lexeme, "as", out, Tok_As)
         || try_keyword(lexeme, "break", out, Tok_Break)
         || try_keyword(lexeme, "case", out, Tok_Case)
@@ -54,8 +54,8 @@ struct Lexer {
     tok_lexeme: *Char,
 }
 
-func lexer_new(file_name: *Char, input: *Char): *Lexer {
-    var self = calloc(1, sizeof(Lexer)) as *Lexer;
+func lexer_new(file_name: *Char, input: *Char): *mut Lexer {
+    var self = calloc(1, sizeof(Lexer)) as *mut Lexer;
 
     var pos = Pos { file: file_name, row: 1, col: 1 };
 
@@ -71,29 +71,29 @@ func lexer_new(file_name: *Char, input: *Char): *Lexer {
     return self;
 }
 
-func make_lexeme(self: *Lexer): *Char {
+func make_lexeme(self: *mut Lexer): *Char {
     var len = self.index - self.tok_index;
-    var lexeme = malloc(len + 1) as *Char;
+    var lexeme = malloc(len + 1) as *mut Char;
     memcpy(lexeme, &self.input[self.index - len], len);
     lexeme[len] = '\0';
     return lexeme;
 }
 
-func begin_token(self: *Lexer) {
+func begin_token(self: *mut Lexer) {
     self.tok_index = self.index;
     self.tok_pos = self.pos;
 }
 
-func finish_token(self: *Lexer, tok_kind: TokKind, lexeme: *Char) {
+func finish_token(self: *mut Lexer, tok_kind: TokKind, lexeme: *Char) {
     self.tok_kind = tok_kind;
     self.tok_lexeme = lexeme;
 }
 
-func curr_char(self: *Lexer): Char {
+func curr_char(self: *mut Lexer): Char {
     return self.input[self.index];
 }
 
-func next_char(self: *Lexer) {
+func next_char(self: *mut Lexer) {
     var c = curr_char(self);
     if (c == '\n') {
         self.pos.row += 1;
@@ -107,35 +107,35 @@ func next_char(self: *Lexer) {
 //==============================================================================
 //== Character matching
 
-func at_end(self: *Lexer): Bool {
+func at_end(self: *mut Lexer): Bool {
     return curr_char(self) == '\0';
 }
 
-func at_whitespace(self: *Lexer): Bool {
+func at_whitespace(self: *mut Lexer): Bool {
     return is_whitespace(curr_char(self));
 }
 
-func at_word_start(self: *Lexer): Bool {
+func at_word_start(self: *mut Lexer): Bool {
     return is_word_start(curr_char(self));
 }
 
-func at_word_part(self: *Lexer): Bool {
+func at_word_part(self: *mut Lexer): Bool {
     return is_word_part(curr_char(self));
 }
 
-func at_digit(self: *Lexer, base: Int): Bool {
+func at_digit(self: *mut Lexer, base: Int): Bool {
     return is_digit(curr_char(self), base);
 }
 
-func at_printable(self: *Lexer): Bool {
+func at_printable(self: *mut Lexer): Bool {
     return is_print(curr_char(self));
 }
 
-func at_char(self: *Lexer, c: Char): Bool {
+func at_char(self: *mut Lexer, c: Char): Bool {
     return curr_char(self) == c;
 }
 
-func eat_char(self: *Lexer, c: Char): Bool {
+func eat_char(self: *mut Lexer, c: Char): Bool {
     if (at_char(self, c)) {
         next_char(self);
         return true;
@@ -147,19 +147,19 @@ func eat_char(self: *Lexer, c: Char): Bool {
 //==============================================================================
 //== Scanning routines
 
-func skip_whitespace(self: *Lexer) {
+func skip_whitespace(self: *mut Lexer) {
     while (is_whitespace(curr_char(self))) {
         next_char(self);
     }
 }
 
-func skip_line_comment(self: *Lexer) {
+func skip_line_comment(self: *mut Lexer) {
     while (!at_end(self) && !eat_char(self, '\n')) {
         next_char(self);
     }
 }
 
-func skip_block_comment(self: *Lexer) {
+func skip_block_comment(self: *mut Lexer) {
     while (true) {
         if (at_end(self)) {
             die_at(&self.pos, "Unterminated block comment.");
@@ -171,7 +171,7 @@ func skip_block_comment(self: *Lexer) {
     }
 }
 
-func scan_word(self: *Lexer) {
+func scan_word(self: *mut Lexer) {
     next_char(self);
     while (is_word_part(curr_char(self))) {
         next_char(self);
@@ -182,7 +182,7 @@ func scan_word(self: *Lexer) {
     finish_token(self, tok_kind, lexeme);
 }
 
-func scan_number(self: *Lexer) {
+func scan_number(self: *mut Lexer) {
     var base = 10;
     if (eat_char(self, '0')) {
         if (eat_char(self, 'x')) {
@@ -206,7 +206,7 @@ func scan_number(self: *Lexer) {
     finish_token(self, Tok_Int, lexeme);
 }
 
-func scan_char_part(self: *Lexer) {
+func scan_char_part(self: *mut Lexer) {
     match (curr_char(self)) {
         case '\\': {
             next_char(self);
@@ -228,7 +228,7 @@ func scan_char_part(self: *Lexer) {
     }
 }
 
-func scan_string(self: *Lexer) {
+func scan_string(self: *mut Lexer) {
     next_char(self);
     while (!eat_char(self, '\"')) {
         if (at_end(self)) {
@@ -241,7 +241,7 @@ func scan_string(self: *Lexer) {
     finish_token(self, Tok_String, lexeme);
 }
 
-func scan_char(self: *Lexer) {
+func scan_char(self: *mut Lexer) {
     next_char(self);
     if (at_char(self, '\'')) {
         die_at(&self.pos, "Empty character literal.");
@@ -254,7 +254,7 @@ func scan_char(self: *Lexer) {
     finish_token(self, Tok_Char, lexeme);
 }
 
-func lexer_next(self: *Lexer): Tok {
+func lexer_next(self: *mut Lexer): Tok {
     while (true) {
         begin_token(self);
         if (at_end(self)) {

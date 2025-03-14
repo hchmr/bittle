@@ -2,7 +2,7 @@ include "bittle.btls";
 
 //==============================================================================
 
-func parse(file_name: *Char, input_file: *File): *Ast {
+func parse(file_name: *Char, input_file: *mut File): *mut Ast {
     var text = read_file(input_file);
     var lexer = lexer_new(file_name, text);
     var parser = parser_new(lexer);
@@ -23,7 +23,7 @@ func help(progname: *Char, status: Int32) {
     exit(status);
 }
 
-func arg_parse(argc: Int32, argv: **Char, args: *Args) {
+func arg_parse(argc: Int32, argv: **Char, args: *mut Args) {
     for (var i = 1; i < argc; i += 1) {
         if (str_eq(argv[i], "--help") || str_eq(argv[i], "-h")) {
             help(argv[0], 0);
@@ -41,7 +41,7 @@ func main(argc: Int32, argv: **Char): Int32 {
     arg_parse(argc, argv, &args);
 
     var file_name: *Char;
-    var input_file: *File;
+    var input_file: *mut File;
     if (!args.file_name) {
         file_name = "<stdin>";
         input_file = stdin;

@@ -9,28 +9,28 @@ struct ScopeEntry {
 }
 
 struct Scope {
-    entries: *List, // List<ScopeEntry>
-    parent: *Scope,
+    entries: *mut List, // List<ScopeEntry>
+    parent: *mut Scope,
 }
 
-func scope_new(parent: *Scope): *Scope {
+func scope_new(parent: *mut Scope): *mut Scope {
     return box(sizeof(Scope), &Scope {
         entries: list_new(),
         parent: parent
-    }) as *Scope;
+    }) as *mut Scope;
 }
 
-func scope_drop(scope: *Scope) {
+func scope_drop(scope: *mut Scope) {
     free(scope.entries);
     free(scope);
 }
 
-func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
+func scope_lookup(scope: *mut Scope, name: *Char, max_depth: Int): Int {
     if (scope == null || max_depth == 0) {
         return -1;
     }
     for (var i = list_len(scope.entries) - 1; i >= 0; i -= 1) {
-        var entry = list_get(scope.entries, i) as *ScopeEntry;
+        var entry = list_get(scope.entries, i) as *mut ScopeEntry;
         if (str_eq(entry.name, name)) {
             return entry.sym_index;
         }
@@ -42,18 +42,18 @@ func scope_lookup(scope: *Scope, name: *Char, max_depth: Int): Int {
 //== Context
 
 struct ElabCtx {
-    syms: *List, // List<Sym>
-    scope: *Scope,
-    current_func: *FuncSym,
+    syms: *mut List, // List<Sym>
+    scope: *mut Scope,
+    current_func: *mut FuncSym,
     loop_depth: Int,
     or_pattern_depth: Int,
 }
 
-func enter_scope(ctx: *ElabCtx) {
+func enter_scope(ctx: *mut ElabCtx) {
     ctx.scope = scope_new(ctx.scope);
 }
 
-func exit_scope(ctx: *ElabCtx) {
+func exit_scope(ctx: *mut ElabCtx) {
     var scope = ctx.scope;
     ctx.scope = scope.parent;
     scope_drop(scope);
@@ -62,50 +62,50 @@ func exit_scope(ctx: *ElabCtx) {
 //==============================================================================
 //== Symbol declaration & lookup
 
-func lookup(ctx: *ElabCtx, name: *Char): *Sym {
+func lookup(ctx: *mut ElabCtx, name: *Char): *mut Sym {
     var sym_index = scope_lookup(ctx.scope, name, -1);
     if (sym_index == -1) {
         return null;
     }
-    return list_get(ctx.syms, sym_index) as *Sym;
+    return list_get(ctx.syms, sym_index) as *mut Sym;
 }
 
-func try_get_existing(ctx: *ElabCtx, name: *Char): *Sym {
+func try_get_existing(ctx: *mut ElabCtx, name: *Char): *mut Sym {
     var sym_index = scope_lookup(ctx.scope, name, 1);
     if (sym_index == -1) {
         return null;
     }
-    return list_get(ctx.syms, sym_index) as *Sym;
+    return list_get(ctx.syms, sym_index) as *mut Sym;
 }
 
-func add_sym(ctx: *ElabCtx, sym: *Sym) {
+func add_sym(ctx: *mut ElabCtx, sym: *mut Sym) {
     var entry = box(sizeof(ScopeEntry), &ScopeEntry {
         name: sym.name,
         sym_index: list_len(ctx.syms)
-    }) as *ScopeEntry;
+    }) as *mut ScopeEntry;
     list_push(ctx.syms, sym);
     list_push(ctx.scope.entries, entry);
 }
 
-func declare_enum(ctx: *ElabCtx, pos: *Pos, name: *Char): *EnumSym {
+func declare_enum(ctx: *mut ElabCtx, pos: *Pos, name: *Char): *mut EnumSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         if (existing.kind != Sym_Enum) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        return existing as *EnumSym;
+        return existing as *mut EnumSym;
     }
 
     var sym = box(sizeof(EnumSym), &EnumSym {
         name,
         is_defined: false,
         size: -1,
-    }) as *EnumSym;
+    }) as *mut Sym;
     add_sym(ctx, sym);
-    return sym;
+    return sym as *mut EnumSym;
 }
 
-func define_enum(ctx: *ElabCtx, pos: *Pos, sym: *EnumSym, size: Int) {
+func define_enum(ctx: *mut ElabCtx, pos: *Pos, sym: *mut EnumSym, size: Int) {
     if (sym.is_defined) {
         die_at(pos, "Symbol is already defined");
     }
@@ -114,17 +114,17 @@ func define_enum(ctx: *ElabCtx, pos: *Pos, sym: *EnumSym, size: Int) {
 }
 
 func declare_record(
-    ctx: *ElabCtx,
+    ctx: *mut ElabCtx,
     pos: *Pos,
     is_union: Bool,
     name: *Char,
-): *RecordSym {
+): *mut RecordSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         if (existing.kind != Sym_Record) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        return existing as *RecordSym;
+        return existing as *mut RecordSym;
     }
 
     var sym = box(sizeof(RecordSym), &RecordSym {
@@ -135,12 +135,12 @@ func declare_record(
         fields: null,
         unpadded_size: 0,
         align: 0,
-    }) as *RecordSym;
+    }) as *mut Sym;
     add_sym(ctx, sym);
-    return sym;
+    return sym as *mut RecordSym;
 }
 
-func define_record(ctx: *ElabCtx, pos: *Pos, sym: *RecordSym) {
+func define_record(ctx: *mut ElabCtx, pos: *Pos, sym: *mut RecordSym) {
     if (sym.is_defined) {
         die_at(pos, "Symbol is already defined");
     }
@@ -148,26 +148,25 @@ func define_record(ctx: *ElabCtx, pos: *Pos, sym: *RecordSym) {
     sym.is_defined = true;
 }
 
-func declare_const(ctx: *ElabCtx, pos: *Pos, name: *Char): *ConstSym {
+func declare_const(ctx: *mut ElabCtx, pos: *Pos, name: *Char): *mut ConstSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         if (existing.kind != Sym_Const) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        return existing as *ConstSym;
+        return existing as *mut ConstSym;
     }
 
-    var sym = calloc(1, sizeof(ConstSym)) as *ConstSym;
-    *sym = ConstSym {
-        is_defined: false,
+    var sym = box(sizeof(ConstSym), &ConstSym {
         name,
+        is_defined: false,
         value: null,
-    };
+    }) as *mut Sym;
     add_sym(ctx, sym);
-    return sym;
+    return sym as *mut ConstSym;
 }
 
-func define_const(ctx: *ElabCtx, pos: *Pos, sym: *ConstSym, value: *ConstValue) {
+func define_const(ctx: *mut ElabCtx, pos: *Pos, sym: *mut ConstSym, value: *ConstValue) {
     if (sym.is_defined) {
         die_at(pos, "Symbol is already defined");
     }
@@ -175,13 +174,13 @@ func define_const(ctx: *ElabCtx, pos: *Pos, sym: *ConstSym, value: *ConstValue) 
     sym.value = value;
 }
 
-func params_eq(xs: *List, ys: *List): Bool {
+func params_eq(xs: *mut List, ys: *mut List): Bool {
     if (list_len(xs) != list_len(ys)) {
         return false;
     }
     for (var i = 0; i < list_len(xs); i += 1) {
-        var param1 = list_get(xs, i) as *FuncParam;
-        var param2 = list_get(ys, i) as *FuncParam;
+        var param1 = list_get(xs, i) as *mut FuncParam;
+        var param2 = list_get(ys, i) as *mut FuncParam;
         if (!str_eq(param1.name, param2.name)) {
             return false;
         }
@@ -193,13 +192,13 @@ func params_eq(xs: *List, ys: *List): Bool {
 }
 
 func declare_func(
-    ctx: *ElabCtx,
+    ctx: *mut ElabCtx,
     pos: *Pos,
     name: *Char,
-    params: *List,
-    rest_param: *RestParamDecl,
+    params: *mut List,
+    rest_param: *mut RestParamDecl,
     return_type: *Type
-): *FuncSym {
+): *mut FuncSym {
     var is_variadic = !!rest_param;
 
     var existing = try_get_existing(ctx, name);
@@ -207,7 +206,7 @@ func declare_func(
         if (existing.kind != Sym_Func) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        var existing = existing as *FuncSym;
+        var existing = existing as *mut FuncSym;
         if (!params_eq(existing.params, params)) {
             die_at(pos, "Symbol redeclared with different parameters");
         }
@@ -239,12 +238,12 @@ func declare_func(
         locals: list_new(),
         temps: list_new(),
         body: null
-    }) as *FuncSym;
+    }) as *mut Sym;
     add_sym(ctx, sym);
-    return sym;
+    return sym as *mut FuncSym;
 }
 
-func define_func(ctx: *ElabCtx, pos: *Pos, sym: *FuncSym, body: *Stmt) {
+func define_func(ctx: *mut ElabCtx, pos: *Pos, sym: *mut FuncSym, body: *mut Stmt) {
     if (sym.is_defined) {
         die_at(pos, "Symbol is already defined");
     }
@@ -252,37 +251,36 @@ func define_func(ctx: *ElabCtx, pos: *Pos, sym: *FuncSym, body: *Stmt) {
     sym.body = body;
 }
 
-func declare_global(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *GlobalSym {
+func declare_global(ctx: *mut ElabCtx, pos: *Pos, name: *Char, type: *Type): *mut GlobalSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         if (existing.kind != Sym_Global) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        var existing = existing as *GlobalSym;
+        var existing = existing as *mut GlobalSym;
         if (!type_eq(existing.type, type)) {
             die_at(pos, "Symbol redeclared with different type");
         }
         return existing;
     }
 
-    var sym = calloc(1, sizeof(GlobalSym)) as *GlobalSym;
-    *sym = GlobalSym {
+    var sym = box(sizeof(GlobalSym), &GlobalSym {
         name,
         type,
         is_defined: false,
-    };
+    }) as *mut Sym;
     add_sym(ctx, sym);
-    return sym;
+    return sym as *mut GlobalSym;
 }
 
-func define_global(ctx: *ElabCtx, pos: *Pos, sym: *GlobalSym) {
+func define_global(ctx: *mut ElabCtx, pos: *Pos, sym: *mut GlobalSym) {
     if (sym.is_defined) {
         die_at(pos, "Symbol is already defined");
     }
     sym.is_defined = true;
 }
 
-func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym {
+func define_local(ctx: *mut ElabCtx, pos: *Pos, name: *Char, type: *Type): *mut LocalSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         if (existing.kind != Sym_Local) {
@@ -294,24 +292,23 @@ func define_local(ctx: *ElabCtx, pos: *Pos, name: *Char, type: *Type): *LocalSym
 
     var slot_id = list_len(ctx.current_func.locals);
 
-    var sym = calloc(1, sizeof(LocalSym)) as *LocalSym;
-    *sym = LocalSym {
+    var sym = box(sizeof(LocalSym), &LocalSym {
         name,
         is_defined: true,
         type,
         slot_id,
         is_indirect: false,
-    };
+    }) as *mut Sym;
     add_sym(ctx, sym);
     list_push(ctx.current_func.locals, sym);
 
-    return sym;
+    return sym as *mut LocalSym;
 }
 
-func define_params(ctx: *ElabCtx, param_decls: *List, params: *List) {
+func define_params(ctx: *mut ElabCtx, param_decls: *mut List, params: *mut List) {
     for (var i = 0; i < list_len(params); i += 1) {
-        var param_decl = list_get(param_decls, i) as *FuncParamDecl;
-        var param = list_get(params, i) as *FuncParam;
+        var param_decl = list_get(param_decls, i) as *mut FuncParamDecl;
+        var param = list_get(params, i) as *mut FuncParam;
         define_local(ctx, &param_decl.pos, param.name, param.type);
     }
 }
@@ -323,7 +320,7 @@ func report_type_mismatch(pos: *Pos, expected: *Type, actual: *Type) {
     die_at(pos, "Type mismatch. Expected '%s', got '%s'", pretty_type(expected), pretty_type(actual));
 }
 
-func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
+func try_coerce_expr_with_cast(e: *mut Expr, target: *Type, out: *mut *mut Expr): Bool {
     if (!type_implicitly_convertible(e.type, target)) {
         return false;
     }
@@ -339,7 +336,7 @@ func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
         const_value,
         expr: e,
         type_expr: null
-    }) as *CastExpr;
+    }) as *mut Expr;
     *out = cast;
     return true;
 }
@@ -350,7 +347,7 @@ func try_coerce_expr_with_cast(e: *Expr, target: *Type, out: **Expr): Bool {
     to
         x: MyUnion = MyUnion { field: 123 }
 */
-func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
+func try_coerce_expr_to_union(e: *mut Expr, target: *Type, out: *mut *mut Expr): Bool {
     if (target.kind != Type_Record) {
         return false;
     }
@@ -367,13 +364,13 @@ func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
         return false;
     }
 
-    var field = list_get(sym.fields, field_index) as *RecordField;
+    var field = list_get(sym.fields, field_index) as *mut RecordField;
 
     var field_init = box(sizeof(FieldInitializer), &FieldInitializer {
         pos: e.pos,
         name: field.name,
         expr: e
-    }) as *FieldInitializer;
+    }) as *mut FieldInitializer;
 
     var field_inits = list_new();
     list_push(field_inits, field_init);
@@ -384,18 +381,18 @@ func try_coerce_expr_to_union(e: *Expr, target: *Type, out: **Expr): Bool {
         const_value: null,
         name: sym.name,
         fields: field_inits,
-    }) as *RecordExpr;
+    }) as *mut Expr;
     *out = record_expr;
     return true;
 }
 
-func try_coerce_expr(e: *Expr, target: *Type, out: **Expr): Bool {
+func try_coerce_expr(e: *mut Expr, target: *Type, out: *mut *mut Expr): Bool {
     return type_eq(e.type, target)
         || try_coerce_expr_with_cast(e, target, out)
         || try_coerce_expr_to_union(e, target, out);
 }
 
-func try_coerce_expr_to_int(e: *Expr, out: **Expr): Bool {
+func try_coerce_expr_to_int(e: *mut Expr, out: *mut *mut Expr): Bool {
     var target_type: *Type = null;
     for (var size = 1; size <= 8; size *= 2) {
         target_type = mk_int_type(size);
@@ -406,36 +403,36 @@ func try_coerce_expr_to_int(e: *Expr, out: **Expr): Bool {
     return false;
 }
 
-func check_expr_type(e: **Expr, expected: *Type) {
+func check_expr_type(e: *mut *mut Expr, expected: *Type) {
     try_coerce_expr(*e, expected, e);
     if (!type_eq((*e).type, expected)) {
         report_type_mismatch(&(*e).pos, expected, (*e).type);
     }
 }
 
-func check_expr_type_int(e: **Expr) {
+func check_expr_type_int(e: *mut *mut Expr) {
     if (!try_coerce_expr_to_int(*e, e)) {
         die_at(&(*e).pos, "Integer expression expected");
     }
 }
 
-func check_expr_type_bool(e: **Expr) {
+func check_expr_type_bool(e: *mut *mut Expr) {
     check_expr_type(e, mk_bool_type());
 }
 
-func unify_expr_types_with_coersion(e1: **Expr, e2: **Expr) {
+func unify_expr_types_with_coersion(e1: *mut *mut Expr, e2: *mut *mut Expr) {
     try_coerce_expr(*e2, (*e1).type, e2);
     try_coerce_expr(*e1, (*e2).type, e1);
     check_expr_type(e2, (*e1).type);
 }
 
-func check_pattern_type(p: *Pattern, expected: *Type) {
+func check_pattern_type(p: *mut Pattern, expected: *Type) {
     if (!type_eq(p.type, expected)) {
         report_type_mismatch(&p.pos, expected, p.type);
     }
 }
 
-func check_pattern_type_int(p: *Pattern) {
+func check_pattern_type_int(p: *mut Pattern) {
     if (p.type.kind != Type_Int) {
         die_at(&(*p).pos, "Integer pattern expected");
     }
@@ -444,7 +441,7 @@ func check_pattern_type_int(p: *Pattern) {
 //==============================================================================
 //== Types
 
-func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
+func eval_type(ctx: *mut ElabCtx, type_expr: *mut TypeExpr): *Type {
     match (type_expr.kind) {
         case TypeExpr_Named: {
             var name = (type_expr as *NamedTypeExpr).name;
@@ -467,10 +464,10 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
                 }
                 match (sym.kind) {
                     case Sym_Enum: {
-                        return mk_enum_type(sym as *EnumSym);
+                        return mk_enum_type(sym as *mut EnumSym);
                     }
                     case Sym_Record: {
-                        return mk_record_type(sym as *RecordSym);
+                        return mk_record_type(sym as *mut RecordSym);
                     }
                     case _: {
                         die_at(&type_expr.pos, "Expected a type");
@@ -479,12 +476,12 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
             }
         }
         case TypeExpr_Ptr: {
-            var type_expr = type_expr as *PtrTypeExpr;
+            var type_expr = type_expr as *mut PtrTypeExpr;
             var pointee = eval_type(ctx, type_expr.pointee);
             return mk_ptr_type(pointee, is_mut: type_expr.is_mut);
         }
         case TypeExpr_Arr: {
-            var type_expr = type_expr as *ArrTypeExpr;
+            var type_expr = type_expr as *mut ArrTypeExpr;
             var elem = eval_type(ctx, type_expr.elem);
             var size = const_eval_int64(ctx, type_expr.size);
             return mk_array_type(elem, size);
@@ -506,7 +503,7 @@ func eval_type(ctx: *ElabCtx, type_expr: *TypeExpr): *Type {
     }
 }
 
-func const_eval_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type): *ConstValue {
+func const_eval_infer(ctx: *mut ElabCtx, expr: *mut Expr, type_hint: *Type): *ConstValue {
     elab_expr_infer(ctx, expr, type_hint);
     if (!expr.const_value) {
         die_at(&expr.pos, "Expected a constant expression");
@@ -514,7 +511,7 @@ func const_eval_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type): *ConstValue
     return expr.const_value;
 }
 
-func const_eval_expect(ctx: *ElabCtx, expr: *Expr, expected: *Type): *ConstValue {
+func const_eval_expect(ctx: *mut ElabCtx, expr: *mut Expr, expected: *Type): *ConstValue {
     elab_expr_expect(ctx, &expr, expected);
     if (!expr.const_value) {
         die_at(&expr.pos, "Expected a constant expression");
@@ -522,18 +519,18 @@ func const_eval_expect(ctx: *ElabCtx, expr: *Expr, expected: *Type): *ConstValue
     return expr.const_value;
 }
 
-func const_eval_int64(ctx: *ElabCtx, expr: *Expr): Int {
+func const_eval_int64(ctx: *mut ElabCtx, expr: *mut Expr): Int {
     return (const_eval_expect(ctx, expr, mk_int_type(8)) as *IntConstValue).int;
 }
 
-func const_eval_int32(ctx: *ElabCtx, expr: *Expr): Int32 {
+func const_eval_int32(ctx: *mut ElabCtx, expr: *mut Expr): Int32 {
     return (const_eval_expect(ctx, expr, mk_int_type(4)) as *IntConstValue).int as Int32;
 }
 
 //==============================================================================
 //== Literals
 
-func elab_literal(ctx: *ElabCtx, literal: *Literal, type_hint: *Type): *ConstValue {
+func elab_literal(ctx: *mut ElabCtx, literal: *Literal, type_hint: *Type): *ConstValue {
     match (literal.kind) {
         case Literal_Null: {
             var type = type_hint && type_hint.kind == Type_Ptr ? type_hint : mk_ptr_type(mk_void_type(), is_mut: true);
@@ -565,23 +562,23 @@ func elab_literal(ctx: *ElabCtx, literal: *Literal, type_hint: *Type): *ConstVal
 //==============================================================================
 //== Patterns
 
-func elab_pattern_expect(ctx: *ElabCtx, pattern: *Pattern, expected: *Type) {
+func elab_pattern_expect(ctx: *mut ElabCtx, pattern: *mut Pattern, expected: *Type) {
     elab_pattern_infer(ctx, pattern, expected);
     check_pattern_type(pattern, expected);
 }
 
-func elab_grouped_pattern(ctx: *ElabCtx, pattern: *GroupedPattern, type_hint: *Type) {
+func elab_grouped_pattern(ctx: *mut ElabCtx, pattern: *mut GroupedPattern, type_hint: *Type) {
     elab_pattern_infer(ctx, pattern.pattern, type_hint);
     pattern.type = pattern.pattern.type;
 }
 
-func elab_literal_pattern(ctx: *ElabCtx, pattern: *LiteralPattern, type_hint: *Type) {
+func elab_literal_pattern(ctx: *mut ElabCtx, pattern: *mut LiteralPattern, type_hint: *Type) {
     var literal = pattern.literal;
     pattern.value = elab_literal(ctx, literal, type_hint);
     pattern.type = pattern.value.type;
 }
 
-func elab_name_pattern(ctx: *ElabCtx, pattern: *NamePattern, type_hint: *Type) {
+func elab_name_pattern(ctx: *mut ElabCtx, pattern: *mut NamePattern, type_hint: *Type) {
     var name = pattern.name;
 
     var sym = lookup(ctx, name);
@@ -592,15 +589,15 @@ func elab_name_pattern(ctx: *ElabCtx, pattern: *NamePattern, type_hint: *Type) {
         die_at(&pattern.pos, "Expected a constant");
     }
 
-    pattern.sym = sym as *ConstSym;
+    pattern.sym = sym as *mut ConstSym;
     pattern.type = pattern.sym.value.type;
 }
 
-func elab_wildcard_pattern(ctx: *ElabCtx, pattern: *WildcardPattern, type_hint: *Type) {
+func elab_wildcard_pattern(ctx: *mut ElabCtx, pattern: *mut WildcardPattern, type_hint: *Type) {
     pattern.type = type_hint;
 }
 
-func elab_var_pattern(ctx: *ElabCtx, pattern: *VarPattern, type_hint: *Type) {
+func elab_var_pattern(ctx: *mut ElabCtx, pattern: *mut VarPattern, type_hint: *Type) {
     var name = pattern.name;
 
     elab_pattern_infer(ctx, pattern.pattern, type_hint);
@@ -615,7 +612,7 @@ func elab_var_pattern(ctx: *ElabCtx, pattern: *VarPattern, type_hint: *Type) {
     pattern.type = sym.type;
 }
 
-func elab_range_pattern(ctx: *ElabCtx, pattern: *RangePattern, type_hint: *Type) {
+func elab_range_pattern(ctx: *mut ElabCtx, pattern: *mut RangePattern, type_hint: *Type) {
     if (!pattern.lower && !pattern.upper) {
         die_at(&pattern.pos, "Range pattern must have at least one bound");
     }
@@ -639,16 +636,16 @@ func elab_range_pattern(ctx: *ElabCtx, pattern: *RangePattern, type_hint: *Type)
     pattern.type = type;
 }
 
-func elab_or_pattern(ctx: *ElabCtx, pattern: *OrPattern, type_hint: *Type) {
+func elab_or_pattern(ctx: *mut ElabCtx, pattern: *mut OrPattern, type_hint: *Type) {
     ctx.or_pattern_depth += 1;
 
     var patterns = pattern.patterns;
 
-    var first_pattern = list_get(patterns, 0) as *Pattern;
+    var first_pattern = list_get(patterns, 0) as *mut Pattern;
     elab_pattern_infer(ctx, first_pattern, type_hint);
 
     for (var i = 1; i < list_len(patterns); i += 1) {
-        var next_pattern = list_get(patterns, i) as *Pattern;
+        var next_pattern = list_get(patterns, i) as *mut Pattern;
         elab_pattern_expect(ctx, next_pattern, first_pattern.type);
     }
 
@@ -657,28 +654,28 @@ func elab_or_pattern(ctx: *ElabCtx, pattern: *OrPattern, type_hint: *Type) {
     ctx.or_pattern_depth -= 1;
 }
 
-func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type) {
+func elab_pattern_infer(ctx: *mut ElabCtx, pattern: *mut Pattern, type_hint: *Type) {
     match (pattern.kind) {
         case Pattern_Grouped: {
-            elab_grouped_pattern(ctx, pattern as *GroupedPattern, type_hint);
+            elab_grouped_pattern(ctx, pattern as *mut GroupedPattern, type_hint);
         }
         case Pattern_Literal: {
-            elab_literal_pattern(ctx, pattern as *LiteralPattern, type_hint);
+            elab_literal_pattern(ctx, pattern as *mut LiteralPattern, type_hint);
         }
         case Pattern_Name: {
-            elab_name_pattern(ctx, pattern as *NamePattern, type_hint);
+            elab_name_pattern(ctx, pattern as *mut NamePattern, type_hint);
         }
         case Pattern_Wildcard: {
-            elab_wildcard_pattern(ctx, pattern as *WildcardPattern, type_hint);
+            elab_wildcard_pattern(ctx, pattern as *mut WildcardPattern, type_hint);
         }
         case Pattern_Var: {
-            elab_var_pattern(ctx, pattern as *VarPattern, type_hint);
+            elab_var_pattern(ctx, pattern as *mut VarPattern, type_hint);
         }
         case Pattern_Range: {
-            elab_range_pattern(ctx, pattern as *RangePattern, type_hint);
+            elab_range_pattern(ctx, pattern as *mut RangePattern, type_hint);
         }
         case Pattern_Or: {
-            elab_or_pattern(ctx, pattern as *OrPattern, type_hint);
+            elab_or_pattern(ctx, pattern as *mut OrPattern, type_hint);
         }
         case _: {
             unreachable("elab_pattern_infer");
@@ -690,21 +687,21 @@ func elab_pattern_infer(ctx: *ElabCtx, pattern: *Pattern, type_hint: *Type) {
 //==============================================================================
 //== Expressions
 
-func elab_expr_expect(ctx: *ElabCtx, expr: **Expr, expected: *Type) {
+func elab_expr_expect(ctx: *mut ElabCtx, expr: *mut *mut Expr, expected: *Type) {
     elab_expr_infer(ctx, *expr, type_hint: expected);
     check_expr_type(expr, expected);
 }
 
-func elab_expr_bool(ctx: *ElabCtx, expr: **Expr) {
+func elab_expr_bool(ctx: *mut ElabCtx, expr: *mut *mut Expr) {
     elab_expr_expect(ctx, expr, mk_bool_type());
 }
 
-func elab_expr_int(ctx: *ElabCtx, expr: **Expr, type_hint: *Type) {
+func elab_expr_int(ctx: *mut ElabCtx, expr: *mut *mut Expr, type_hint: *Type) {
     elab_expr_infer(ctx, *expr, type_hint);
     check_expr_type_int(expr);
 }
 
-func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
+func elab_ident_expr(ctx: *mut ElabCtx, expr: *mut IdentExpr) {
     var name = expr.name;
 
     var sym = lookup(ctx, name);
@@ -716,13 +713,13 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
     var const_val: *ConstValue = null;
     match (sym.kind) {
         case Sym_Local: {
-            type = (sym as *LocalSym).type;
+            type = (sym as *mut LocalSym).type;
         }
         case Sym_Global: {
-            type = (sym as *GlobalSym).type;
+            type = (sym as *mut GlobalSym).type;
         }
         case Sym_Const: {
-            var sym = sym as *ConstSym;
+            var sym = sym as *mut ConstSym;
             type = sym.value.type;
             const_val = sym.value;
         }
@@ -736,13 +733,13 @@ func elab_ident_expr(ctx: *ElabCtx, expr: *IdentExpr) {
     expr.const_value = const_val;
 }
 
-func elab_literal_expr(ctx: *ElabCtx, expr: *LiteralExpr, type_hint: *Type) {
+func elab_literal_expr(ctx: *mut ElabCtx, expr: *mut LiteralExpr, type_hint: *Type) {
     var literal = expr.literal;
     expr.const_value = elab_literal(ctx, literal, type_hint);
     expr.type = expr.const_value.type;
 }
 
-func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
+func elab_array_expr(ctx: *mut ElabCtx, expr: *mut ArrayExpr, type_hint: *Type) {
     var elem_type_hint: *Type = null;
     if (type_hint && type_hint.kind == Type_Arr) {
         elem_type_hint = (type_hint as *ArrType).elem;
@@ -754,12 +751,12 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
     var elem_count = list_len(elems);
 
     for (var i = 0; i < elem_count; i += 1) {
-        var elem = list_get(elems, i) as *Expr;
+        var elem = list_get(elems, i) as *mut Expr;
         elab_expr_infer(ctx, elem, elem_type_hint);
         if (i == 0) {
             elem_type = elem.type;
         } else {
-            var prev_expr = list_get(elems, i - 1) as *Expr;
+            var prev_expr = list_get(elems, i - 1) as *mut Expr;
             check_expr_type(&elem, elem_type);
             list_set(elems, i, elem);
             list_set(elems, i - 1, prev_expr);
@@ -777,30 +774,30 @@ func elab_array_expr(ctx: *ElabCtx, expr: *ArrayExpr, type_hint: *Type) {
     expr.type = mk_array_type(elem_type, elem_count);
 }
 
-func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
+func elab_call_expr(ctx: *mut ElabCtx, expr: *mut CallExpr) {
     var callee = expr.callee;
     var args = expr.args;
 
     if (callee.kind != Expr_Ident) {
         die_at(&callee.pos, "Expected function name");
     }
-    var sym = lookup(ctx, (callee as *IdentExpr).name);
+    var sym = lookup(ctx, (callee as *mut IdentExpr).name);
     if (!sym) {
         die_at(&callee.pos, "Unknown function");
     }
     if (sym.kind != Sym_Func) {
         die_at(&callee.pos, "Expected a function");
     }
-    var sym = sym as *FuncSym;
+    var sym = sym as *mut FuncSym;
 
     var param_count = list_len(sym.params);
     var arg_count = list_len(args);
 
-    var is_initialized = calloc(param_count, sizeof(*Bool)) as *Bool;
+    var is_initialized = calloc(param_count, sizeof(*Bool)) as *mut Bool;
     var seen_named_arg = false;
 
     for (var i = 0; i < arg_count; i += 1) {
-        var arg = list_get(args, i) as *CallArg;
+        var arg = list_get(args, i) as *mut CallArg;
         if (arg.label) {
             var param_index = find_param_by_name(sym, arg.label);
             if (param_index == -1) {
@@ -808,7 +805,7 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
             } else if (is_initialized[param_index]) {
                 die_at(&arg.expr.pos, "Parameter '%s' is already initialized", arg.label);
             }
-            var param = list_get(sym.params, param_index) as *FuncParam;
+            var param = list_get(sym.params, param_index) as *mut FuncParam;
             elab_expr_expect(ctx, &arg.expr, param.type);
 
             is_initialized[param_index] = true;
@@ -826,7 +823,7 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
             }
             arg.positional_index = i;
         } else {
-            var param = list_get(sym.params, i) as *FuncParam;
+            var param = list_get(sym.params, i) as *mut FuncParam;
             elab_expr_expect(ctx, &arg.expr, param.type);
 
             is_initialized[i] = true;
@@ -835,9 +832,9 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     }
 
     for (var i = 0; i < param_count; i += 1) {
-        var param = list_get(sym.params, i) as *FuncParam;
+        var param = list_get(sym.params, i) as *mut FuncParam;
         if (!is_initialized[i] && !param.default_value) {
-            var param = list_get(sym.params, i) as *FuncParam;
+            var param = list_get(sym.params, i) as *mut FuncParam;
             die_at(&expr.pos, "Parameter '%s' is not initialized", param.name);
         }
     }
@@ -846,7 +843,7 @@ func elab_call_expr(ctx: *ElabCtx, expr: *CallExpr) {
     expr.type = sym.return_type;
 }
 
-func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
+func elab_index_expr(ctx: *mut ElabCtx, expr: *mut IndexExpr) {
     var indexee = expr.indexee;
     var index = expr.index;
 
@@ -867,7 +864,7 @@ func elab_index_expr(ctx: *ElabCtx, expr: *IndexExpr) {
     expr.index = index;
 }
 
-func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
+func elab_member_expr(ctx: *mut ElabCtx, expr: *mut MemberExpr) {
     var left = expr.left;
     var field_name = expr.name;
 
@@ -888,12 +885,12 @@ func elab_member_expr(ctx: *ElabCtx, expr: *MemberExpr) {
         die_at(&expr.pos, "Unknown field");
     }
 
-    var field = list_get(record_sym.fields, field_index) as *RecordField;
+    var field = list_get(record_sym.fields, field_index) as *mut RecordField;
     expr.resolved_field = field;
     expr.type = field.type;
 }
 
-func elab_sizeof_expr(ctx: *ElabCtx, expr: *SizeofExpr) {
+func elab_sizeof_expr(ctx: *mut ElabCtx, expr: *mut SizeofExpr) {
     var type = eval_type(ctx, expr.type_expr);
     var size = type_size(type);
     if (size == -1) {
@@ -904,7 +901,7 @@ func elab_sizeof_expr(ctx: *ElabCtx, expr: *SizeofExpr) {
     expr.const_value = mk_int_const_value(size, expr.type);
 }
 
-func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
+func elab_unary_expr(ctx: *mut ElabCtx, expr: *mut UnaryExpr, type_hint: *Type) {
     var op = expr.op;
     var right = expr.right;
 
@@ -947,7 +944,7 @@ func elab_unary_expr(ctx: *ElabCtx, expr: *UnaryExpr, type_hint: *Type) {
     }
 }
 
-func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
+func elab_binary_expr(ctx: *mut ElabCtx, expr: *mut BinaryExpr, type_hint: *Type) {
     var op = expr.op;
     var left = expr.left;
     var right = expr.right;
@@ -1012,7 +1009,7 @@ func elab_binary_expr(ctx: *ElabCtx, expr: *BinaryExpr, type_hint: *Type) {
     }
 }
 
-func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
+func elab_ternary_expr(ctx: *mut ElabCtx, expr: *mut TernaryExpr, type_hint: *Type) {
     var cond = expr.cond;
     var then_expr = expr.then_expr;
     var else_expr = expr.else_expr;
@@ -1032,7 +1029,7 @@ func elab_ternary_expr(ctx: *ElabCtx, expr: *TernaryExpr, type_hint: *Type) {
 }
 
 // `x is <pattern>`
-func elab_is_expr(ctx: *ElabCtx, expr: *IsExpr) {
+func elab_is_expr(ctx: *mut ElabCtx, expr: *mut IsExpr) {
     var left = expr.left;
     var pattern = expr.pattern;
 
@@ -1042,7 +1039,7 @@ func elab_is_expr(ctx: *ElabCtx, expr: *IsExpr) {
     expr.type = mk_bool_type();
 }
 
-func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
+func elab_cast_expr(ctx: *mut ElabCtx, expr: *mut CastExpr) {
     var subexpr = expr.expr;
     elab_expr_infer(ctx, subexpr, type_hint: null);
 
@@ -1060,7 +1057,7 @@ func elab_cast_expr(ctx: *ElabCtx, expr: *CastExpr) {
     }
 }
 
-func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
+func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type) {
     var sym = lookup(ctx, expr.name);
     if (!sym) {
         die_at(&expr.pos, "Unknown record type");
@@ -1068,7 +1065,7 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     if (sym.kind != Sym_Record) {
         die_at(&expr.pos, "Expected a record type");
     }
-    var sym = sym as *RecordSym;
+    var sym = sym as *mut RecordSym;
     if (!sym.is_defined) {
         die_at(&expr.pos, "Record has incomplete type");
     }
@@ -1079,16 +1076,16 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     var initializers = expr.fields;
     var n_initializers = list_len(initializers);
 
-    var is_initialized = calloc(n_fields, sizeof(*Bool)) as *Bool;
+    var is_initialized = calloc(n_fields, sizeof(*Bool)) as *mut Bool;
 
     for (var i = 0; i < n_initializers; i += 1) {
-        var initializer = list_get(initializers, i) as *FieldInitializer;
+        var initializer = list_get(initializers, i) as *mut FieldInitializer;
         var field_name = initializer.name;
         var field_index = find_record_field_by_name(sym, field_name);
         if (field_index == -1) {
             die_at(&initializer.pos, "Unknown field");
         }
-        var field = list_get(fields, field_index) as *RecordField;
+        var field = list_get(fields, field_index) as *mut RecordField;
 
         if (is_initialized[field_index]) {
             die_at(&initializer.pos, "Field is already initialized");
@@ -1098,14 +1095,14 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     }
 
     for (var i = 0; i < n_fields; i += 1) {
-        var field = list_get(fields, i) as *RecordField;
+        var field = list_get(fields, i) as *mut RecordField;
         is_initialized[i] = is_initialized[i] || field.default_value;
     }
 
     if (!sym.is_union) {
         for (var i = 0; i < n_fields; i += 1) {
             if (!is_initialized[i]) {
-                var field = list_get(fields, i) as *RecordField;
+                var field = list_get(fields, i) as *mut RecordField;
                 die_at(&expr.pos, "Field '%s' is not initialized.", field.name);
             }
         }
@@ -1122,46 +1119,46 @@ func elab_record_expr(ctx: *ElabCtx, expr: *RecordExpr, type_hint: *Type) {
     expr.type = mk_record_type(sym);
 }
 
-func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
+func elab_expr_infer(ctx: *mut ElabCtx, expr: *mut Expr, type_hint: *Type) {
     match (expr.kind) {
         case Expr_Ident: {
-            elab_ident_expr(ctx, expr as *IdentExpr);
+            elab_ident_expr(ctx, expr as *mut IdentExpr);
         }
         case Expr_Literal: {
-            elab_literal_expr(ctx, expr as *LiteralExpr, type_hint);
+            elab_literal_expr(ctx, expr as *mut LiteralExpr, type_hint);
         }
         case Expr_Array: {
-            elab_array_expr(ctx, expr as *ArrayExpr, type_hint);
+            elab_array_expr(ctx, expr as *mut ArrayExpr, type_hint);
         }
         case Expr_Call: {
-            elab_call_expr(ctx, expr as *CallExpr);
+            elab_call_expr(ctx, expr as *mut CallExpr);
         }
         case Expr_Index: {
-            elab_index_expr(ctx, expr as *IndexExpr);
+            elab_index_expr(ctx, expr as *mut IndexExpr);
         }
         case Expr_Member: {
-            elab_member_expr(ctx, expr as *MemberExpr);
+            elab_member_expr(ctx, expr as *mut MemberExpr);
         }
         case Expr_Sizeof: {
-            elab_sizeof_expr(ctx, expr as *SizeofExpr);
+            elab_sizeof_expr(ctx, expr as *mut SizeofExpr);
         }
         case Expr_Unary: {
-            elab_unary_expr(ctx, expr as *UnaryExpr, type_hint);
+            elab_unary_expr(ctx, expr as *mut UnaryExpr, type_hint);
         }
         case Expr_Binary: {
-            elab_binary_expr(ctx, expr as *BinaryExpr, type_hint);
+            elab_binary_expr(ctx, expr as *mut BinaryExpr, type_hint);
         }
         case Expr_Ternary: {
-            elab_ternary_expr(ctx, expr as *TernaryExpr, type_hint);
+            elab_ternary_expr(ctx, expr as *mut TernaryExpr, type_hint);
         }
         case Expr_Is: {
-            elab_is_expr(ctx, expr as *IsExpr);
+            elab_is_expr(ctx, expr as *mut IsExpr);
         }
         case Expr_Cast: {
-            elab_cast_expr(ctx, expr as *CastExpr);
+            elab_cast_expr(ctx, expr as *mut CastExpr);
         }
         case Expr_Record: {
-            elab_record_expr(ctx, expr as *RecordExpr, type_hint);
+            elab_record_expr(ctx, expr as *mut RecordExpr, type_hint);
         }
         case _: {
             unreachable("elab_expr_infer");
@@ -1173,28 +1170,28 @@ func elab_expr_infer(ctx: *ElabCtx, expr: *Expr, type_hint: *Type) {
 //==============================================================================
 //== Statements
 
-func elab_stmt_with_scope(ctx: *ElabCtx, stmt: *Stmt) {
+func elab_stmt_with_scope(ctx: *mut ElabCtx, stmt: *mut Stmt) {
     enter_scope(ctx);
     elab_stmt(ctx, stmt);
     exit_scope(ctx);
 }
 
-func elab_block_stmt(ctx: *ElabCtx, stmt: *BlockStmt) {
+func elab_block_stmt(ctx: *mut ElabCtx, stmt: *mut BlockStmt) {
     enter_scope(ctx);
     for (var i = 0; i < list_len(stmt.stmts); i += 1) {
-        var stmt = list_get(stmt.stmts, i) as *Stmt;
+        var stmt = list_get(stmt.stmts, i) as *mut Stmt;
         elab_stmt(ctx, stmt);
     }
     exit_scope(ctx);
 }
 
-func elab_const_stmt(ctx: *ElabCtx, stmt: *ConstStmt) {
+func elab_const_stmt(ctx: *mut ElabCtx, stmt: *mut ConstStmt) {
     var decl = stmt.decl;
     seed_const_decl(ctx, decl);
     elab_const_decl(ctx, decl);
 }
 
-func elab_local_stmt(ctx: *ElabCtx, stmt: *LocalStmt) {
+func elab_local_stmt(ctx: *mut ElabCtx, stmt: *mut LocalStmt) {
     var name = stmt.name;
     var typeExpr = stmt.type;
     var init = stmt.init;
@@ -1222,7 +1219,7 @@ func elab_local_stmt(ctx: *ElabCtx, stmt: *LocalStmt) {
     stmt.sym = sym;
 }
 
-func elab_if_stmt(ctx: *ElabCtx, stmt: *IfStmt) {
+func elab_if_stmt(ctx: *mut ElabCtx, stmt: *mut IfStmt) {
     var cond = stmt.cond;
     var then_stmt = stmt.then_stmt;
     var else_stmt = stmt.else_stmt;
@@ -1236,7 +1233,7 @@ func elab_if_stmt(ctx: *ElabCtx, stmt: *IfStmt) {
     }
 }
 
-func elab_match_case(ctx: *ElabCtx, match_case: *MatchCase, scrutinee_type: *Type) {
+func elab_match_case(ctx: *mut ElabCtx, match_case: *mut MatchCase, scrutinee_type: *Type) {
     var pattern = match_case.pattern;
     var guard = match_case.guard;
     var body = match_case.body;
@@ -1252,19 +1249,19 @@ func elab_match_case(ctx: *ElabCtx, match_case: *MatchCase, scrutinee_type: *Typ
     match_case.guard = guard;
 }
 
-func elab_match_stmt(ctx: *ElabCtx, stmt: *MatchStmt) {
+func elab_match_stmt(ctx: *mut ElabCtx, stmt: *mut MatchStmt) {
     var scrutinee = stmt.scrutinee;
     var match_cases = stmt.cases;
 
     elab_expr_infer(ctx, scrutinee, type_hint: null);
 
     for (var i = 0; i < list_len(match_cases); i += 1) {
-        var match_case = list_get(match_cases, i) as *MatchCase;
+        var match_case = list_get(match_cases, i) as *mut MatchCase;
         elab_match_case(ctx, match_case, scrutinee.type);
     }
 }
 
-func elab_while_stmt(ctx: *ElabCtx, stmt: *WhileStmt) {
+func elab_while_stmt(ctx: *mut ElabCtx, stmt: *mut WhileStmt) {
     var cond = stmt.cond;
     var body = stmt.body;
 
@@ -1276,7 +1273,7 @@ func elab_while_stmt(ctx: *ElabCtx, stmt: *WhileStmt) {
     ctx.loop_depth -= 1;
 }
 
-func elab_for_stmt(ctx: *ElabCtx, stmt: *ForStmt) {
+func elab_for_stmt(ctx: *mut ElabCtx, stmt: *mut ForStmt) {
     var init = stmt.init;
     var cond = stmt.cond;
     var step = stmt.step;
@@ -1302,7 +1299,7 @@ func elab_for_stmt(ctx: *ElabCtx, stmt: *ForStmt) {
     exit_scope(ctx);
 }
 
-func elab_return_stmt(ctx: *ElabCtx, stmt: *ReturnStmt) {
+func elab_return_stmt(ctx: *mut ElabCtx, stmt: *mut ReturnStmt) {
     var return_expr = stmt.expr;
 
     var return_type = ctx.current_func.return_type;
@@ -1314,57 +1311,57 @@ func elab_return_stmt(ctx: *ElabCtx, stmt: *ReturnStmt) {
     }
 }
 
-func elab_break_stmt(ctx: *ElabCtx, stmt: *BreakStmt) {
+func elab_break_stmt(ctx: *mut ElabCtx, stmt: *mut BreakStmt) {
     if (!ctx.loop_depth) {
         die_at(&stmt.pos, "Break statement outside of loop");
     }
 }
 
-func elab_continue_stmt(ctx: *ElabCtx, stmt: *ContinueStmt) {
+func elab_continue_stmt(ctx: *mut ElabCtx, stmt: *mut ContinueStmt) {
     if (!ctx.loop_depth) {
         die_at(&stmt.pos, "Continue statement outside of loop");
     }
 }
 
-func elab_expr_stmt(ctx: *ElabCtx, stmt: *ExprStmt) {
+func elab_expr_stmt(ctx: *mut ElabCtx, stmt: *mut ExprStmt) {
     var expr = stmt.expr;
     elab_expr_infer(ctx, expr, type_hint: null);
 }
 
-func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
+func elab_stmt(ctx: *mut ElabCtx, stmt: *mut Stmt) {
     match (stmt.kind) {
         case Stmt_Block: {
-            elab_block_stmt(ctx, stmt as *BlockStmt);
+            elab_block_stmt(ctx, stmt as *mut BlockStmt);
         }
         case Stmt_Const: {
-            elab_const_stmt(ctx, stmt as *ConstStmt);
+            elab_const_stmt(ctx, stmt as *mut ConstStmt);
         }
         case Stmt_Local: {
-            elab_local_stmt(ctx, stmt as *LocalStmt);
+            elab_local_stmt(ctx, stmt as *mut LocalStmt);
         }
         case Stmt_If: {
-            elab_if_stmt(ctx, stmt as *IfStmt);
+            elab_if_stmt(ctx, stmt as *mut IfStmt);
         }
         case Stmt_Match: {
-            elab_match_stmt(ctx, stmt as *MatchStmt);
+            elab_match_stmt(ctx, stmt as *mut MatchStmt);
         }
         case Stmt_While: {
-            elab_while_stmt(ctx, stmt as *WhileStmt);
+            elab_while_stmt(ctx, stmt as *mut WhileStmt);
         }
         case Stmt_For: {
-            elab_for_stmt(ctx, stmt as *ForStmt);
+            elab_for_stmt(ctx, stmt as *mut ForStmt);
         }
         case Stmt_Return: {
-            elab_return_stmt(ctx, stmt as *ReturnStmt);
+            elab_return_stmt(ctx, stmt as *mut ReturnStmt);
         }
         case Stmt_Break: {
-            elab_break_stmt(ctx, stmt as *BreakStmt);
+            elab_break_stmt(ctx, stmt as *mut BreakStmt);
         }
         case Stmt_Continue: {
-            elab_continue_stmt(ctx, stmt as *ContinueStmt);
+            elab_continue_stmt(ctx, stmt as *mut ContinueStmt);
         }
         case Stmt_Expr: {
-            elab_expr_stmt(ctx, stmt as *ExprStmt);
+            elab_expr_stmt(ctx, stmt as *mut ExprStmt);
         }
         case _: {
             unreachable("elab_stmt");
@@ -1375,11 +1372,11 @@ func elab_stmt(ctx: *ElabCtx, stmt: *Stmt) {
 //==============================================================================
 //== Top-level declarations
 
-func seed_enum_member(ctx: *ElabCtx, decl: *EnumMember) {
+func seed_enum_member(ctx: *mut ElabCtx, decl: *mut EnumMember) {
     decl.sym = declare_const(ctx, &decl.pos, decl.name);
 }
 
-func elab_enum_member(ctx: *ElabCtx, decl: *EnumMember, type: *Type, next_value: Int32): Int32 {
+func elab_enum_member(ctx: *mut ElabCtx, decl: *mut EnumMember, type: *Type, next_value: Int32): Int32 {
     var value = next_value;
     if (decl.value) {
         value = const_eval_int32(ctx, decl.value);
@@ -1390,18 +1387,18 @@ func elab_enum_member(ctx: *ElabCtx, decl: *EnumMember, type: *Type, next_value:
     return value;
 }
 
-func seed_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
+func seed_enum_decl(ctx: *mut ElabCtx, decl: *mut EnumDecl) {
     if (decl.name) {
         decl.sym = declare_enum(ctx, &decl.pos, decl.name);
     }
     var member_decls = decl.members;
     for (var i = 0; i < list_len(member_decls); i += 1) {
-        var member_decl = list_get(member_decls, i) as *EnumMember;
+        var member_decl = list_get(member_decls, i) as *mut EnumMember;
         seed_enum_member(ctx, member_decl);
     }
 }
 
-func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
+func elab_enum_decl(ctx: *mut ElabCtx, decl: *mut EnumDecl) {
     if (decl.name) {
         define_enum(ctx, &decl.pos, decl.sym, size: 4);
     }
@@ -1416,13 +1413,13 @@ func elab_enum_decl(ctx: *ElabCtx, decl: *EnumDecl) {
     var next_value: Int32 = 0;
     var member_decls = decl.members;
     for (var i = 0; i < list_len(member_decls); i += 1) {
-        var member_decl = list_get(member_decls, i) as *EnumMember;
+        var member_decl = list_get(member_decls, i) as *mut EnumMember;
         var value = elab_enum_member(ctx, member_decl, type, next_value);
         next_value = value + 1;
     }
 }
 
-func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
+func add_field_to_record(ctx: *mut ElabCtx, sym: *mut RecordSym, field_decl: *mut RecordFieldDecl) {
     var field_name = field_decl.name;
     var field_type = eval_type(ctx, field_decl.type);
 
@@ -1447,7 +1444,7 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
         type: field_type,
         default_value,
         offset: field_offset,
-    }) as *RecordField;
+    }) as *mut RecordField;
 
     list_push(sym.fields, field);
     if (sym.is_union) {
@@ -1458,13 +1455,13 @@ func add_field_to_record(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFiel
     sym.align = int_max(sym.align, field_align);
 }
 
-func add_default_value_to_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *RecordFieldDecl) {
+func add_default_value_to_field(ctx: *mut ElabCtx, sym: *mut RecordSym, field_decl: *mut RecordFieldDecl) {
     var field_index = find_record_field_by_name(sym, field_decl.name);
     if (field_index == -1) {
         die_at(&field_decl.pos, "No existing field to add default value to");
     }
 
-    var field = list_get(sym.fields, field_index) as *RecordField;
+    var field = list_get(sym.fields, field_index) as *mut RecordField;
     if (field.default_value) {
         die_at(&field_decl.pos, "Field already has a default value");
     }
@@ -1472,7 +1469,7 @@ func add_default_value_to_field(ctx: *ElabCtx, sym: *RecordSym, field_decl: *Rec
     field.default_value = const_eval_expect(ctx, field_decl.default_value, field.type);
 }
 
-func elab_record_field_decl(ctx: *ElabCtx, field_decl: *RecordFieldDecl, sym: *RecordSym) {
+func elab_record_field_decl(ctx: *mut ElabCtx, field_decl: *mut RecordFieldDecl, sym: *mut RecordSym) {
     if (!field_decl.type && field_decl.default_value) {
         add_default_value_to_field(ctx, sym, field_decl);
     } else if (field_decl.type) {
@@ -1482,7 +1479,7 @@ func elab_record_field_decl(ctx: *ElabCtx, field_decl: *RecordFieldDecl, sym: *R
     }
 }
 
-func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
+func elab_record_base(ctx: *mut ElabCtx, base: *mut TypeExpr, record_sym: *mut RecordSym) {
     var base_type = eval_type(ctx, base);
     if (base_type.kind != Type_Record) {
         die_at(&base.pos, "Expected a record type");
@@ -1497,8 +1494,8 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
     var base_fields = baseSym.fields;
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
-        var field = list_get(base_fields, i) as *RecordField;
-        var copy = box(sizeof(RecordField), field) as *RecordField;
+        var field = list_get(base_fields, i) as *mut RecordField;
+        var copy = box(sizeof(RecordField), field) as *mut RecordField;
         list_push(fields, copy);
     }
 
@@ -1513,11 +1510,11 @@ func elab_record_base(ctx: *ElabCtx, base: *TypeExpr, record_sym: *RecordSym) {
     };
 }
 
-func seed_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
+func seed_record_decl(ctx: *mut ElabCtx, decl: *mut RecordDecl) {
     decl.sym = declare_record(ctx, &decl.pos, decl.is_union, decl.name);
 }
 
-func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
+func elab_record_decl(ctx: *mut ElabCtx, decl: *mut RecordDecl) {
     var sym = decl.sym;
     var base = decl.base;
 
@@ -1530,7 +1527,7 @@ func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
             sym.fields = list_new();
         }
         for (var i = 0; i < list_len(decl.fields); i += 1) {
-            var field_decl = list_get(decl.fields, i) as *RecordFieldDecl;
+            var field_decl = list_get(decl.fields, i) as *mut RecordFieldDecl;
             elab_record_field_decl(ctx, field_decl, sym);
         }
         if (list_len(sym.fields) == 0) {
@@ -1543,7 +1540,7 @@ func elab_record_decl(ctx: *ElabCtx, decl: *RecordDecl) {
     }
 }
 
-func string_list_contains(list: *List, value: *Char): Bool {
+func string_list_contains(list: *mut List, value: *Char): Bool {
     for (var i = 0; i < list_len(list); i += 1) {
         var item = list_get(list, i) as *Char;
         if (str_eq(item, value)) {
@@ -1553,10 +1550,10 @@ func string_list_contains(list: *List, value: *Char): Bool {
     return false;
 }
 
-func ensure_unique_params(ctx: *ElabCtx, decl: *FuncDecl) {
+func ensure_unique_params(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
     var seen = list_new();
     for (var i = 0; i < list_len(decl.params); i += 1) {
-        var param_decl = list_get(decl.params, i) as *FuncParamDecl;
+        var param_decl = list_get(decl.params, i) as *mut FuncParamDecl;
         if (string_list_contains(seen, param_decl.name)) {
             die_at(&param_decl.pos, "Duplicate parameter name");
         }
@@ -1569,7 +1566,7 @@ func ensure_unique_params(ctx: *ElabCtx, decl: *FuncDecl) {
     }
 }
 
-func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
+func elab_param(ctx: *mut ElabCtx, param_decl: *mut FuncParamDecl): *mut FuncParam {
     var name = param_decl.name;
     var type = eval_type(ctx, param_decl.type);
 
@@ -1586,14 +1583,14 @@ func elab_param(ctx: *ElabCtx, param_decl: *FuncParamDecl): *FuncParam {
         name,
         type,
         default_value
-    }) as *FuncParam;
+    }) as *mut FuncParam;
 }
 
-func check_default_params_order(param_decls: *List, rest_param: *RestParamDecl) {
+func check_default_params_order(param_decls: *mut List, rest_param: *mut RestParamDecl) {
     var seen_default = false;
     var n_params = list_len(param_decls);
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl = list_get(param_decls, i) as *FuncParamDecl;
+        var param_decl = list_get(param_decls, i) as *mut FuncParamDecl;
         if (!param_decl.default_value && seen_default) {
             die_at(&param_decl.pos, "Non-default parameter follows default parameter");
         }
@@ -1604,7 +1601,7 @@ func check_default_params_order(param_decls: *List, rest_param: *RestParamDecl) 
     }
 }
 
-func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
+func verify_main_signature(decl: *mut FuncDecl, sym: *mut FuncSym) {
     var param_decls = decl.params;
     var params = sym.params;
     var n_params = list_len(param_decls);
@@ -1616,8 +1613,8 @@ func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
     }
 
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl = list_get(param_decls, i) as *FuncParamDecl;
-        var param = list_get(params, i) as *FuncParam;
+        var param_decl = list_get(param_decls, i) as *mut FuncParamDecl;
+        var param = list_get(params, i) as *mut FuncParam;
         match (i) {
             case 0: {
                 if (!type_eq(param.type, mk_int_type(4))) {
@@ -1640,11 +1637,11 @@ func verify_main_signature(decl: *FuncDecl, sym: *FuncSym) {
     }
 }
 
-func seed_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
+func seed_func_decl(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
     var n_params = list_len(decl.params);
     var params = list_new();
     for (var i = 0; i < n_params; i += 1) {
-        var param_decl = list_get(decl.params, i) as *FuncParamDecl;
+        var param_decl = list_get(decl.params, i) as *mut FuncParamDecl;
         var param = elab_param(ctx, param_decl);
         list_push(params, param);
     }
@@ -1668,7 +1665,7 @@ func seed_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     ensure_unique_params(ctx, decl);
 }
 
-func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
+func elab_func_decl(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
     if (!decl.body) {
         return;
     }
@@ -1692,11 +1689,11 @@ func elab_func_decl(ctx: *ElabCtx, decl: *FuncDecl) {
     define_func(ctx, &decl.pos, sym, decl.body);
 }
 
-func seed_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
+func seed_const_decl(ctx: *mut ElabCtx, decl: *mut ConstDecl) {
     decl.sym = declare_const(ctx, &decl.pos, decl.name);
 }
 
-func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
+func elab_const_decl(ctx: *mut ElabCtx, decl: *mut ConstDecl) {
     var sym = decl.sym;
     var value_expr = decl.value;
     var type: *Type = null;
@@ -1715,7 +1712,7 @@ func elab_const_decl(ctx: *ElabCtx, decl: *ConstDecl) {
     define_const(ctx, &decl.pos, sym, value);
 }
 
-func seed_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
+func seed_global_decl(ctx: *mut ElabCtx, decl: *mut GlobalDecl) {
     var type = eval_type(ctx, decl.type);
     if (!is_sized(type)) {
         die_at(&decl.pos, "Global variable must have known size");
@@ -1724,7 +1721,7 @@ func seed_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
     decl.sym = declare_global(ctx, &decl.pos, decl.name, type);
 }
 
-func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
+func elab_global_decl(ctx: *mut ElabCtx, decl: *mut GlobalDecl) {
     var sym = decl.sym;
 
     if (!decl.is_extern) {
@@ -1732,22 +1729,22 @@ func elab_global_decl(ctx: *ElabCtx, decl: *GlobalDecl) {
     }
 }
 
-func seed_decl(ctx: *ElabCtx, decl: *Decl) {
+func seed_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
     match (decl.kind) {
         case Decl_Record: {
-            seed_record_decl(ctx, decl as *RecordDecl);
+            seed_record_decl(ctx, decl as *mut RecordDecl);
         }
         case Decl_Enum: {
-            seed_enum_decl(ctx, decl as *EnumDecl);
+            seed_enum_decl(ctx, decl as *mut EnumDecl);
         }
         case Decl_Const: {
-            seed_const_decl(ctx, decl as *ConstDecl);
+            seed_const_decl(ctx, decl as *mut ConstDecl);
         }
         case Decl_Func: {
-            seed_func_decl(ctx, decl as *FuncDecl);
+            seed_func_decl(ctx, decl as *mut FuncDecl);
         }
         case Decl_Global: {
-            seed_global_decl(ctx, decl as *GlobalDecl);
+            seed_global_decl(ctx, decl as *mut GlobalDecl);
         }
         case _: {
             unreachable("seed_decl");
@@ -1755,22 +1752,22 @@ func seed_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 }
 
-func elab_decl(ctx: *ElabCtx, decl: *Decl) {
+func elab_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
     match (decl.kind) {
         case Decl_Record: {
-            elab_record_decl(ctx, decl as *RecordDecl);
+            elab_record_decl(ctx, decl as *mut RecordDecl);
         }
         case Decl_Enum: {
-            elab_enum_decl(ctx, decl as *EnumDecl);
+            elab_enum_decl(ctx, decl as *mut EnumDecl);
         }
         case Decl_Const: {
-            elab_const_decl(ctx, decl as *ConstDecl);
+            elab_const_decl(ctx, decl as *mut ConstDecl);
         }
         case Decl_Func: {
-            elab_func_decl(ctx, decl as *FuncDecl);
+            elab_func_decl(ctx, decl as *mut FuncDecl);
         }
         case Decl_Global: {
-            elab_global_decl(ctx, decl as *GlobalDecl);
+            elab_global_decl(ctx, decl as *mut GlobalDecl);
         }
         case _: {
             unreachable("elab_decl");
@@ -1778,18 +1775,18 @@ func elab_decl(ctx: *ElabCtx, decl: *Decl) {
     }
 }
 
-func elab(ast: *Ast): *List { // *List<*Sym>
+func elab(ast: *mut Ast): *mut List { // *List<*Sym>
     var ctx = box(sizeof(ElabCtx), &ElabCtx {
         syms: list_new(),
         scope: scope_new(null),
         current_func: null,
         loop_depth: 0,
         or_pattern_depth: 0,
-    }) as *ElabCtx;
+    }) as *mut ElabCtx;
 
     for (var pass = 0; pass < 4; pass += 1) {
         for (var i = 0; i < list_len(ast.decls); i += 1) {
-            var decl = list_get(ast.decls, i) as *Decl;
+            var decl = list_get(ast.decls, i) as *mut Decl;
             match (decl.kind) {
                 case Decl_Record | Decl_Enum | Decl_Const if pass == 0: {
                     seed_decl(ctx, decl);

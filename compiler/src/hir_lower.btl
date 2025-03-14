@@ -38,149 +38,149 @@ func translate_assign_op(tok_kind: TokKind): HirOpKind {
     }
 }
 
-func mk_skip_stmt(pos: *Pos): *HirExpr {
+func mk_skip_stmt(pos: *Pos): *mut HirExpr {
     return box(sizeof(HirSkipExpr), &HirSkipExpr {
         type: mk_void_type(),
         pos: *pos,
-    }) as *HirSkipExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_seq_expr(first: *HirExpr, second: *HirExpr): *HirSeqExpr {
+func hir_mk_seq_expr(first: *mut HirExpr, second: *mut HirExpr): *mut HirExpr {
     return box(sizeof(HirSeqExpr), &HirSeqExpr {
         type: second.type,
         pos: first.pos,
         first,
         second,
-    }) as *HirSeqExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *HirIntExpr {
+func hir_mk_int_expr(value: Int, type: *Type, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirIntExpr), &HirIntExpr {
         type,
         pos: *pos,
         value,
-    }) as *HirIntExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_bool_expr(value: Bool, pos: *Pos): *HirIntExpr {
+func hir_mk_bool_expr(value: Bool, pos: *Pos): *mut HirExpr {
     return hir_mk_int_expr(value as Int, mk_bool_type(), pos);
 }
 
-func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *HirStrExpr {
+func hir_mk_str_expr(value: *StringBuffer, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirStrExpr), &HirStrExpr {
         type: mk_ptr_type(mk_int_type(1), is_mut: false),
         pos: *pos,
         value,
-    }) as *HirStrExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_var_expr(sym: *Sym, type: *Type, pos: *Pos): *HirVarExpr {
+func hir_mk_var_expr(sym: *mut Sym, type: *Type, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirVarExpr), &HirVarExpr {
         type,
         pos: *pos,
         sym,
-    }) as *HirVarExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_temp_expr(temp: *HirTemp, pos: *Pos): *HirTempExpr {
+func hir_mk_temp_expr(temp: *mut HirTemp, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirTempExpr), &HirTempExpr {
         type: temp.type,
         pos: *pos,
         temp,
-    }) as *HirTempExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_cond_expr(cond: *HirExpr, then_expr: *HirExpr, else_expr: *HirExpr, pos: *Pos): *HirCondExpr {
+func hir_mk_cond_expr(cond: *mut HirExpr, then_expr: *mut HirExpr, else_expr: *mut HirExpr, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirCondExpr), &HirCondExpr {
         type: then_expr.type,
         pos: *pos,
         cond,
         then_expr,
         else_expr,
-    }) as *HirCondExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_loop_expr(cond: *HirExpr, body: *HirExpr, step: *HirExpr, pos: *Pos): *HirLoopExpr {
+func hir_mk_loop_expr(cond: *mut HirExpr, body: *mut HirExpr, step: *mut HirExpr, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirLoopExpr), &HirLoopExpr {
         type: body.type,
         pos: *pos,
         cond,
         body,
         step,
-    }) as *HirLoopExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_return_expr(expr: *HirExpr, pos: *Pos): *HirReturnExpr {
+func hir_mk_return_expr(expr: *mut HirExpr, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirReturnExpr), &HirReturnExpr {
         type: mk_void_type(),
         pos: *pos,
         expr,
-    }) as *HirReturnExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *HirJumpExpr {
+func hir_mk_jump_expr(is_break: Bool, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirJumpExpr), &HirJumpExpr {
         type: mk_void_type(),
         pos: *pos,
         is_break,
-    }) as *HirJumpExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_assign_expr(dst: *HirExpr, src: *HirExpr): *HirAssignExpr {
+func hir_mk_assign_expr(dst: *mut HirExpr, src: *mut HirExpr): *mut HirExpr {
     return box(sizeof(HirAssignExpr), &HirAssignExpr {
         type: mk_void_type(),
         pos: dst.pos,
         dst,
         src,
-    }) as *HirAssignExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_binary_op_expr(op: HirOpKind, left: *HirExpr, right: *HirExpr, type: *Type): *HirBinaryOpExpr {
+func hir_mk_binary_op_expr(op: HirOpKind, left: *mut HirExpr, right: *mut HirExpr, type: *Type): *mut HirExpr {
     return box(sizeof(HirBinaryOpExpr), &HirBinaryOpExpr {
         type,
         pos: left.pos,
         op,
         left,
         right,
-    }) as *HirBinaryOpExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_neg_expr(expr: *HirExpr): *HirExpr {
+func hir_mk_neg_expr(expr: *mut HirExpr): *mut HirExpr {
     var zero = hir_mk_int_expr(0, expr.type, &expr.pos);
     return hir_mk_binary_op_expr(HirOp_Sub, zero, expr, expr.type);
 }
 
-func hir_mk_not_expr(expr: *HirExpr): *HirExpr {
+func hir_mk_not_expr(expr: *mut HirExpr): *mut HirExpr {
     var one = hir_mk_int_expr(1, expr.type, &expr.pos);
     return hir_mk_binary_op_expr(HirOp_Xor, expr, one, expr.type);
 }
 
-func hir_mk_bit_not_expr(expr: *HirExpr): *HirExpr {
+func hir_mk_bit_not_expr(expr: *mut HirExpr): *mut HirExpr {
     var minus_one = hir_mk_int_expr(-1, expr.type, &expr.pos);
     return hir_mk_binary_op_expr(HirOp_Xor, expr, minus_one, expr.type);
 }
 
-func hir_mk_call_expr(callee: *FuncSym, args: **HirExpr, n_args: Int, pos: *Pos): *HirCallExpr {
+func hir_mk_call_expr(callee: *mut FuncSym, args: *mut *mut HirExpr, n_args: Int, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirCallExpr), &HirCallExpr {
         type: callee.return_type,
         pos: *pos,
         callee,
         args,
         n_args,
-    }) as *HirCallExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_member_expr(left: *HirExpr, name: *Char, field: *RecordField, field_type: *Type): *HirMemberExpr {
+func hir_mk_member_expr(left: *mut HirExpr, name: *Char, field: *mut RecordField, field_type: *Type): *mut HirExpr {
     return box(sizeof(HirMemberExpr), &HirMemberExpr {
         type: field_type,
         pos: left.pos,
         left,
         name,
         field,
-    }) as *HirMemberExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_index_expr(indexee: *HirExpr, index: *HirExpr): *HirIndexExpr {
+func hir_mk_index_expr(indexee: *mut HirExpr, index: *mut HirExpr): *mut HirExpr {
     assert(
         indexee.type.kind == Type_Ptr || indexee.type.kind == Type_Arr,
         "hir_mk_index_expr: indexee should have a pointer or array type"
@@ -194,10 +194,10 @@ func hir_mk_index_expr(indexee: *HirExpr, index: *HirExpr): *HirIndexExpr {
         pos: indexee.pos,
         indexee,
         index,
-    }) as *HirIndexExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
+func hir_mk_deref_expr(expr: *mut HirExpr, pos: *Pos): *mut HirExpr {
     assert(expr.type.kind == Type_Ptr, "hir_mk_deref_expr: expr should have a pointer type");
     var deref_type = (expr.type as *PtrType).pointee;
 
@@ -205,46 +205,46 @@ func hir_mk_deref_expr(expr: *HirExpr, pos: *Pos): *HirDerefExpr {
         type: deref_type,
         pos: *pos,
         expr,
-    }) as *HirDerefExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_addr_expr(expr: *HirExpr, pos: *Pos): *HirAddrExpr {
+func hir_mk_addr_expr(expr: *mut HirExpr, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirAddrExpr), &HirAddrExpr {
         type: mk_ptr_type(expr.type, is_mut: false),
         pos: *pos,
         expr,
-    }) as *HirAddrExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_cast_expr(expr: *HirExpr, type: *Type): *HirCastExpr {
+func hir_mk_cast_expr(expr: *mut HirExpr, type: *Type): *mut HirExpr {
     return box(sizeof(HirCastExpr), &HirCastExpr {
         type,
         pos: expr.pos,
         expr,
-    }) as *HirCastExpr;
+    }) as *mut HirExpr;
 }
 
-func hir_mk_unreachable_expr(pos: *Pos, type: *Type): *HirExpr {
+func hir_mk_unreachable_expr(pos: *Pos, type: *Type): *mut HirExpr {
     return box(sizeof(HirUnreachableExpr), &HirUnreachableExpr {
         type,
         pos: *pos,
-    }) as *HirUnreachableExpr;
+    }) as *mut HirExpr;
 }
 
 //==============================================================================
 //== Context
 
 struct Context {
-    func_: *FuncSym,
+    func_: *mut FuncSym,
 }
 
-func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
+func mk_temp_var(ctx: *mut Context, type: *Type): *mut HirTemp {
     var slot_id = list_len(ctx.func_.locals) + list_len(ctx.func_.temps);
 
     var temp = box(sizeof(HirTemp), &HirTemp {
         type,
         slot_id: slot_id
-    }) as *HirTemp;
+    }) as *mut HirTemp;
 
     list_push(ctx.func_.temps, temp);
 
@@ -254,7 +254,7 @@ func mk_temp_var(ctx: *Context, type: *Type): *HirTemp {
 //==============================================================================
 //== Constants
 
-func lower_const_value(value: *ConstValue, pos: *Pos): *HirExpr {
+func lower_const_value(value: *ConstValue, pos: *Pos): *mut HirExpr {
     match (value.kind) {
         case ConstValue_Bool: {
             var value = value as *BoolConstValue;
@@ -280,11 +280,11 @@ func lower_const_value(value: *ConstValue, pos: *Pos): *HirExpr {
 //==============================================================================
 //== Patterns
 
-func lower_grouped_pattern(ctx: *Context, lhs: *HirExpr, pattern: *GroupedPattern): *HirExpr {
+func lower_grouped_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *GroupedPattern): *mut HirExpr {
     return lower_pattern(ctx, lhs, pattern.pattern);
 }
 
-func lower_literal_pattern(ctx: *Context, lhs: *HirExpr, pattern: *LiteralPattern): *HirExpr {
+func lower_literal_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *LiteralPattern): *mut HirExpr {
     /*
         Desugar
             lhs is 1
@@ -295,7 +295,7 @@ func lower_literal_pattern(ctx: *Context, lhs: *HirExpr, pattern: *LiteralPatter
     return hir_mk_binary_op_expr(HirOp_Eq, lhs, rhs, mk_bool_type());
 }
 
-func lower_name_pattern(ctx: *Context, lhs: *HirExpr, pattern: *NamePattern): *HirExpr {
+func lower_name_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *NamePattern): *mut HirExpr {
     /*
         Desugar
             lhs is x
@@ -306,7 +306,7 @@ func lower_name_pattern(ctx: *Context, lhs: *HirExpr, pattern: *NamePattern): *H
     return hir_mk_binary_op_expr(HirOp_Eq, lhs, rhs, mk_bool_type());
 }
 
-func lower_wildcard_pattern(ctx: *Context, lhs: *HirExpr, pattern: *WildcardPattern): *HirExpr {
+func lower_wildcard_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *WildcardPattern): *mut HirExpr {
     /*
         Desugar
             lhs is _
@@ -316,7 +316,7 @@ func lower_wildcard_pattern(ctx: *Context, lhs: *HirExpr, pattern: *WildcardPatt
     return hir_mk_bool_expr(true, &pattern.pos);
 }
 
-func lower_var_pattern(ctx: *Context, lhs: *HirExpr, pattern: *VarPattern): *HirExpr {
+func lower_var_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *VarPattern): *mut HirExpr {
     /*
         Desugar
             lhs is x @ p
@@ -324,13 +324,13 @@ func lower_var_pattern(ctx: *Context, lhs: *HirExpr, pattern: *VarPattern): *Hir
             x = lhs;
             x is p
     */
-    var var_ = hir_mk_var_expr(pattern.sym, pattern.type, &pattern.pos);
+    var var_ = hir_mk_var_expr(pattern.sym as *mut Sym, pattern.type, &pattern.pos);
     var assign = hir_mk_assign_expr(var_, lhs);
     var cond = lower_pattern(ctx, var_, pattern.pattern);
     return hir_mk_seq_expr(assign, cond);
 }
 
-func lower_range_pattern(ctx: *Context, lhs: *HirExpr, pattern: *RangePattern): *HirExpr {
+func lower_range_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *RangePattern): *mut HirExpr {
     /*
         Desugar
             lhs is 1...3  ->  1 <= lhs ? lhs <= 3 : 0
@@ -356,7 +356,7 @@ func lower_range_pattern(ctx: *Context, lhs: *HirExpr, pattern: *RangePattern): 
     }
 }
 
-func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirExpr {
+func lower_or_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *OrPattern): *mut HirExpr {
     /*
         Desugar
             lhs is p1 | p2 | p3
@@ -370,11 +370,11 @@ func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirEx
     }
 
     var last_index = n_patterns - 1;
-    var last_pattern = list_get(pattern.patterns, last_index) as *Pattern;
+    var last_pattern = list_get(pattern.patterns, last_index) as *mut Pattern;
     var acc = lower_pattern(ctx, lhs, last_pattern);
 
     for (var i = last_index - 1; i >= 0; i -= 1) {
-        var current_pattern = list_get(pattern.patterns, i) as *Pattern;
+        var current_pattern = list_get(pattern.patterns, i) as *mut Pattern;
         var current = lower_pattern(ctx, lhs, current_pattern);
 
         acc = hir_mk_cond_expr(current, hir_mk_bool_expr(true, &pattern.pos), acc, &pattern.pos);
@@ -383,7 +383,7 @@ func lower_or_pattern(ctx: *Context, lhs: *HirExpr, pattern: *OrPattern): *HirEx
     return acc;
 }
 
-func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr {
+func lower_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *mut Pattern): *mut HirExpr {
     match (pattern.kind) {
         case Pattern_Grouped: {
             return lower_grouped_pattern(ctx, lhs, pattern as *GroupedPattern);
@@ -415,7 +415,7 @@ func lower_pattern(ctx: *Context, lhs: *HirExpr, pattern: *Pattern): *HirExpr {
 //==============================================================================
 //== Expressions
 
-func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
+func lower_ident_expr(ctx: *mut Context, expr: *IdentExpr): *mut HirExpr {
     match (expr.sym.kind) {
         case Sym_Global | Sym_Local: {
             return hir_mk_var_expr(expr.sym, expr.type, &expr.pos);
@@ -430,7 +430,7 @@ func lower_ident_expr(ctx: *Context, expr: *IdentExpr): *HirExpr {
     }
 }
 
-func lower_literal_expr(ctx: *Context, expr: *LiteralExpr): *HirExpr {
+func lower_literal_expr(ctx: *mut Context, expr: *LiteralExpr): *mut HirExpr {
     var literal = expr.literal;
 
     match (literal.kind) {
@@ -455,13 +455,13 @@ func lower_literal_expr(ctx: *Context, expr: *LiteralExpr): *HirExpr {
     }
 }
 
-func lower_array_expr(ctx: *Context, expr: *ArrayExpr): *HirExpr {
+func lower_array_expr(ctx: *mut Context, expr: *ArrayExpr): *mut HirExpr {
     die_at(&expr.pos, "Array literal outside of an assignment statement");
 }
 
 // All arguments are passed by value, but non-scalar rvalues
 // are converted to lvalues here make code generation easier.
-func lower_arg(ctx: *Context, expr: *Expr): *HirExpr {
+func lower_arg(ctx: *mut Context, expr: *Expr): *mut HirExpr {
     if (is_scalar(expr.type)) {
         return lower_expr(ctx, expr);
     } else if (is_lvalue(expr) && !is_pass_by_ptr(expr.type)) {
@@ -486,7 +486,7 @@ func lower_arg(ctx: *Context, expr: *Expr): *HirExpr {
     }
 }
 
-func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
+func lower_call_expr(ctx: *mut Context, expr: *CallExpr, dest: *mut HirExpr): *mut HirExpr {
     var sym = expr.resolved_callee;
     var n_params = list_len(sym.params);
 
@@ -494,7 +494,7 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
     var n_ast_args = list_len(ast_args);
 
     var n_hir_args = int_max(n_params, n_ast_args);
-    var hir_args = calloc(n_hir_args, sizeof(*HirExpr)) as **HirExpr;
+    var hir_args = calloc(n_hir_args, sizeof(*HirExpr)) as *mut *mut HirExpr;
 
     for (var i = 0; i < n_ast_args; i += 1) {
         var ast_arg = list_get(ast_args, i) as *CallArg;
@@ -535,7 +535,7 @@ func lower_call_expr(ctx: *Context, expr: *CallExpr, dest: *HirExpr): *HirExpr {
     }
 }
 
-func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
+func lower_index_expr(ctx: *mut Context, expr: *IndexExpr): *mut HirExpr {
     var ast_indexee = expr.indexee;
     var ast_index = expr.index;
 
@@ -545,7 +545,7 @@ func lower_index_expr(ctx: *Context, expr: *IndexExpr): *HirExpr {
     return hir_mk_index_expr(hir_indexee, hir_index);
 }
 
-func lower_member_expr(ctx: *Context, expr: *MemberExpr): *HirExpr {
+func lower_member_expr(ctx: *mut Context, expr: *MemberExpr): *mut HirExpr {
     var ast_left = expr.left;
     var name = expr.name;
     var field = expr.resolved_field;
@@ -558,16 +558,16 @@ func lower_member_expr(ctx: *Context, expr: *MemberExpr): *HirExpr {
     return hir_mk_member_expr(hir_left, name, field, expr.type);
 }
 
-func lower_sizeof_expr(ctx: *Context, expr: *SizeofExpr): *HirExpr {
+func lower_sizeof_expr(ctx: *mut Context, expr: *SizeofExpr): *mut HirExpr {
     var size = expr.size;
     return hir_mk_int_expr(size, expr.type, &expr.pos);
 }
 
-func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
+func lower_unary_expr(ctx: *mut Context, expr: *UnaryExpr): *mut HirExpr {
     var op = expr.op;
     var ast_right = expr.right;
 
-    var result: *HirExpr;
+    var result: *mut HirExpr;
     match (op) {
         case Tok_Minus: {
             var right = lower_expr(ctx, ast_right);
@@ -613,14 +613,14 @@ func lower_unary_expr(ctx: *Context, expr: *UnaryExpr): *HirExpr {
     return result;
 }
 
-func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
+func lower_binary_expr(ctx: *mut Context, expr: *BinaryExpr): *mut HirExpr {
     var ast_op = expr.op;
     var ast_left = expr.left;
     var ast_right = expr.right;
 
     var left = lower_expr(ctx, ast_left);
 
-    var result: *HirExpr;
+    var result: *mut HirExpr;
     match (ast_op) {
         case Tok_Eq: {
             result = lower_assign_expr(ctx, left, ast_right, &expr.pos);
@@ -630,7 +630,7 @@ func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
                 Desugar
                     left op= right
                 to
-                    temp t1: *typeof(left);
+                    temp t1: *Typeof(left);
                     t1 = &left;
                     *t1 = *t1 op right;
             */
@@ -669,7 +669,7 @@ func lower_binary_expr(ctx: *Context, expr: *BinaryExpr): *HirExpr {
     return result;
 }
 
-func lower_ternary_expr(ctx: *Context, expr: *TernaryExpr): *HirExpr {
+func lower_ternary_expr(ctx: *mut Context, expr: *TernaryExpr): *mut HirExpr {
     var ast_cond = expr.cond;
     var ast_then_expr = expr.then_expr;
     var ast_else_expr = expr.else_expr;
@@ -681,7 +681,7 @@ func lower_ternary_expr(ctx: *Context, expr: *TernaryExpr): *HirExpr {
     return hir_mk_cond_expr(cond, then_expr, else_expr, &expr.pos);
 }
 
-func lower_is_expr(ctx: *Context, expr: *IsExpr): *HirExpr {
+func lower_is_expr(ctx: *mut Context, expr: *IsExpr): *mut HirExpr {
     var ast_left = expr.left;
     var ast_pattern = expr.pattern;
 
@@ -691,7 +691,7 @@ func lower_is_expr(ctx: *Context, expr: *IsExpr): *HirExpr {
     return test;
 }
 
-func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
+func lower_cast_expr(ctx: *mut Context, expr: *CastExpr): *mut HirExpr {
     var ast_subexpr = expr.expr;
     var subexpr = lower_expr(ctx, ast_subexpr);
 
@@ -713,7 +713,7 @@ func lower_cast_expr(ctx: *Context, expr: *CastExpr): *HirExpr {
 }
 
 // Evaluate and discard the initializers
-func lower_record_expr(ctx: *Context, expr: *RecordExpr): *HirExpr {
+func lower_record_expr(ctx: *mut Context, expr: *RecordExpr): *mut HirExpr {
     var sequence = mk_skip_stmt(&expr.pos);
     var n_initializers = list_len(expr.fields);
     for (var i = 0; i < n_initializers; i += 1) {
@@ -724,7 +724,7 @@ func lower_record_expr(ctx: *Context, expr: *RecordExpr): *HirExpr {
     return sequence;
 }
 
-func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
+func lower_expr(ctx: *mut Context, expr: *Expr): *mut HirExpr {
     match (expr.kind) {
         case Expr_Ident: {
             return lower_ident_expr(ctx, expr as *IdentExpr);
@@ -771,15 +771,15 @@ func lower_expr(ctx: *Context, expr: *Expr): *HirExpr {
     }
 }
 
-func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr, pos: *Pos): *HirExpr {
+func lower_assign_expr_record(ctx: *mut Context, dst: *mut HirExpr, ast_src: *RecordExpr, pos: *Pos): *mut HirExpr {
     /*
         Desugar
             x = Pair { value: 1, y: List { value: 2, next: null } }
         to
-            temp t1: *Pair;
+            temp t1: *mut Pair;
             t1 = &x;
             (*t1).value = 1;
-            let t2: *List = &t1.next;
+            let t2: *mut List = &t1.next;
             (*t2).value = 2;
             (*t2).next = null
     */
@@ -792,6 +792,7 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
     var initializers = ast_src.fields;
     var n_initializers = list_len(initializers);
 
+    // TODO: Unused????
     var is_initialized = calloc(n_fields, sizeof(Bool)) as *Bool;
 
     var addr_dst = hir_mk_addr_expr(dst, &dst.pos);
@@ -800,11 +801,11 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
     var temp = hir_mk_temp_expr(temp_var, pos);
     var temp_init = hir_mk_assign_expr(temp, addr_dst);
 
-    var body: *HirExpr = temp_init;
+    var body: *mut HirExpr = temp_init;
     for (var init_index = 0; init_index < n_initializers; init_index += 1) {
         var initializer = list_get(initializers, init_index) as *FieldInitializer;
         var field_index = find_record_field_by_name(record_type.sym, initializer.name);
-        var field = list_get(record_type.sym.fields, field_index) as *RecordField;
+        var field = list_get(record_type.sym.fields, field_index) as *mut RecordField;
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
         var field_access = hir_mk_member_expr(temp_deref, field.name, field, field.type);
@@ -816,7 +817,7 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
         if (is_initialized[field_index]) {
             continue;
         }
-        var field = list_get(record_type.sym.fields, field_index) as *RecordField;
+        var field = list_get(record_type.sym.fields, field_index) as *mut RecordField;
         if (!field.default_value) {
             continue;
         }
@@ -831,12 +832,12 @@ func lower_assign_expr_record(ctx: *Context, dst: *HirExpr, ast_src: *RecordExpr
     return body;
 }
 
-func lower_assign_expr_array(ctx: *Context, dst: *HirExpr, ast_src: *ArrayExpr, pos: *Pos): *HirExpr {
+func lower_assign_expr_array(ctx: *mut Context, dst: *mut HirExpr, ast_src: *ArrayExpr, pos: *Pos): *mut HirExpr {
     /*
         Desugar
             x = [a, b, c]
         to
-            temp t1: *T;
+            temp t1: *mut T;
             t1 = &x[0];
             t1[0] = a;
             t1[1] = b;
@@ -860,7 +861,7 @@ func lower_assign_expr_array(ctx: *Context, dst: *HirExpr, ast_src: *ArrayExpr, 
     var temp = hir_mk_temp_expr(temp_var, pos);
     var temp_init = hir_mk_assign_expr(temp, addr_zero_index);
 
-    var body: *HirExpr = temp_init;
+    var body: *mut HirExpr = temp_init;
     for (var i = 0; i < arr_size; i += 1) {
         var ast_elem = list_get(elems, i) as *Expr;
         var index = hir_mk_int_expr(i, mk_int_type(4), pos);
@@ -872,7 +873,7 @@ func lower_assign_expr_array(ctx: *Context, dst: *HirExpr, ast_src: *ArrayExpr, 
     return body;
 }
 
-func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos): *HirExpr {
+func lower_assign_expr(ctx: *mut Context, dst: *mut HirExpr, ast_src: *Expr, pos: *Pos): *mut HirExpr {
     match (ast_src.kind) {
         case Expr_Record: {
             return lower_assign_expr_record(ctx, dst, ast_src as *RecordExpr, pos);
@@ -893,7 +894,7 @@ func lower_assign_expr(ctx: *Context, dst: *HirExpr, ast_src: *Expr, pos: *Pos):
 //==============================================================================
 //== Statements
 
-func lower_block_stmt(ctx: *Context, stmt: *BlockStmt): *HirExpr {
+func lower_block_stmt(ctx: *mut Context, stmt: *BlockStmt): *mut HirExpr {
     var current = mk_skip_stmt(&stmt.pos);
 
     for (var i = 0; i < list_len(stmt.stmts); i += 1) {
@@ -906,7 +907,7 @@ func lower_block_stmt(ctx: *Context, stmt: *BlockStmt): *HirExpr {
     return current;
 }
 
-func lower_local_stmt(ctx: *Context, stmt: *LocalStmt): *HirExpr {
+func lower_local_stmt(ctx: *mut Context, stmt: *LocalStmt): *mut HirExpr {
     var sym = stmt.sym;
     var type = sym.type;
     var ast_init = stmt.init;
@@ -915,11 +916,11 @@ func lower_local_stmt(ctx: *Context, stmt: *LocalStmt): *HirExpr {
         return mk_skip_stmt(&stmt.pos);
     }
 
-    var var_expr = hir_mk_var_expr(sym, type, &stmt.pos);
+    var var_expr = hir_mk_var_expr(sym as *mut Sym, type, &stmt.pos);
     return lower_assign_expr(ctx, var_expr, ast_init, &ast_init.pos);
 }
 
-func lower_if_stmt(ctx: *Context, stmt: *IfStmt): *HirExpr {
+func lower_if_stmt(ctx: *mut Context, stmt: *IfStmt): *mut HirExpr {
     var ast_cond = stmt.cond;
     var ast_then_block = stmt.then_stmt;
     var ast_else_block = stmt.else_stmt;
@@ -933,7 +934,7 @@ func lower_if_stmt(ctx: *Context, stmt: *IfStmt): *HirExpr {
     return hir_mk_cond_expr(cond, then_block, else_block, &stmt.pos);
 }
 
-func lower_match_stmt(ctx: *Context, stmt: *MatchStmt): *HirExpr {
+func lower_match_stmt(ctx: *mut Context, stmt: *MatchStmt): *mut HirExpr {
     /*
         Desugar
             match (x) {
@@ -980,7 +981,7 @@ func lower_match_stmt(ctx: *Context, stmt: *MatchStmt): *HirExpr {
     return hir_mk_seq_expr(temp_init, acc);
 }
 
-func lower_while_stmt(ctx: *Context, stmt: *WhileStmt): *HirExpr {
+func lower_while_stmt(ctx: *mut Context, stmt: *WhileStmt): *mut HirExpr {
     var ast_cond = stmt.cond;
     var ast_body = stmt.body;
 
@@ -991,7 +992,7 @@ func lower_while_stmt(ctx: *Context, stmt: *WhileStmt): *HirExpr {
     return hir_mk_loop_expr(cond, body, step, &stmt.pos);
 }
 
-func lower_for_stmt(ctx: *Context, stmt: *ForStmt): *HirExpr {
+func lower_for_stmt(ctx: *mut Context, stmt: *ForStmt): *mut HirExpr {
     var ast_init = stmt.init;
     var ast_cond = stmt.cond;
     var ast_step = stmt.step;
@@ -1005,7 +1006,7 @@ func lower_for_stmt(ctx: *Context, stmt: *ForStmt): *HirExpr {
     return hir_mk_seq_expr(init, hir_mk_loop_expr(cond, body, step, &stmt.pos));
 }
 
-func lower_return_stmt(ctx: *Context, stmt: *ReturnStmt): *HirExpr {
+func lower_return_stmt(ctx: *mut Context, stmt: *ReturnStmt): *mut HirExpr {
     var ast_expr = stmt.expr;
 
     // All non-scalar rvalued expressions are converted to lvalues here
@@ -1031,20 +1032,20 @@ func lower_return_stmt(ctx: *Context, stmt: *ReturnStmt): *HirExpr {
     }
 }
 
-func lower_break_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+func lower_break_stmt(ctx: *mut Context, stmt: *Stmt): *mut HirExpr {
     return hir_mk_jump_expr(true, &stmt.pos);
 }
 
-func lower_continue_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+func lower_continue_stmt(ctx: *mut Context, stmt: *Stmt): *mut HirExpr {
     return hir_mk_jump_expr(false, &stmt.pos);
 }
 
-func lower_expr_stmt(ctx: *Context, stmt: *ExprStmt): *HirExpr {
+func lower_expr_stmt(ctx: *mut Context, stmt: *ExprStmt): *mut HirExpr {
     var ast_expr = stmt.expr;
     return lower_expr(ctx, ast_expr);
 }
 
-func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
+func lower_stmt(ctx: *mut Context, stmt: *Stmt): *mut HirExpr {
     match (stmt.kind) {
         case Stmt_Block: {
             return lower_block_stmt(ctx, stmt as *BlockStmt);
@@ -1089,8 +1090,8 @@ func lower_stmt(ctx: *Context, stmt: *Stmt): *HirExpr {
 //==============================================================================
 //== Top-level declarations
 
-func hir_lower(func_: *FuncSym, body: *Stmt): *HirExpr {
-    var ctx = box(sizeof(Context), &Context { func_ }) as *Context;
+func hir_lower(func_: *mut FuncSym, body: *Stmt): *mut HirExpr {
+    var ctx = box(sizeof(Context), &Context { func_ }) as *mut Context;
 
     return lower_stmt(ctx, body);
 }

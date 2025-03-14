@@ -1,13 +1,13 @@
 include "bittle.btls";
 
 struct StringBuffer {
-    buf: *Char,
+    buf: *mut Char,
     len: Int,
     cap: Int,
 }
 
 struct List {
-    elems: **Void,
+    elems: *mut *Void,
     len: Int,
     cap: Int,
 }
@@ -40,11 +40,11 @@ func die_at(pos: *Pos, msg: *Char, ...args): ! {
     exit(1);
 }
 
-func sb_new(): *StringBuffer {
-    return calloc(1, sizeof(StringBuffer)) as *StringBuffer;
+func sb_new(): *mut StringBuffer {
+    return calloc(1, sizeof(StringBuffer)) as *mut StringBuffer;
 }
 
-func sb_free(self: *StringBuffer) {
+func sb_free(self: *mut StringBuffer) {
     free(self.buf);
     free(self);
 }
@@ -62,7 +62,7 @@ func sb_cstr(self: *StringBuffer): *Char {
     return self.buf;
 }
 
-func sb_ensure_cap(self: *StringBuffer, cap: Int) {
+func sb_ensure_cap(self: *mut StringBuffer, cap: Int) {
     if (self.cap >= cap) {
         return;
     }
@@ -70,16 +70,16 @@ func sb_ensure_cap(self: *StringBuffer, cap: Int) {
     while (new_cap < cap) {
         new_cap *= 2;
     }
-    self.buf = realloc(self.buf, new_cap) as *Char;
+    self.buf = realloc(self.buf, new_cap) as *mut Char;
     self.cap = new_cap;
 }
 
-func sb_shrink_to_fit(self: *StringBuffer) {
-    self.buf = realloc(self.buf, self.len + 1) as *Char;
+func sb_shrink_to_fit(self: *mut StringBuffer) {
+    self.buf = realloc(self.buf, self.len + 1) as *mut Char;
     self.cap = self.len + 1;
 }
 
-func sb_vprintf(self: *StringBuffer, fmt: *Char, args: ...) {
+func sb_vprintf(self: *mut StringBuffer, fmt: *Char, args: ...) {
     var len = vsnprintf(null, 0, fmt, args);
     assert(len >= 0, "sb_printf: vsnprintf will never fail");
     sb_ensure_cap(self, self.len + len + 1);
@@ -87,29 +87,29 @@ func sb_vprintf(self: *StringBuffer, fmt: *Char, args: ...) {
     self.len += len;
 }
 
-func sb_printf(self: *StringBuffer, fmt: *Char, ...args) {
+func sb_printf(self: *mut StringBuffer, fmt: *Char, ...args) {
     sb_vprintf(self, fmt, args);
 }
 
-func sb_push(self: *StringBuffer, c: Char) {
+func sb_push(self: *mut StringBuffer, c: Char) {
     sb_ensure_cap(self, self.len + 2);
     self.buf[self.len] = c;
     self.buf[self.len + 1] = '\0';
     self.len += 1;
 }
 
-func sb_append(self: *StringBuffer, s: *Char) {
+func sb_append(self: *mut StringBuffer, s: *Char) {
     sb_printf(self, "%s", s);
 }
 
-func sb_finish(self: *StringBuffer): *Char {
+func sb_finish(self: *mut StringBuffer): *mut Char {
     sb_shrink_to_fit(self);
     var buf = self.buf;
     free(self);
     return buf;
 }
 
-func list_ensure_cap(self: *List, cap: Int) {
+func list_ensure_cap(self: *mut List, cap: Int) {
     if (self.cap >= cap) {
         return;
     }
@@ -117,16 +117,16 @@ func list_ensure_cap(self: *List, cap: Int) {
     while (new_cap < cap) {
         new_cap *= 2;
     }
-    self.elems = realloc(self.elems, new_cap * sizeof(*Void)) as **Void;
+    self.elems = realloc(self.elems, new_cap * sizeof(*Void)) as *mut *Void;
     self.cap = new_cap;
 }
 
-func list_new(): *List {
-    return calloc(1, sizeof(List)) as *List;
+func list_new(): *mut List {
+    return calloc(1, sizeof(List)) as *mut List;
 }
 
-func list_new_with_cap(cap: Int64): *List {
-    var list = calloc(1, sizeof(List)) as *List;
+func list_new_with_cap(cap: Int64): *mut List {
+    var list = calloc(1, sizeof(List)) as *mut List;
     list_ensure_cap(list, cap);
     return list;
 }
@@ -140,24 +140,24 @@ func list_get(self: *List, i: Int): *Void {
     return self.elems[i];
 }
 
-func list_set(self: *List, i: Int, elem: *Void) {
+func list_set(self: *mut List, i: Int, elem: *Void) {
     assert(i >= 0 && i < self.len, "list_set: index out of bounds");
     self.elems[i] = elem;
 }
 
-func list_push(self: *List, elem: *Void) {
+func list_push(self: *mut List, elem: *Void) {
     list_ensure_cap(self, self.len + 1);
     self.elems[self.len] = elem;
     self.len += 1;
 }
 
-func list_pop(self: *List): *Void {
+func list_pop(self: *mut List): *Void {
     assert(self.len > 0, "list_pop: empty list");
     self.len -= 1;
     return self.elems[self.len];
 }
 
-func box(size: Int64, data: *Void): *Void {
+func box(size: Int64, data: *Void): *mut Void {
     var copy = malloc(size + sizeof(*Void));
     memcpy(copy, data, size);
     return copy;
@@ -192,10 +192,10 @@ func int_max(a: Int, b: Int): Int {
     return a > b ? a : b;
 }
 
-func read_file(file: *File): *Char {
+func read_file(file: *mut File): *mut Char {
     var len = 0;
     var cap = 4096;
-    var buf = malloc(cap) as *Char;
+    var buf = malloc(cap) as *mut Char;
     while (true) {
         var avail = cap - len;
         var n = fread(&buf[len], 1, avail, file);
@@ -204,21 +204,21 @@ func read_file(file: *File): *Char {
             break;
         }
         cap *= 2;
-        buf = realloc(buf, cap) as *Char;
+        buf = realloc(buf, cap) as *mut Char;
     }
-    buf = realloc(buf, len + 1) as *Char;
+    buf = realloc(buf, len + 1) as *mut Char;
     buf[len] = '\0';
     return buf;
 }
 
-func get_directory(path: *Char): *Char {
+func get_directory(path: *Char): *mut Char {
     var i = strlen(path);
     while (true) {
         if (i == 0)
-            return ".";
+            return box(1 + 1, ".") as *mut Char;
         i -= 1;
         if (path[i] == '/') {
-            var dir = malloc(i + 1) as *Char;
+            var dir = malloc(i + 1) as *mut Char;
             memcpy(dir, path, i);
             dir[i] = '\0';
             return dir;
@@ -227,7 +227,7 @@ func get_directory(path: *Char): *Char {
     unreachable("get_directory");
 }
 
-func join_paths(dir: *Char, file: *Char): *Char {
+func join_paths(dir: *Char, file: *Char): *mut Char {
     var sb = sb_new();
     sb_append(sb, dir);
     sb_push(sb, '/');
@@ -268,7 +268,7 @@ func parse_char(s: *Char): Char {
     return char;
 }
 
-func parse_string(s: *Char): *StringBuffer {
+func parse_string(s: *Char): *mut StringBuffer {
     var sb = sb_new();
     var i = 0;
     var quote = s[i];

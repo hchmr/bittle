@@ -8,29 +8,29 @@ enum {
 
 struct File;
 
-extern var stdin: *File;
-extern var stdout: *File;
-extern var stderr: *File;
-extern func fopen(file_name: *Char, mode: *Char): *File;
-extern func fclose(file: *File): Int32;
-extern func fgetc(file: *File): Int32;
-extern func fprintf(file: *File, format: *Char, ...): Int32;
-extern func vfprintf(file: *File, format: *Char, args: ...): Int32;
+extern var stdin: *mut File;
+extern var stdout: *mut File;
+extern var stderr: *mut File;
+extern func fopen(file_name: *Char, mode: *Char): *mut File;
+extern func fclose(file: *mut File): Int32;
+extern func fgetc(file: *mut File): Int32;
+extern func fprintf(file: *mut File, format: *Char, ...): Int32;
+extern func vfprintf(file: *mut File, format: *Char, args: ...): Int32;
 extern func printf(format: *Char, ...): Int32;
 extern func snprintf(buf: *Char, n: Int, fmt: *Char, ...): Int32;
 extern func vsnprintf(buf: *Char, n: Int, fmt: *Char, args: ...): Int32;
-extern func fseek(file: *File, offset: Int, origin: Int): Int32;
-extern func ftell(file: *File): Int;
-extern func fread(buffer: *Void, size: Int, count: Int, stream: *File): Int;
-extern func ferror(stream: *File): Int32;
+extern func fseek(file: *mut File, offset: Int, origin: Int): Int32;
+extern func ftell(file: *mut File): Int;
+extern func fread(buffer: *mut Void, size: Int, count: Int, stream: *mut File): Int;
+extern func ferror(stream: *mut File): Int32;
 
 // stdlib.h
 
 extern func exit(status: Int32): !;
-extern func calloc(count: Int, size: Int): *Void;
-extern func malloc(size: Int): *Void;
-extern func realloc(ptr: *Void, size: Int): *Void;
-extern func free(ptr: *Void): Void;
+extern func calloc(count: Int, size: Int): *mut Void;
+extern func malloc(size: Int): *mut Void;
+extern func realloc(ptr: *mut Void, size: Int): *mut Void;
+extern func free(ptr: *mut Void): Void;
 extern func strtol(str: *Char, endptr: *Char, base: Int32): Int32;
 extern func realpath(path: *Char, resolved: *Char): *Char;
 
@@ -41,7 +41,7 @@ extern func perror(message: *Char): Void;
 
 // string.h
 
-extern func memcpy(dest: *Void, src: *Void, n: Int): *Void;
-extern func memset(s: *Void, c: Int32, n: Int): *Void;
+extern func memcpy(dest: *mut Void, src: *Void, n: Int): *mut Void;
+extern func memset(s: *mut Void, c: Int32, n: Int): *mut Void;
 extern func strlen(s: *Char): Int;
 extern func strcmp(a: *Char, b: *Char): Int32;
