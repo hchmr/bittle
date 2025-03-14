@@ -11,7 +11,7 @@ import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
 import { ConstEvaluator } from './constEvaluator';
 import { Scope } from './scope';
 import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
-import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, tryUnifyTypesWithCoercion, Type, typeConvertible, typeEq, TypeKind, typeLayout, unifyTypes } from './type';
+import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, tryUnifyTypesWithCoercion, Type, typeConvertible, typeEq, typeImplicitlyConvertible, TypeKind, typeLayout, unifyTypes } from './type';
 
 export type ErrorLocation = {
     file: string;
@@ -1669,7 +1669,7 @@ export class Elaborator {
             this.reportError(node, `Invalid cast type.`);
         }
 
-        if (typeEq(castType, exprType)) {
+        if (typeImplicitlyConvertible(exprType, castType)) {
             this.reportWarning(keywordNode, `Redundant cast.`);
         }
 
