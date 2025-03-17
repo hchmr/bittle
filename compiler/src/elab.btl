@@ -321,7 +321,7 @@ func report_type_mismatch(pos: *Pos, expected: *Type, actual: *Type) {
 }
 
 func try_coerce_expr_with_cast(e: *mut Expr, target: *Type, out: *mut *mut Expr): Bool {
-    if (!type_implicitly_convertible(e.type, target)) {
+    if (!type_implicitly_castable(e.type, target)) {
         return false;
     }
 
@@ -1046,8 +1046,8 @@ func elab_cast_expr(ctx: *mut ElabCtx, expr: *mut CastExpr) {
     var source_type = subexpr.type;
     var target_type = eval_type(ctx, expr.type_expr);
 
-    if (!type_convertible(source_type, target_type)) {
-        die_at(&expr.pos, "Invalid cast");
+    if (!type_castable(source_type, target_type)) {
+        die_at(&expr.pos, "Invalid cast. Cannot cast from '%s' to '%s'", pretty_type(source_type), pretty_type(target_type));
     }
 
     expr.type = target_type;

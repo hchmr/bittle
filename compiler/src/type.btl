@@ -1,3 +1,18 @@
+/// Note: [Pointer Subtyping]
+/// ~~~~~~~~~~~~~~~~~~~~~~~~~
+///
+/// Immutable to immutable:
+/// - `*T <: *T`: (reflexitivy)
+/// - `*! <: *T`: (bottom type)
+/// - `*T <: *Void`: (top type)
+/// - `*r1 <: *r2`: if `r1` extends `r2` (covariance)
+/// Mutable to immutable:
+/// - `*mut T <: *U` if `*T <: *U`
+/// Mutable to mutable:
+/// - `*mut T <: *mut T` (reflexivity)
+/// - `*mut ! <: *mut T` (bottom type)
+/// - `*mut T <: *mut Void` (top type)
+
 include "bittle.btls";
 
 func mk_void_type(): *VoidType {
@@ -82,60 +97,28 @@ func record_le(s1: *RecordSym, s2: *RecordSym): Bool {
     return record_le(s1.base, s2);
 }
 
-func is_union_with_member(sym: *RecordSym, t: *Type): Bool {
-    if (!sym.is_union) {
-        return false;
-    }
-    for (var i = 0; i < list_len(sym.fields); i += 1) {
-        var field = list_get(sym.fields, i) as *RecordField;
-        if (type_eq(field.type, t)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/*
-    Pointer subtyping rules:
-
-    Pointee subtyping relation (T << U)
-    - T << T
-    - ! << T
-    - T << Void
-    - r1 << r2 if r1 extends r2
-
-    Pointer rules (T <: U)
-    - *T <: *U if T << U: Immutable to immutable (covariant)
-    - *mut T <: *U if T << U: Mutable to immutable (covariant)
-    - *mut T <: *mut T: Mutable to mutable (invariant)
-    - *mut T <: *mut Void: Mutable to mutable (void pointer)
-
-    Future extensions:
-    - Nullable pointers
-    - Function pointers
-*/
-
 func pointee_type_le(t1: *Type, t2: *Type): Bool {
-    return type_eq(t1, t2)
-        || t1.kind == Type_Never
+    return t1.kind == Type_Never
         || t2.kind == Type_Void
+        || type_eq(t1, t2)
         || t1.kind == Type_Record && t2.kind == Type_Record && record_le((t1 as *RecordType).sym, (t2 as *RecordType).sym);
 }
 
 func ptr_type_le(t1: *PtrType, t2: *PtrType): Bool {
-    var p1 = t1.pointee;
-    var p2 = t2.pointee;
-
     return
-        // Immutable to immutable
-        // Mutable to immutable
-        !t2.is_mut && pointee_type_le(p1, p2)
-        // Mutable to mutable
-        || t1.is_mut && t2.is_mut && (type_eq(p1, p2) || p2.kind == Type_Void);
+        // T <: *mut U
+        !t2.is_mut && pointee_type_le(t1.pointee, t2.pointee)
+        // *mut T <: *mut U
+        || t1.is_mut && t2.is_mut
+        && (
+            t1.kind == Type_Never
+            || t2.kind == Type_Void
+            || type_eq(t1.pointee, t2.pointee)
+        );
 }
 
 // Returns whether the first type is implicitly convertible to the second type.
-func type_implicitly_convertible(src: *Type, dst: *Type): Bool {
+func type_implicitly_castable(src: *Type, dst: *Type): Bool {
     if (src.kind == Type_Never) {
         return true;
     }
@@ -151,7 +134,7 @@ func type_implicitly_convertible(src: *Type, dst: *Type): Bool {
         case Type_Ptr if src.kind == Type_Ptr: {
             var dst = dst as *PtrType;
             var src = src as *PtrType;
-            return ptr_type_le(src, dst);
+            return ptr_type_convertible(src, dst);
         }
         case _: {
             return false;
@@ -160,13 +143,14 @@ func type_implicitly_convertible(src: *Type, dst: *Type): Bool {
 }
 
 func ptr_type_convertible(src: *PtrType, dst: *PtrType): Bool {
-    return !(!src.is_mut && dst.is_mut && (pointee_type_le(src.pointee, dst.pointee) || pointee_type_le(dst.pointee, src.pointee)))
-        || (src.pointee.kind == Type_Void || dst.pointee.kind == Type_Void);
+    return
+        src.pointee.kind == Type_Void // Casting from void pointer
+        || dst.pointee.kind == Type_Void // Casting to void pointer
+        || !(!src.is_mut && dst.is_mut); // Cannot cast away constness in general
 }
 
-// Returns whether the first type is explicitly convertible to the second type
-func type_convertible(src: *Type, dst: *Type): Bool {
-    if (type_implicitly_convertible(src, dst)) {
+func type_castable(src: *Type, dst: *Type): Bool {
+    if (type_implicitly_castable(src, dst)) {
         return true;
     }
 
@@ -178,7 +162,7 @@ func type_convertible(src: *Type, dst: *Type): Bool {
             return type_size(src) == 8;
         }
         case Type_Ptr if src.kind == Type_Ptr: {
-            return ptr_type_convertible(src as *PtrType, dst as *PtrType);
+            return ptr_type_le(src as *PtrType, dst as *PtrType);
         }
         case Type_Enum: {
             return src.kind is (Type_Int | Type_Enum);

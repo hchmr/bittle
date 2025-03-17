@@ -138,8 +138,8 @@ func mk_record_type(sym: *mut RecordSym): *RecordType;
 func mk_rest_param_type(): *Type;
 
 func type_eq(t1: *Type, t2: *Type): Bool;
-func type_implicitly_convertible(src: *Type, dst: *Type): Bool;
-func type_convertible(src: *Type, dst: *Type): Bool;
+func type_implicitly_castable(src: *Type, dst: *Type): Bool;
+func type_castable(src: *Type, dst: *Type): Bool;
 func type_size(type: *Type): Int;
 func type_align(type: *Type): Int;
 func is_scalar(type: *Type): Bool;
