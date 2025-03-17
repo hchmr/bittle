@@ -373,7 +373,7 @@ export function canCoerce(src: Type, dst: Type): boolean {
 }
 
 function canCoerceWithCast(src: Type, dst: Type): boolean {
-    return typeImplicitlyConvertible(src, dst);
+    return typeImplicitlyCastable(src, dst);
 }
 
 function canCoerceToUnion(src: Type, dst: Type): boolean {
@@ -383,7 +383,7 @@ function canCoerceToUnion(src: Type, dst: Type): boolean {
     return dst.sym.fields.some(f => typeEq(f.type, src));
 }
 
-export function typeImplicitlyConvertible(src: Type, dst: Type): boolean {
+export function typeImplicitlyCastable(src: Type, dst: Type): boolean {
     if (src.kind === TypeKind.Never || src.kind === TypeKind.Err) {
         return true;
     }
@@ -405,8 +405,8 @@ function pointerTypeConvertible(src: PointerType, dst: PointerType): boolean {
         || ([src.pointeeType.kind, dst.pointeeType.kind].includes(TypeKind.Void));
 }
 
-export function typeConvertible(src: Type, dst: Type): boolean {
-    if (typeImplicitlyConvertible(src, dst)) {
+export function typeCastable(src: Type, dst: Type): boolean {
+    if (typeImplicitlyCastable(src, dst)) {
         return true;
     }
 
@@ -434,18 +434,19 @@ function recordLe(s1: RecordSym, s2: RecordSym): boolean {
 }
 
 function pointeeTypeLe(t1: Type, t2: Type): boolean {
-    return typeEq(t1, t2)
-        || t1.kind === TypeKind.Never
+    return t1.kind === TypeKind.Never
         || t2.kind === TypeKind.Void
+        || typeEq(t1, t2)
         || (t1.kind === TypeKind.Record && t2.kind === TypeKind.Record && recordLe(t1.sym, t2.sym));
 }
 
 function pointerTypeLe(t1: PointerType, t2: PointerType): boolean {
-    const p1 = t1.pointeeType;
-    const p2 = t2.pointeeType;
-
-    return (!t2.isMut && pointeeTypeLe(p1, p2))
-        || (t1.isMut && t2.isMut && (typeEq(p1, p2) || p2.kind === TypeKind.Void));
+    return !t2.isMut && pointeeTypeLe(t1.pointeeType, t2.pointeeType)
+        || t1.isMut && t2.isMut && (
+            t1.pointeeType.kind === TypeKind.Never
+            || t2.pointeeType.kind === TypeKind.Void
+            || typeEq(t1.pointeeType, t2.pointeeType)
+        );
 }
 
 export function prettyType(t: Type): string {
