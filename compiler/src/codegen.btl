@@ -70,6 +70,8 @@ struct Slot {
 }
 
 struct CodegenCtx {
+    out: *mut File,
+
     // execution context
     current_func: *FuncSym,
     current_loop: LoopCtx,
@@ -1076,7 +1078,7 @@ func emit_func(ctx: *mut CodegenCtx, sym: *mut FuncSym) {
 
     var frame_size = align_up(spills_size + -next_fp_offset + ctx.max_scratch_size + ctx.max_arg_pass_size, 16);
 
-    asm_print_func(&AsmFunc {
+    asm_print_func(ctx.out, &AsmFunc {
         name: sym.name,
         builder: ctx.builder,
         frame_size: frame_size,
@@ -1089,7 +1091,12 @@ func emit_func(ctx: *mut CodegenCtx, sym: *mut FuncSym) {
 }
 
 func emit_global(ctx: *mut CodegenCtx, sym: *GlobalSym) {
-    asm_print_global(sym.name, type_size(sym.type), type_align(sym.type));
+    asm_print_global(
+        ctx.out,
+        sym.name,
+        type_size(sym.type),
+        type_align(sym.type)
+    );
 }
 
 func emit_sym(ctx: *mut CodegenCtx, sym: *mut Sym) {
@@ -1106,8 +1113,9 @@ func emit_sym(ctx: *mut CodegenCtx, sym: *mut Sym) {
     }
 }
 
-func emit_program(syms: *List) {
+func emit_program(out: *mut File, syms: *List) {
     var ctx = calloc(1, sizeof(CodegenCtx)) as *mut CodegenCtx;
+    ctx.out = out;
     ctx.strings = list_new();
 
     for (var i = 0; i < list_len(syms); i += 1) {
@@ -1118,6 +1126,6 @@ func emit_program(syms: *List) {
     var n_strings = list_len(ctx.strings);
     for (var i = 0; i < n_strings; i += 1) {
         var string = list_get(ctx.strings, i) as *StringBuffer;
-        asm_print_string(i, string);
+        asm_print_string(ctx.out, i, string);
     }
 }

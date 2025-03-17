@@ -1,61 +1,199 @@
 include "bittle.btls";
 
-//==============================================================================
+struct GlobalCtx {
+    // Modules that have been loaded
+    modules: *mut List, // List<*Module>
+    import_chain: *mut List, // List<*Char>
+}
 
-func parse(file_name: *Char, input_file: *mut File): *mut Ast {
-    var text = read_file(input_file);
-    var lexer = lexer_new(file_name, text);
-    var parser = parser_new(lexer);
-    return parser_run(parser);
+//==============================================================================
+//== Loading
+
+func find_module(ctx: *GlobalCtx, path: *Char): *mut Module {
+    var n = list_len(ctx.modules);
+    for (var i = 0; i < n; i += 1) {
+        var mod = list_get(ctx.modules, i) as *mut Module;
+        if (str_eq(mod.path, path)) {
+            return mod;
+        }
+    }
+    return null;
+}
+
+func process_imports(ctx: *mut GlobalCtx, ast: *mut Ast) {
+    var dir = get_dirname(ast.file);
+    for (var i = 0; i < list_len(ast.decls); i += 1) {
+        var decl = list_get(ast.decls, i) as *mut Decl;
+        if (decl.kind != Decl_Import) {
+            continue;
+        }
+        var decl = decl as *mut ImportDecl;
+
+        var file = sb_cstr(decl.path);
+        var relative_path = join_paths(dir, file);
+
+        var mod = load_module(ctx, relative_path);
+        if (!mod) {
+            die_at(&decl.pos, "Could not find module to import: %s", file);
+        }
+        decl.resolved_mod = mod;
+    }
+}
+
+func resolve_path(import_path: *Char): *Char {
+    var resolved = realpath(import_path);
+    if (!resolved && !str_ends_with(import_path, ".btl")) {
+        var sb = sb_new();
+        sb_printf(sb, "%s.btl", import_path);
+        resolved = realpath(sb_cstr(sb));
+        sb_free(sb);
+    }
+    return resolved;
+}
+
+func load_module(ctx: *mut GlobalCtx, file_name: *Char): *mut Module {
+    var full_path = resolve_path(file_name);
+    if (!full_path) {
+        return null;
+    }
+
+    var existing = find_module(ctx, full_path);
+    if (existing) {
+        return existing;
+    }
+
+    if (string_list_contains(ctx.import_chain, full_path)) {
+        die("Cyclic imports detected.");
+    }
+
+    list_push(ctx.import_chain, full_path);
+
+    var ast = parse(full_path);
+    process_imports(ctx, ast);
+    var syms = elab(ast);
+
+    list_pop(ctx.import_chain);
+
+    var mod = box(sizeof(Module), &Module {
+        name: get_stem(full_path),
+        path: full_path,
+        syms: syms,
+    }) as *mut Module;
+
+    list_push(ctx.modules, mod);
+    return mod;
+}
+
+//==============================================================================
+//== Args
+
+
+
+struct Args {
+    out_dir: *Char,
+    files: **Char,
+    n_files: Int,
+}
+
+func help(progname: *Char, status: Int32): ! {
+    fprintf(stderr, "Usage: %s [options] file...\n", progname);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --help, -h  Show this help message\n");
+    fprintf(stderr, "  --out-dir   Output directory\n");
+    exit(status);
+}
+
+func arg_error(progrname: *Char, message: *Char) {
+    fprintf(stderr, "%s: %s\n", progrname, message);
+    help(progrname, 1);
+}
+
+func arg_parse(argc: Int32, argv: **Char): Args {
+    var files = list_new();
+    var out_dir: *Char = null;
+    for (var i = 1; i < argc;) {
+        var arg = argv[i];
+        if (str_eq(arg, "--help") || str_eq(arg, "-h")) {
+            help(argv[0], 0);
+        } else if (str_eq(arg, "--out-dir")) {
+            if (out_dir) {
+                arg_error(argv[0], "Multiple --out-dir options");
+            }
+            if (i + 1 >= argc) {
+                arg_error(argv[0], "Missing argument for --out-dir");
+            }
+            out_dir = argv[i + 1];
+            i += 2;
+        } else {
+            list_push(files, arg);
+            i += 1;
+        }
+    }
+
+    if (list_len(files) == 0) {
+        fprintf(stderr, "No input files\n");
+        help(argv[0], 1);
+    }
+
+    var n_files = list_len(files);
+    var files = list_finish(files) as *mut *Char;
+
+    return Args {
+        out_dir,
+        files,
+        n_files,
+    };
 }
 
 //==============================================================================
 //== main
 
-struct Args {
-    file_name: *Char,
-}
-
-func help(progname: *Char, status: Int32) {
-    printf("Usage: %s [options] file\n", progname);
-    printf("Options:\n");
-    printf("  --help, -h  Show this help message\n");
-    exit(status);
-}
-
-func arg_parse(argc: Int32, argv: **Char, args: *mut Args) {
-    for (var i = 1; i < argc; i += 1) {
-        if (str_eq(argv[i], "--help") || str_eq(argv[i], "-h")) {
-            help(argv[0], 0);
-        } else if (i == 1) {
-            args.file_name = argv[i];
-        } else {
-            printf("Unknown argument: %s\n", argv[i]);
-            help(argv[0], 1);
-        }
+func get_output_file_name(out_dir: *Char, mod_name: *Char): *mut Char {
+    var sb = sb_new();
+    if (out_dir) {
+        sb_printf(sb, "%s/", out_dir);
     }
+    sb_printf(sb, "%s.s", mod_name);
+    return sb_finish(sb);
 }
 
 func main(argc: Int32, argv: **Char): Int32 {
-    var args: Args;
-    arg_parse(argc, argv, &args);
+    var args = arg_parse(argc, argv);
 
-    var file_name: *Char;
-    var input_file: *mut File;
-    if (!args.file_name) {
-        file_name = "<stdin>";
-        input_file = stdin;
-    } else {
-        file_name = args.file_name;
-        input_file = fopen(args.file_name, "r");
-        if (!input_file) {
-            perror("fopen");
+    var ctx = GlobalCtx {
+        modules: list_new(),
+        import_chain: list_new(),
+    };
+
+    // Legacy mode
+    if (args.n_files == 1 && !args.out_dir) {
+        var mod = load_module(&ctx, args.files[0]);
+        if (!mod) {
+            fprintf(stderr, "File not found: %s\n", args.files[0]);
             return 1;
+        }
+        emit_program(stdout, mod.syms);
+    } else {
+        for (var i = 0; i < args.n_files; i += 1) {
+            var file_name = args.files[i];
+            var mod = load_module(&ctx, file_name);
+            if (!mod) {
+                fprintf(stderr, "File not found: %s\n", file_name);
+                return 1;
+            }
+            var output_file_name = get_output_file_name(args.out_dir, mod.name);
+            var output_file = fopen(output_file_name, "w");
+            if (!output_file) {
+                perror("fopen");
+                return 1;
+            }
+            emit_program(output_file, mod.syms);
+            if (fclose(output_file) != 0) {
+                perror("fclose");
+                return 1;
+            }
         }
     }
 
-    var ast = parse(file_name, input_file);
-    var syms = elab(ast);
-    emit_program(syms);
     return 0;
 }

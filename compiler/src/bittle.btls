@@ -17,8 +17,8 @@ func assert(cond: Bool, because: *Char);
 func unreachable(function: *Char): !;
 
 func error_at(pos: *Pos);
-func die(msg: *Char): !;
-func die_at(pos: *Pos, msg: *Char, ...args): !;
+func die(fmt: *Char, ...args): !;
+func die_at(pos: *Pos, fmt: *Char, ...args): !;
 
 func sb_new(): *mut StringBuffer;
 func sb_free(self: *mut StringBuffer);
@@ -36,14 +36,18 @@ func sb_finish(self: *mut StringBuffer): *mut Char;
 func list_new(): *mut List;
 func list_new_with_cap(cap: Int): *mut List;
 func list_len(self: *List): Int;
+func list_buf(self: *List): *mut Void;
 func list_get(self: *List, i: Int): *Void;
 func list_set(self: *mut List, i: Int, elem: *Void);
 func list_push(self: *mut List, elem: *Void);
 func list_pop(self: *mut List): *Void;
+func list_finish(self: *mut List, len_p: *mut Int = null): *mut Void;
+func string_list_contains(haystack: *mut List, needle: *Char): Bool;
 
 func box(size: Int, data: *Void): *mut Void;
 
 func str_eq(a: *Char, b: *Char): Bool;
+func str_ends_with(s: *Char, suffix: *Char): Bool;
 
 func align_up(size: Int , align: Int): Int;
 func ilog2(n: Int): Int;
@@ -52,7 +56,10 @@ func int_min(a: Int, b: Int): Int;
 func int_max(a: Int, b: Int): Int;
 
 func read_file(file: *mut File): *mut Char;
-func get_directory(path: *Char): *mut Char;
+
+func get_dirname(path: *Char): *mut Char;
+func get_basename(path: *Char): *Char;
+func get_stem(path: *Char): *mut Char;
 func join_paths(dir: *Char, file: *Char): *mut Char;
 
 func is_whitespace(c: Char): Bool;
@@ -267,6 +274,12 @@ struct LocalSym: Sym {
     is_indirect: Bool,
 }
 
+struct Module {
+    name: *Char,
+    path: *Char,
+    syms: *mut List, // List<*Sym>
+}
+
 func find_record_field_by_name(sym: *Sym, name: *Char): Int;
 func find_record_field_by_type(sym: *Sym, type: *Type): Int;
 func find_param_by_name(sym: *FuncSym, name: *Char): Int;
@@ -296,9 +309,11 @@ enum TokKind {
     Tok_For,
     Tok_Func,
     Tok_If,
+    Tok_Import,
     Tok_Include,
     Tok_Is,
     Tok_Match,
+    Tok_Module,
     Tok_Mut,
     Tok_Null,
     Tok_Return,
@@ -721,6 +736,8 @@ struct ExprStmt: Stmt {
 // Decl
 
 enum DeclKind {
+    Decl_ModuleName,
+    Decl_Import,
     Decl_Record,
     Decl_Func,
     Decl_Enum,
@@ -731,6 +748,17 @@ enum DeclKind {
 struct Decl {
     kind: DeclKind,
     pos: Pos,
+}
+
+struct ModuleNameDecl: Decl {
+    kind = Decl_ModuleName,
+    name: *Char,
+}
+
+struct ImportDecl: Decl {
+    kind = Decl_Import,
+    path: *StringBuffer,
+    resolved_mod: *mut Module,
 }
 
 struct RecordFieldDecl {
@@ -803,6 +831,7 @@ struct GlobalDecl: Decl {
 }
 
 struct Ast {
+    file: *Char,
     decls: *mut List, // List<Decl>
 }
 
@@ -995,10 +1024,7 @@ func lexer_next(self: *mut Lexer): Tok;
 //==============================================================================
 //== parser.btl
 
-struct Parser;
-
-func parser_new(lexer: *mut Lexer): *mut Parser;
-func parser_run(self: *mut Parser): *mut Ast;
+func parse(file_name: *Char): *mut Ast;
 
 //==============================================================================
 //== elab.btl
@@ -1203,11 +1229,11 @@ func asm_add_comment_to_last(builder: *mut AsmInstrBuilder, fmt: *Char, ...args)
 //== Printing Assembly
 
 
-func asm_print_func(fun: *AsmFunc);
-func asm_print_global(name: *Char, size: Int, align: Int);
-func asm_print_string(id: Int, str: *StringBuffer);
+func asm_print_func(out: *mut File, fun: *AsmFunc);
+func asm_print_global(out: *mut File, name: *Char, size: Int, align: Int);
+func asm_print_string(out: *mut File, id: Int, str: *StringBuffer);
 
 //==============================================================================
 //== codegen.btl
 
-func emit_program(syms: *List);
+func emit_program(out: *mut File, syms: *List);
