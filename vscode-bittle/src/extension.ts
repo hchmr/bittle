@@ -3,7 +3,7 @@ import { CodeActionsProvider } from './features/codeActions';
 import { createCompilerErrorProvider } from './features/compilerErrors';
 import { CompletionProvider } from './features/completion';
 import { ElaborationDiagnosticProvider } from './features/elaborationDiags';
-import { IncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
+import { ImportAndIncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { ReferenceProvider } from './features/references';
 import { SemanticTokensProvider } from './features/semanticTokens';
@@ -11,9 +11,9 @@ import { SignatureHelpProvider } from './features/signatureHelp';
 import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { CompilerService } from './services/compilerService';
-import { IncludeGraphService } from './services/includeGraphService';
-import { IncludeResolver } from './services/IncludeResolver';
+import { FileGraphService } from './services/fileGraphService';
 import { ParsingServiceImpl } from './services/parsingService';
+import { PathResolver } from './services/pathResolver';
 import { SemanticsService } from './services/semanticsService';
 import { VirtualFileSystemImpl } from './services/vfs';
 import { ReactiveCache } from './utils/reactiveCache';
@@ -28,11 +28,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     const parsingService = new ParsingServiceImpl(cache, vfs);
 
-    const includeResolver = new IncludeResolver(vfs);
+    const pathResolver = new PathResolver(vfs);
 
-    const semanticsService = new SemanticsService(parsingService, includeResolver, cache);
+    const semanticsService = new SemanticsService(parsingService, pathResolver, cache);
 
-    const includeGraphService = new IncludeGraphService(parsingService, vfs, includeResolver);
+    const fileGraphService = new FileGraphService(parsingService, vfs, pathResolver);
 
     const compilerService = new CompilerService();
 
@@ -96,9 +96,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Navigation
 
-    const nameDefinitionProvider = new NameDefinitionProvider(parsingService, semanticsService, includeGraphService);
+    const nameDefinitionProvider = new NameDefinitionProvider(parsingService, semanticsService, fileGraphService);
     context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('bittle', new IncludeDefinitionProvider(vfs, parsingService)),
+        vscode.languages.registerDefinitionProvider('bittle', new ImportAndIncludeDefinitionProvider(pathResolver, parsingService)),
         vscode.languages.registerDefinitionProvider('bittle', nameDefinitionProvider),
         vscode.languages.registerImplementationProvider('bittle', nameDefinitionProvider),
         vscode.languages.registerTypeDefinitionProvider('bittle', new TypeDefinitionProvider(parsingService, semanticsService)),
@@ -116,7 +116,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Rename and references
 
-    const referenceProvider = new ReferenceProvider(parsingService, semanticsService, includeGraphService);
+    const referenceProvider = new ReferenceProvider(parsingService, semanticsService, fileGraphService);
     context.subscriptions.push(
         vscode.languages.registerReferenceProvider('bittle', referenceProvider),
         vscode.languages.registerRenameProvider('bittle', referenceProvider),

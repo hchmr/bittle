@@ -8,6 +8,8 @@ import { SyntaxNode } from './tree';
 export enum AstNodeTypes {
     Root = 'Root',
     IncludeDecl = 'IncludeDecl',
+    ModuleNameDecl = 'ModuleNameDecl',
+    ImportDecl = 'ImportDecl',
     EnumDecl = 'EnumDecl',
     EnumBody = 'EnumBody',
     EnumMember = 'EnumMember',
@@ -75,12 +77,34 @@ export type AstNodeType = AstNodeTypes[keyof AstNodeTypes];
 
 export class RootNode extends AstNode {
     get declNodes(): DeclNode[] {
-        return this.getAstNodesOfType<DeclNode>(undefined, ['IncludeDecl', 'EnumDecl', 'RecordDecl', 'FuncDecl', 'GlobalDecl', 'ConstDecl']);
+        return this.getAstNodesOfType<DeclNode>(undefined, ['IncludeDecl', 'ModuleNameDecl', 'ImportDecl', 'EnumDecl', 'RecordDecl', 'FuncDecl', 'GlobalDecl', 'ConstDecl']);
     }
 }
 export class IncludeDeclNode extends AstNode {
     get includeToken(): TokenNode<'include'> | undefined {
         return this.getTokenOfType(undefined, ['include']);
+    }
+    get path(): TokenNode<'string_literal'> | undefined {
+        return this.getTokenOfType('path', ['string_literal']);
+    }
+    get semicolonToken(): TokenNode<';'> | undefined {
+        return this.getTokenOfType(undefined, [';']);
+    }
+}
+export class ModuleNameDeclNode extends AstNode {
+    get moduleToken(): TokenNode<'module'> | undefined {
+        return this.getTokenOfType(undefined, ['module']);
+    }
+    get name(): TokenNode<'identifier'> | undefined {
+        return this.getTokenOfType('name', ['identifier']);
+    }
+    get semicolonToken(): TokenNode<';'> | undefined {
+        return this.getTokenOfType(undefined, [';']);
+    }
+}
+export class ImportDeclNode extends AstNode {
+    get importToken(): TokenNode<'import'> | undefined {
+        return this.getTokenOfType(undefined, ['import']);
     }
     get path(): TokenNode<'string_literal'> | undefined {
         return this.getTokenOfType('path', ['string_literal']);
@@ -801,6 +825,8 @@ export class StringLiteralNode extends AstNode {
 
 export enum DeclNodeTypes {
     IncludeDecl = 'IncludeDecl',
+    ModuleNameDecl = 'ModuleNameDecl',
+    ImportDecl = 'ImportDecl',
     EnumDecl = 'EnumDecl',
     RecordDecl = 'RecordDecl',
     FuncDecl = 'FuncDecl',
@@ -810,6 +836,8 @@ export enum DeclNodeTypes {
 
 export type DeclNode =
     | IncludeDeclNode
+    | ModuleNameDeclNode
+    | ImportDeclNode
     | EnumDeclNode
     | RecordDeclNode
     | FuncDeclNode
@@ -942,6 +970,8 @@ export function fromSyntaxNode(syntax: SyntaxNode): AstNode {
     switch (syntax.type) {
         case AstNodeTypes.Root: return new RootNode(syntax);
         case AstNodeTypes.IncludeDecl: return new IncludeDeclNode(syntax);
+        case AstNodeTypes.ModuleNameDecl: return new ModuleNameDeclNode(syntax);
+        case AstNodeTypes.ImportDecl: return new ImportDeclNode(syntax);
         case AstNodeTypes.EnumDecl: return new EnumDeclNode(syntax);
         case AstNodeTypes.EnumBody: return new EnumBodyNode(syntax);
         case AstNodeTypes.EnumMember: return new EnumMemberNode(syntax);

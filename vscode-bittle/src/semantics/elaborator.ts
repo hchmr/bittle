@@ -1,11 +1,12 @@
 import assert, { AssertionError } from 'assert';
-import { resolve as resolvePath } from 'path';
-import { IncludeResolver } from '../services/IncludeResolver';
+import { basename as pathBasename, resolve as resolvePath } from 'path';
 import { ParsingService } from '../services/parsingService';
+import { PathResolver } from '../services/pathResolver';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, IsExprNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, ImportDeclNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, IsExprNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, ModuleNameDeclNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
+import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
 import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
 import { ConstEvaluator } from './constEvaluator';
@@ -37,6 +38,7 @@ export type SymReference = {
 };
 
 export type ElaboratorResult = {
+    moduleName: string | undefined;
     scope: Scope;
     symbols: Map<string, Sym>;
     nodeSymMap: WeakMap<SyntaxNode, string[]>;
@@ -55,6 +57,9 @@ export class Elaborator {
 
     private scope: Scope;
 
+    // Path -> ElaboratorResult
+    private imports: Map<string, ElaboratorResult> = new Map();
+
     // Symbol.qualifiedName -> Symbol
     private symbols: Map<string, Sym> = new Map();
     // Symbol.qualifiedName -> Reference[]
@@ -66,6 +71,9 @@ export class Elaborator {
     private nodeTypeMap: WeakMap<SyntaxNode, Type> = new WeakMap();
 
     private diagnostics: ElaborationDiag[] = [];
+
+    // Current module
+    moduleName: string | undefined;
 
     // Current function
     private currentFunc: FuncSym | undefined;
@@ -79,8 +87,10 @@ export class Elaborator {
 
     private constructor(
         private parsingService: ParsingService,
-        private includeResolver: IncludeResolver,
+        private pathResolver: PathResolver,
+        private cache: ReactiveCache,
         private path: string,
+        private importChain: string[],
     ) {
         this.rootNode = this.parsingService.parseAsAst(path);
         this.scope = new Scope(this.path, this.rootNode.syntax);
@@ -89,6 +99,7 @@ export class Elaborator {
     private run(): ElaboratorResult {
         this.elabRoot(this.rootNode);
         return {
+            moduleName: this.moduleName,
             scope: this.scope,
             symbols: this.symbols,
             nodeSymMap: this.nodeSymMap,
@@ -100,10 +111,14 @@ export class Elaborator {
 
     public static elaborate(
         parsingService: ParsingService,
-        includeResolver: IncludeResolver,
+        pathResolver: PathResolver,
+        cache: ReactiveCache,
         path: string,
+        importChain: string[] = [],
     ): ElaboratorResult {
-        return new Elaborator(parsingService, includeResolver, path).run();
+        return cache.compute('elaborate:' + path, () =>
+            new Elaborator(parsingService, pathResolver, cache, path, importChain).run(),
+        );
     }
 
     //==============================================================================
@@ -124,6 +139,18 @@ export class Elaborator {
     }
 
     private lookupSymbol(name: string) {
+        const sym = this.lookupSymbolInCurrentModule(name);
+        if (sym) {
+            return [sym];
+        }
+
+        return stream(this.imports.values())
+            .filterMap(result => result.scope.lookup(name))
+            .map(qname => this.symbols.get(qname)!)
+            .toArray();
+    }
+
+    private lookupSymbolInCurrentModule(name: string) {
         const qname = this.scope.lookup(name);
         if (!qname)
             return;
@@ -139,13 +166,18 @@ export class Elaborator {
 
     private resolveName(nameNode: SyntaxNode): Sym | undefined {
         const name = nameNode.text;
-        const sym = this.lookupSymbol(name);
-        if (sym) {
-            this.recordNameResolution(sym, nameNode);
-            return sym;
-        } else {
-            this.reportError(nameNode, `Unknown symbol '${name}'.`);
-            return undefined;
+        const syms = this.lookupSymbol(name);
+
+        switch (syms.length) {
+            case 1:
+                this.recordNameResolution(syms[0], nameNode);
+                return syms[0];
+            case 0:
+                this.reportError(nameNode, `Unknown symbol '${name}'.`);
+                return undefined;
+            default:
+                this.reportError(nameNode, `Ambiguous symbol '${name}'.`);
+                return undefined;
         }
     }
 
@@ -216,7 +248,7 @@ export class Elaborator {
             kind: SymKind.Record,
             recordKind,
             name: nameNode.text,
-            qualifiedName: 'record:' + nameNode.text,
+            qualifiedName: this.mkQualifiedName('record', nameNode.text),
             origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
             isDefined: false,
             base: undefined,
@@ -261,7 +293,7 @@ export class Elaborator {
         const sym: RecordFieldSym = {
             kind: SymKind.RecordField,
             name: nameNode.text,
-            qualifiedName: `${recordSym.name}.${nameNode.text}`,
+            qualifiedName: this.mkQualifiedName(recordSym.name, nameNode.text),
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             isDefined: true,
             type,
@@ -298,7 +330,7 @@ export class Elaborator {
         const sym: EnumSym = {
             kind: SymKind.Enum,
             name: nameNode.text,
-            qualifiedName: 'enum:' + nameNode.text,
+            qualifiedName: this.mkQualifiedName('enum', nameNode.text),
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             isDefined: false,
             size: 32,
@@ -352,7 +384,7 @@ export class Elaborator {
         const sym: FuncSym = {
             kind: SymKind.Func,
             name: nameNode.text,
-            qualifiedName: 'func:' + nameNode.text,
+            qualifiedName: this.mkQualifiedName('func', nameNode.text),
             origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
             isDefined: false,
             params,
@@ -400,7 +432,7 @@ export class Elaborator {
         const sym: FuncParamSym = {
             kind: SymKind.FuncParam,
             name: nameNode.text,
-            qualifiedName: `func:${funcName}.param:${paramIndex}`,
+            qualifiedName: this.mkQualifiedName('func', funcName, `.param:${paramIndex}`),
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             isDefined: true,
             type,
@@ -440,7 +472,7 @@ export class Elaborator {
         const sym: GlobalSym = {
             kind: SymKind.Global,
             name: nameNode.text,
-            qualifiedName: 'global:' + nameNode.text,
+            qualifiedName: this.mkQualifiedName('global', nameNode.text),
             origins: [this.createOrigin(declNode.syntax, nameNode, !isDefinition)],
             isDefined: false,
             type,
@@ -475,7 +507,7 @@ export class Elaborator {
         const sym: ConstSym = {
             kind: SymKind.Const,
             name: nameNode.text,
-            qualifiedName: 'const:' + nameNode.text,
+            qualifiedName: this.mkQualifiedName('const', nameNode.text),
             origins: [this.createOrigin(nameNode, nameNode)],
             isDefined: false,
             value: undefined,
@@ -517,7 +549,7 @@ export class Elaborator {
         const sym: LocalSym = {
             kind: SymKind.Local,
             name: nameNode.text,
-            qualifiedName: `${this.currentFunc!.name}.local:${this.nextLocalIndex++}`,
+            qualifiedName: this.mkQualifiedName('func', this.currentFunc!.name, `.local:${this.nextLocalIndex++}`),
             origins: [this.createOrigin(declNode.syntax, nameNode)],
             isDefined: true,
             type,
@@ -667,19 +699,36 @@ export class Elaborator {
     //== Top-level
 
     private elabRoot(rootNode: RootNode) {
-        const declNodes = this.expandIncludes(this.path, rootNode.declNodes, new Set());
+        const decls: IncludedDecl[] = [];
+        this.expandIncludes(this.path, rootNode.declNodes, new Set(), decls);
 
-        const typesAndConsts = declNodes.filter(({ node }) =>
-            node instanceof RecordDeclNode
-            || node instanceof EnumDeclNode
-            || node instanceof ConstDeclNode,
-        );
+        let hasModuleName = false;
+        if (decls[0]?.node instanceof ModuleNameDeclNode) {
+            hasModuleName = true;
+            this.processModuleName(decls[0].node);
+        }
 
-        const funcsAndGlobals = declNodes.filter(({ node }) =>
-            node instanceof FuncDeclNode
-            || node instanceof GlobalDeclNode,
-        );
+        const moduleHeadersAndImports: IncludedDecl[] = [];
+        const typesAndConsts: IncludedDecl[] = [];
+        const funcsAndGlobals: IncludedDecl[] = [];
 
+        for (const [i, decl] of decls.entries()) {
+            if (hasModuleName && i === 0) {
+                // Skip
+            } else if (decl.node instanceof IncludeDeclNode) {
+                // Skip
+            } else if (decl.node instanceof ModuleNameDeclNode || decl.node instanceof ImportDeclNode) {
+                moduleHeadersAndImports.push(decl);
+            } else if (decl.node instanceof RecordDeclNode || decl.node instanceof EnumDeclNode || decl.node instanceof ConstDeclNode) {
+                typesAndConsts.push(decl);
+            } else if (decl.node instanceof FuncDeclNode || decl.node instanceof GlobalDeclNode) {
+                funcsAndGlobals.push(decl);
+            } else {
+                unreachable(decl.node);
+            }
+        }
+
+        this.elabDecls(moduleHeadersAndImports);
         this.elabDecls(typesAndConsts);
         this.elabDecls(funcsAndGlobals);
     }
@@ -687,46 +736,68 @@ export class Elaborator {
     private elabDecls(includedDecls: IncludedDecl[]) {
         const completionCallbacks = includedDecls.map(({ path, node }) => {
             const complete = this.withPath(path, () => this.elabDecl(node));
+            if (!complete) {
+                return () => { /* skip */ };
+            }
             return () => this.withPath(path, complete);
         });
 
         completionCallbacks.forEach((complete) => complete());
     }
 
-    private expandIncludes(path: string, declNodes: DeclNode[], seenPaths: Set<string>): IncludedDecl[] {
+    private expandIncludes(path: string, declNodes: DeclNode[], seenPaths: Set<string>, result: IncludedDecl[]) {
         const resolvedPath = resolvePath(path);
 
         seenPaths.add(resolvedPath);
-        return declNodes.flatMap(node => {
+        for (const node of declNodes) {
             if (node instanceof IncludeDeclNode) {
-                return this.processInclude(node, seenPaths);
+                this.processInclude(node, seenPaths, result);
+            } else {
+                result.push({ path, node });
             }
-            return [{ path: path, node }];
-        });
+        }
     }
 
-    private processInclude(node: IncludeDeclNode, seenPaths: Set<string>): IncludedDecl[] {
+    private processInclude(node: IncludeDeclNode, seenPaths: Set<string>, result: IncludedDecl[]) {
         if (!node.path) {
-            return [];
+            return;
         }
 
-        const resolvedPath = this.includeResolver.resolveInclude(this.path, node.path);
+        const resolvedPath = this.pathResolver.resolveInclude(this.path, node.path);
         if (!resolvedPath) {
             this.reportError(node, `Cannot resolve include.`);
-            return [];
+            return;
         }
 
         if (seenPaths.has(resolvedPath)) {
-            return [];
+            return;
         }
 
         const tree = this.parsingService.parseAsAst(resolvedPath);
-        return this.expandIncludes(resolvedPath, tree.declNodes, seenPaths);
+        return this.expandIncludes(resolvedPath, tree.declNodes, seenPaths, result);
     }
 
-    private elabDecl(node: DeclNode): () => void {
+    private processModuleName(node: ModuleNameDeclNode) {
+        const name = node.name?.text;
+        if (!name) {
+            return;
+        }
+
+        const expectedName = /^\w+/.exec(pathBasename(this.path))?.[0];
+        if (name !== expectedName) {
+            this.reportError(node, `Module name must match the file name.`);
+        }
+
+        this.moduleName = name;
+    }
+
+    private elabDecl(node: DeclNode): undefined | (() => void) {
         if (node instanceof IncludeDeclNode) {
-            throw new AssertionError({ message: `IncludeDeclNode should have been processed in expandIncludes.` });
+            // Skip
+        } else if (node instanceof ImportDeclNode) {
+            this.elabImport(node);
+        } else if (node instanceof ModuleNameDeclNode) {
+            this.handleBadModuleName(node);
         } else if (node instanceof RecordDeclNode) {
             return this.elabRecord(node);
         } else if (node instanceof FuncDeclNode) {
@@ -739,6 +810,50 @@ export class Elaborator {
             return this.elabEnum(node);
         } else {
             unreachable(node);
+        }
+    }
+
+    private handleBadModuleName(node: ModuleNameDeclNode) {
+        this.reportError(node, `Module name must be declared at the beginning of the file.`);
+    }
+
+    private elabImport(node: ImportDeclNode) {
+        const pathNode = node.path;
+        if (!pathNode) {
+            return;
+        }
+        const path = this.pathResolver.resolveImport(this.path, pathNode);
+        if (!path) {
+            this.reportError(node, `Cannot resolve import.`);
+            return;
+        }
+
+        if (this.imports.has(path)) {
+            return;
+        }
+
+        if (this.importChain.includes(path)) {
+            const cycle = this.importChain.slice(this.importChain.indexOf(path));
+            cycle.push(path);
+            this.reportError(node, `Import cycle detected: ${cycle.join(' → ')}`);
+            return;
+        }
+
+        const elaboratorResult = Elaborator.elaborate(
+            this.parsingService,
+            this.pathResolver,
+            this.cache,
+            path,
+            [...this.importChain, path],
+        );
+        if (!elaboratorResult.moduleName) {
+            this.reportError(node, `Imported file is not a module.`);
+            return;
+        }
+
+        this.imports.set(path, elaboratorResult);
+        for (const [qname, sym] of elaboratorResult.symbols) {
+            this.symbols.set(qname, sym);
         }
     }
 
@@ -2054,6 +2169,17 @@ export class Elaborator {
             nameNode: nameNode ?? undefined,
             isForwardDecl,
         };
+    }
+
+    mkQualifiedName(type: string, name: string, suffix = '') {
+        const module = this.moduleName ?? '';
+        if (module) {
+            type = '.' + type;
+        }
+        if (name) {
+            name = '.' + name;
+        }
+        return `${module}${type}${name}${suffix}`;
     }
 }
 

@@ -8,13 +8,13 @@ import { ExprNodeTypes } from '../syntax/nodeTypes';
 import { Nullish } from '../utils';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { Stream, stream } from '../utils/stream';
-import { IncludeResolver } from './IncludeResolver';
 import { ParsingService } from './parsingService';
+import { PathResolver } from './pathResolver';
 
 export class SemanticsService {
     constructor(
         private parsingService: ParsingService,
-        private includeResolver: IncludeResolver,
+        private pathResolver: PathResolver,
         private cache: ReactiveCache,
     ) { }
 
@@ -91,9 +91,7 @@ export class SemanticsService {
     }
 
     private elaborateFile(path: string): ElaboratorResult {
-        return this.cache.compute('semanticsService:elaborateFile:' + path, () =>
-            Elaborator.elaborate(this.parsingService, this.includeResolver, path),
-        );
+        return Elaborator.elaborate(this.parsingService, this.pathResolver, this.cache, path);
     }
 }
 

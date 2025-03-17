@@ -11,6 +11,8 @@ export const grammar = createGrammar({
 
     Decl: $ => choice(
         $.IncludeDecl,
+        $.ModuleNameDecl,
+        $.ImportDecl,
         $.EnumDecl,
         $.RecordDecl,
         $.FuncDecl,
@@ -20,6 +22,18 @@ export const grammar = createGrammar({
 
     IncludeDecl: $ => seq(
         'include',
+        label('path', 'string_literal'),
+        ';',
+    ),
+
+    ModuleNameDecl: $ => seq(
+        'module',
+        label('name', 'identifier'),
+        ';',
+    ),
+
+    ImportDecl: $ => seq(
+        'import',
         label('path', 'string_literal'),
         ';',
     ),
