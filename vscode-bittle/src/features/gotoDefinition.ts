@@ -1,21 +1,19 @@
-import path from 'path';
 import * as vscode from 'vscode';
 import { Origin, Sym, SymKind, symRelatedType } from '../semantics/sym';
 import { Type, TypeKind, unifyTypes } from '../semantics/type';
-import { IncludeGraphService } from '../services/includeGraphService';
+import { FileGraphService } from '../services/fileGraphService';
 import { ParsingService } from '../services/parsingService';
+import { PathResolver } from '../services/pathResolver';
 import { SemanticsService } from '../services/semanticsService';
-import { VirtualFileSystem } from '../services/vfs';
 import { Point, SyntaxNode } from '../syntax';
 import { isExprNode, isPatternNode, isTypeNode, NodeTypes } from '../syntax/nodeTypes';
 import { interceptExceptions } from '../utils/interceptExceptions';
-import { parseString } from '../utils/literalParsing';
 import { stream } from '../utils/stream';
 import { fromVscPosition, toVscRange } from '../utils/vscode';
 
-export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
+export class ImportAndIncludeDefinitionProvider implements vscode.DefinitionProvider {
     constructor(
-        private vfs: VirtualFileSystem,
+        private pathResolver: PathResolver,
         private parsingService: ParsingService,
     ) { }
 
@@ -28,30 +26,21 @@ export class IncludeDefinitionProvider implements vscode.DefinitionProvider {
         const tree = this.parsingService.parse(document.fileName);
         const position = fromVscPosition(vscPosition);
         return stream(tree.rootNode.descendantsForPosition(position))
-            .filter(node => node.type === 'string_literal' && node.parent?.type === NodeTypes.IncludeDecl)
+            .filter(node => node.type === 'string_literal' && (node.parent?.type === NodeTypes.IncludeDecl || node.parent?.type === NodeTypes.ImportDecl))
             .filterMap(node => {
-                const stringValue = parseString(node.text);
-                if (!stringValue) {
-                    return;
-                }
-                const includePath = this.resolveInclude(document.uri.fsPath, stringValue);
-                if (!includePath) {
+                const resolved = node.parent?.type === NodeTypes.ImportDecl
+                    ? this.pathResolver.resolveImport(document.fileName, node)
+                    : this.pathResolver.resolveInclude(document.fileName, node);
+                if (!resolved) {
                     return;
                 }
                 return {
                     originSelectionRange: toVscRange(node),
-                    targetUri: vscode.Uri.file(includePath),
+                    targetUri: vscode.Uri.file(resolved),
                     targetRange: new vscode.Range(0, 0, 0, 0),
                 };
             })
             .toArray();
-    }
-
-    resolveInclude(filePath: string, stringValue: string) {
-        const includePath = path.resolve(path.dirname(filePath), stringValue);
-        if (this.vfs.readFile(includePath)) {
-            return includePath;
-        }
     }
 }
 
@@ -59,7 +48,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
     constructor(
         private parsingService: ParsingService,
         private semanticsService: SemanticsService,
-        private includeGraphService: IncludeGraphService,
+        private fileGraphService: FileGraphService,
     ) { }
 
     @interceptExceptions
@@ -90,7 +79,7 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
             .flatMap(nameNode => {
                 const symbols = this.semanticsService.resolveSymbol(filePath, nameNode);
                 return stream(symbols)
-                    .flatMap(sym => [sym, ...this.getSameSymbolInReferringFiles(sym)])
+                    .flatMap(sym => [sym, ...this.getSameSymbolInIncludingFiles(sym)])
                     .flatMap(sym => sym.origins)
                     .filter(origin => !definitionOnly || !origin.isForwardDecl)
                     .distinctBy(origin => origin.file + '|' + origin.node.startIndex)
@@ -100,17 +89,17 @@ export class NameDefinitionProvider implements vscode.DefinitionProvider, vscode
             .toArray();
     }
 
-    private getSameSymbolInReferringFiles(symbol: Sym) {
-        return this.findReferringFiles(symbol)
+    private getSameSymbolInIncludingFiles(symbol: Sym) {
+        return this.findIncludingFiles(symbol)
             .filterMap(filePath => this.semanticsService.getSymbol(filePath, symbol.qualifiedName));
     }
 
     // TODO: Copied from references.ts
-    private findReferringFiles(symbol: Sym) {
+    private findIncludingFiles(symbol: Sym) {
         return stream(symbol.origins)
             .map(origin => origin.file)
             .distinct()
-            .flatMap(filePath => this.includeGraphService.getFinalReferences(filePath))
+            .flatMap(filePath => this.fileGraphService.getFinalIncludingFiles(filePath))
             .distinct();
     }
 }

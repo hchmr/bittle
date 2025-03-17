@@ -309,6 +309,10 @@ export class Parser extends ParserBase {
     topLevelDecl() {
         if (this.match('include')) {
             this.includeDecl();
+        } else if (this.match('module')) {
+            this.ModuleNameDecl();
+        } else if (this.match('import')) {
+            this.importDecl();
         } else if (this.match('enum')) {
             this.enumDecl();
         } else if (this.match('struct') || this.match('union')) {
@@ -346,6 +350,26 @@ export class Parser extends ParserBase {
         this.finishField('path');
         this.expect(';');
         this.finishNode(CompositeNodeTypes.IncludeDecl);
+    }
+
+    ModuleNameDecl() {
+        this.beginNode(CompositeNodeTypes.ModuleNameDecl);
+        this.bump('module');
+        this.beginField('name');
+        this.expect('identifier');
+        this.finishField('name');
+        this.expect(';');
+        this.finishNode(CompositeNodeTypes.ModuleNameDecl);
+    }
+
+    importDecl() {
+        this.beginNode(CompositeNodeTypes.ImportDecl);
+        this.bump('import');
+        this.beginField('path');
+        this.expect('string_literal');
+        this.finishField('path');
+        this.expect(';');
+        this.finishNode(CompositeNodeTypes.ImportDecl);
     }
 
     enumDecl() {

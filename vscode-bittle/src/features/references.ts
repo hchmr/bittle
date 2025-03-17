@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { SymReference } from '../semantics/elaborator';
 import { Sym } from '../semantics/sym';
-import { IncludeGraphService } from '../services/includeGraphService';
+import { FileGraphService } from '../services/fileGraphService';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { SyntaxNode } from '../syntax';
@@ -15,7 +15,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
     constructor(
         private parsingService: ParsingService,
         private semanticsService: SemanticsService,
-        private includeGraphService: IncludeGraphService,
+        private fileGraphService: FileGraphService,
     ) { }
 
     @interceptExceptions
@@ -50,10 +50,10 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
         const references = this.findReferences(document, vscPosition, context);
 
         return references
-            .map(reference => ({
-                uri: vscode.Uri.file(reference.file),
-                range: toVscRange(reference.nameNode),
-            }))
+            .map(reference => new vscode.Location(
+                vscode.Uri.file(reference.file),
+                toVscRange(reference.nameNode),
+            ))
             .toArray();
     }
 
@@ -78,7 +78,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             // add definitions
             if (context.includeDeclaration) {
                 references.push(
-                    ...stream([symbol]).concat(this.getSameSymbolInReferringFiles(symbol))
+                    ...stream([symbol]).concat(this.getSameSymbolInIncludingFiles(symbol))
                         .flatMap(sym => sym.origins)
                         .filterMap(origin => origin.nameNode && { file: origin.file, nameNode: origin.nameNode }),
                 );
@@ -90,7 +90,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             );
 
             // add references in referring files
-            for (const referringFile of this.findReferringFiles(symbol)) {
+            for (const referringFile of this.findIncludingFiles(symbol).concat(this.findImportingFiles(symbol))) {
                 references.push(...this.semanticsService.references(referringFile, symbol.qualifiedName));
             }
         }
@@ -99,16 +99,24 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             .distinctBy(reference => reference.file + '|' + reference.nameNode.startIndex);
     }
 
-    private getSameSymbolInReferringFiles(symbol: Sym) {
-        return this.findReferringFiles(symbol)
+    private getSameSymbolInIncludingFiles(symbol: Sym) {
+        return this.findIncludingFiles(symbol)
             .filterMap(filePath => this.semanticsService.getSymbol(filePath, symbol.qualifiedName));
     }
 
-    private findReferringFiles(symbol: Sym) {
+    private findIncludingFiles(symbol: Sym) {
         return stream(symbol.origins)
             .map(origin => origin.file)
             .distinct()
-            .flatMap(filePath => this.includeGraphService.getFinalReferences(filePath))
+            .flatMap(filePath => this.fileGraphService.getFinalIncludingFiles(filePath))
+            .distinct();
+    }
+
+    private findImportingFiles(symbol: Sym) {
+        return stream(symbol.origins)
+            .map(origin => origin.file)
+            .distinct()
+            .flatMap(filePath => this.fileGraphService.getImportingFiles(filePath))
             .distinct();
     }
 }
