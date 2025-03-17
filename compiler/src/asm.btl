@@ -460,166 +460,166 @@ func asm_add_comment_to_last(builder: *mut AsmInstrBuilder, fmt: *Char, ...args)
 //==============================================================================
 //== Printing Assembly
 
-func asm_print_reg(reg: Reg, width: Int) {
+func asm_print_reg(out: *mut File, reg: Reg, width: Int) {
     if (reg == SP) {
-        printf("sp");
+        fprintf(out, "sp");
     } else {
         if (width == 4) {
-            printf("w%d", reg);
+            fprintf(out, "w%d", reg);
         } else {
-            printf("x%d", reg);
+            fprintf(out, "x%d", reg);
         }
     }
 }
 
-func asm_print_operand(fun: *AsmFunc, operand: *mut AsmOperand) {
+func asm_print_operand(out: *mut File, fun: *AsmFunc, operand: *mut AsmOperand) {
     match (operand.kind) {
         case AsmOperand_Reg: {
             var operand = &operand.Reg;
-            asm_print_reg(operand.reg, operand.width);
+            asm_print_reg(out, operand.reg, operand.width);
             if (operand.shift != 0) {
-                printf(", lsl #%d", operand.shift);
+                fprintf(out, ", lsl #%d", operand.shift);
             }
         }
         case AsmOperand_Mem: {
             var operand = &operand.Mem;
-            printf("[");
+            fprintf(out, "[");
             for (var i = 0; i < operand.n_args; i += 1) {
-                asm_print_operand(fun, &operand.args[i]);
+                asm_print_operand(out, fun, &operand.args[i]);
                 if (i < operand.n_args - 1) {
-                    printf(", ");
+                    fprintf(out, ", ");
                 }
             }
-            printf("]");
+            fprintf(out, "]");
         }
         case AsmOperand_Int: {
             var operand = &operand.Int;
-            printf("#%d", operand.value);
+            fprintf(out, "#%d", operand.value);
             if (operand.shift != 0) {
-                printf(", lsl #%d", operand.shift);
+                fprintf(out, ", lsl #%d", operand.shift);
             }
         }
         case AsmOperand_Label: {
             var operand = &operand.Label;
-            printf(".L%d", operand.counter);
+            fprintf(out, ".L%d", operand.counter);
             if (operand.suffix != null) {
-                printf(".%s", operand.suffix);
+                fprintf(out, ".%s", operand.suffix);
             }
         }
         case AsmOperand_Global: {
             var operand = &operand.Global;
-            printf("%s%s", operand.relocation_spec, operand.prefix);
+            fprintf(out, "%s%s", operand.relocation_spec, operand.prefix);
             if (operand.counter != -1) {
-                printf("%d", operand.counter);
+                fprintf(out, "%d", operand.counter);
             }
         }
         case AsmOperand_FpFromFrameStart: {
             var operand = &operand.FpFromFrameStart;
-            printf("#%d", fun.spills_size + operand.offset);
+            fprintf(out, "#%d", fun.spills_size + operand.offset);
         }
         case AsmOperand_SpFromFp: {
             var operand = &operand.SpFromFp;
-            printf("#%d", fun.frame_size - fun.spills_size + operand.fp_offset);
+            fprintf(out, "#%d", fun.frame_size - fun.spills_size + operand.fp_offset);
         }
         case AsmOperand_Raw: {
             var operand = &operand.Raw;
-            printf("%s", operand.op);
+            fprintf(out, "%s", operand.op);
         }
     }
 }
 
-func asm_print_instr(fun: *AsmFunc, instr: *mut AsmInstr) {
+func asm_print_instr(out: *mut File, fun: *AsmFunc, instr: *mut AsmInstr) {
     // special case for labels:
     if (instr.op == null) {
-        asm_print_operand(fun, &instr.args[0]);
-        printf(":\n");
+        asm_print_operand(out, fun, &instr.args[0]);
+        fprintf(out, ":\n");
         return;
     }
 
-    printf("  %s", instr.op);
+    fprintf(out, "  %s", instr.op);
 
     for (var i = 0; i < instr.n_args; i += 1) {
         if (i == 0) {
-            printf(" ");
+            fprintf(out, " ");
         } else {
-            printf(", ");
+            fprintf(out, ", ");
         }
-        asm_print_operand(fun, &instr.args[i]);
+        asm_print_operand(out, fun, &instr.args[i]);
     }
 
     if (instr.comment != null) {
-        printf("  %s", instr.comment);
+        fprintf(out, "  %s", instr.comment);
     }
 
-    printf("\n");
+    fprintf(out, "\n");
 }
 
-func asm_print_func(fun: *AsmFunc) {
+func asm_print_func(out: *mut File, fun: *AsmFunc) {
     var n_spills = fun.n_spills;
     var spills = fun.spills;
     var spills_size = fun.spills_size;
 
-    printf("  .text\n");
-    printf("  .align 2\n");
-    printf("  .global %s\n", fun.name);
-    printf("%s:\n", fun.name);
+    fprintf(out, "  .text\n");
+    fprintf(out, "  .align 2\n");
+    fprintf(out, "  .global %s\n", fun.name);
+    fprintf(out, "%s:\n", fun.name);
 
     // prologue
-    printf("  // prologue\n");
-    printf("  sub  sp, sp, #%d\n", spills_size);
+    fprintf(out, "  // prologue\n");
+    fprintf(out, "  sub  sp, sp, #%d\n", spills_size);
     for (var i = 0; i < n_spills; i += 2) {
         if (i + 1 < n_spills) {
-            printf("  stp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
+            fprintf(out, "  stp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
         } else {
-            printf("  str  x%d, [sp, #%d]\n", spills[i], i * 8);
+            fprintf(out, "  str  x%d, [sp, #%d]\n", spills[i], i * 8);
         }
     }
-    printf("  mov  x29, sp\n");
-    printf("  sub  sp, sp, #%d\n", fun.frame_size - spills_size);
+    fprintf(out, "  mov  x29, sp\n");
+    fprintf(out, "  sub  sp, sp, #%d\n", fun.frame_size - spills_size);
 
     var instrs = fun.builder.instrs;
     var n_instrs = list_len(instrs);
     for (var i = 0; i < n_instrs; i += 1) {
         var instr = list_get(instrs, i) as *mut AsmInstr;
-        asm_print_instr(fun, instr);
+        asm_print_instr(out, fun, instr);
     }
 
     // epilogue
-    printf("  // epilogue\n");
-    printf("  add  sp, sp, #%d\n", fun.frame_size - spills_size);
+    fprintf(out, "  // epilogue\n");
+    fprintf(out, "  add  sp, sp, #%d\n", fun.frame_size - spills_size);
     for (var i = 0; i < n_spills; i += 2) {
         if (i + 1 < n_spills) {
-            printf("  ldp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
+            fprintf(out, "  ldp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
         } else {
-            printf("  ldr  x%d, [sp, #%d]\n", spills[i], i * 8);
+            fprintf(out, "  ldr  x%d, [sp, #%d]\n", spills[i], i * 8);
         }
     }
-    printf("  add  sp, sp, #%d\n", spills_size);
-    printf("  ret\n");
+    fprintf(out, "  add  sp, sp, #%d\n", spills_size);
+    fprintf(out, "  ret\n");
 }
 
-func asm_print_global(name: *Char, size: Int, align: Int) {
-    printf("  .global %s\n", name);
-    printf("  .bss\n");
-    printf("  .align %d\n", align);
-    printf("%s:\n", name);
-    printf("  .zero %d\n", size);
+func asm_print_global(out: *mut File, name: *Char, size: Int, align: Int) {
+    fprintf(out, "  .global %s\n", name);
+    fprintf(out, "  .bss\n");
+    fprintf(out, "  .align %d\n", align);
+    fprintf(out, "%s:\n", name);
+    fprintf(out, "  .zero %d\n", size);
 }
 
-func asm_print_string(id: Int, str: *StringBuffer) {
-    printf("  .text\n");
-    printf("  .section .rodata\n");
-    printf("  .align 3\n");
-    printf(".L.str.%d:\n", id);
-    printf("  .string \"");
+func asm_print_string(out: *mut File, id: Int, str: *StringBuffer) {
+    fprintf(out, "  .text\n");
+    fprintf(out, "  .section .rodata\n");
+    fprintf(out, "  .align 3\n");
+    fprintf(out, ".L.str.%d:\n", id);
+    fprintf(out, "  .string \"");
     var i = 0;
     for (var i = 0; i < sb_len(str); i += 1) {
         var c = sb_get(str, i);
         if (!is_print(c) || c is ('\"' | '\\')) {
-            printf("\\%03o", c);
+            fprintf(out, "\\%03o", c);
         } else {
-            printf("%c", c);
+            fprintf(out, "%c", c);
         }
     }
-    printf("\"\n");
+    fprintf(out, "\"\n");
 }

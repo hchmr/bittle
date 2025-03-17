@@ -10,17 +10,14 @@ struct Parser {
     includes: *mut List, // List<*Char>
 }
 
-func try_add_include(self: *mut Parser, file_path: *Char): Bool {
-    var n_includes = list_len(self.includes);
-    for (var i = 0; i < n_includes; i += 1) {
-        if (str_eq(file_path, list_get(self.includes, i) as *Char)) {
-            return false;
-        }
+func try_add_include(self: *Parser, file_name: *Char): Bool {
+    if (string_list_contains(haystack: self.includes, needle: file_name)) {
+        return false;
     }
-
-    list_push(self.includes, file_path);
+    list_push(self.includes, file_name);
     return true;
 }
+
 
 func advance(self: *mut Parser) {
     self.tok = self.lookahead;
@@ -994,6 +991,32 @@ func p_stmt(self: *mut Parser): *mut Stmt {
 //==============================================================================
 //== Declarations
 
+func p_module_name_decl(self: *mut Parser): *mut Decl {
+    var pos = self.tok.pos;
+    expect(self, Tok_Module);
+    var name = p_ident(self);
+    expect(self, Tok_Semicolon);
+
+    return box(sizeof(ModuleNameDecl), &ModuleNameDecl {
+        pos,
+        name,
+    }) as *mut Decl;
+}
+
+func p_import_decl(self: *mut Parser): *mut Decl {
+    var pos = self.tok.pos;
+    expect(self, Tok_Import);
+    var string_literal = expect_with_lexeme(self, Tok_String);
+    expect(self, Tok_Semicolon);
+
+    var path = parse_string(string_literal);
+    return box(sizeof(ImportDecl), &ImportDecl {
+        pos,
+        path,
+        resolved_mod: null,
+    }) as *mut Decl;
+}
+
 func p_record_field(self: *mut Parser): *mut RecordFieldDecl {
     var pos = self.tok.pos;
     var name = p_ident(self);
@@ -1207,52 +1230,69 @@ func p_global_decl(self: *mut Parser, is_extern: Bool): *mut Decl {
 }
 
 func p_decl_decl(self: *mut Parser): *mut Decl {
-    if (at(self, Tok_Struct) || at(self, Tok_Union)) {
-        return p_record_decl(self);
-    } else if (at(self, Tok_Func)) {
-        return p_func_decl(self, false);
-    } else if (at(self, Tok_Enum)) {
-        return p_enum_decl(self);
-    } else if (at(self, Tok_Const)) {
-        return p_const_decl(self);
-    } else if (at(self, Tok_Var)) {
-        return p_global_decl(self, false);
-    } else if (eat(self, Tok_Extern)) {
-        if (at(self, Tok_Func)) {
-            return p_func_decl(self, true);
-        } else if (at(self, Tok_Var)) {
-            return p_global_decl(self, true);
-        } else {
-            die_at(&self.tok.pos, "Expected extern function or variable declaration.");
+    match (self.tok.kind) {
+        case Tok_Module: {
+            return p_module_name_decl(self);
         }
-    } else {
-        die_at(&self.tok.pos, "Unexpected token.");
+        case Tok_Import: {
+            return p_import_decl(self);
+        }
+        case Tok_Struct | Tok_Union: {
+            return p_record_decl(self);
+        }
+        case Tok_Func: {
+            return p_func_decl(self, false);
+        }
+        case Tok_Enum: {
+            return p_enum_decl(self);
+        }
+        case Tok_Const: {
+            return p_const_decl(self);
+        }
+        case Tok_Var: {
+            return p_global_decl(self, false);
+        }
+        case Tok_Extern: {
+            advance(self);
+            if (at(self, Tok_Func)) {
+                return p_func_decl(self, true);
+            } else if (at(self, Tok_Var)) {
+                return p_global_decl(self, true);
+            } else {
+                die_at(&self.tok.pos, "Expected extern function or variable declaration.");
+            }
+        }
+        case _: {
+            die_at(&self.tok.pos, "Unexpected token.");
+        }
     }
 }
 
-//==============================================================================
-//== Top-level
-
 func p_include(self: *mut Parser, decls: *mut List) {
     var pos = self.tok.pos;
+    expect(self, Tok_Include);
     var string_literal = expect_with_lexeme(self, Tok_String);
-    var file_name = parse_string(string_literal);
     expect(self, Tok_Semicolon);
 
-    var file_dir = get_directory(pos.file);
-    var file_path = join_paths(file_dir, sb_cstr(file_name));
-    var file_path = realpath(file_path, null);
+    var path = parse_string(string_literal);
+    var curr_dir = get_dirname(pos.file);
 
-    if (!try_add_include(self, file_path)) {
-        return; // Already included.
+    var full_path = realpath(join_paths(curr_dir, sb_cstr(path)));
+    if (!full_path) {
+        die_at(&pos, "Could not find file to include: %s", path);
     }
 
-    var file = fopen(file_path, "r");
+    if (!try_add_include(self, full_path)) {
+        return;
+    }
+
+    var file = fopen(full_path, "r");
     if (!file) {
-        die_at(&pos, "Cannot open file.");
+        perror("fopen");
+        exit(1);
     }
     var file_input = read_file(file);
-    var file_lexer = lexer_new(file_path, file_input);
+    var file_lexer = lexer_new(full_path, file_input);
     var file_parser = parser_new(file_lexer);
     file_parser.includes = self.includes;
     parse_file(file_parser, decls);
@@ -1260,8 +1300,8 @@ func p_include(self: *mut Parser, decls: *mut List) {
 
 func parse_file(self: *mut Parser, decls: *mut List) {
     while (!at_eof(self)) {
-        if (eat(self, Tok_Include)) {
-            p_include(self, decls);
+        if (at(self, Tok_Include)) {
+            p_include(self, decls, );
         } else {
             list_push(decls, p_decl_decl(self));
         }
@@ -1272,6 +1312,20 @@ func parser_run(self: *mut Parser): *mut Ast {
     var decls = list_new();
     parse_file(self, decls);
     return box(sizeof(Ast), &Ast {
+        file: self.tok.pos.file,
         decls,
     }) as *mut Ast;
+}
+
+func parse(file_name: *Char): *mut Ast {
+    var file = fopen(file_name, "r");
+    if (!file) {
+        perror("fopen");
+        exit(1);
+    }
+    var text = read_file(file);
+    var lexer = lexer_new(file_name, text);
+    var parser = parser_new(lexer);
+    var ast = parser_run(parser);
+    return ast;
 }

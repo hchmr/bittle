@@ -22,9 +22,11 @@ func pretty_tok_kind(kind: TokKind): *Char {
         case Tok_For: return "'for'";
         case Tok_Func: return "'func'";
         case Tok_If: return "'if'";
-        case Tok_Is: return "'is'";
+        case Tok_Import: return "'import'";
         case Tok_Include: return "'include'";
+        case Tok_Is: return "'is'";
         case Tok_Match: return "'match'";
+        case Tok_Module: return "'module'";
         case Tok_Mut: return "'mut'";
         case Tok_Null: return "'null'";
         case Tok_Return: return "'return'";

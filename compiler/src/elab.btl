@@ -42,8 +42,10 @@ func scope_lookup(scope: *mut Scope, name: *Char, max_depth: Int): Int {
 //== Context
 
 struct ElabCtx {
+    imports: *mut List, // List<Module>
     syms: *mut List, // List<Sym>
     scope: *mut Scope,
+    module_name: *Char,
     current_func: *mut FuncSym,
     loop_depth: Int,
     or_pattern_depth: Int,
@@ -62,12 +64,50 @@ func exit_scope(ctx: *mut ElabCtx) {
 //==============================================================================
 //== Symbol declaration & lookup
 
-func lookup(ctx: *mut ElabCtx, name: *Char): *mut Sym {
+func lookup_in_module_scope(ctx: *mut ElabCtx, name: *Char): *mut Sym {
     var sym_index = scope_lookup(ctx.scope, name, -1);
     if (sym_index == -1) {
         return null;
     }
     return list_get(ctx.syms, sym_index) as *mut Sym;
+}
+
+func lookup_in_imports(ctx: *mut ElabCtx, name: *Char, result: *mut *mut Sym): Int {
+    var last_found: *mut Sym = null;
+    var n_found = 0;
+    for (var i = 0; i < list_len(ctx.imports); i += 1) {
+        var mod = list_get(ctx.imports, i) as *Module;
+        for (var j = 0; j < list_len(mod.syms); j += 1) {
+            var sym = list_get(mod.syms, j) as *mut Sym;
+            if (str_eq(sym.name, name)) {
+                last_found = sym;
+                n_found += 1;
+                break;
+            }
+        }
+    }
+    if (n_found == 1) {
+        *result = last_found;
+    }
+    return n_found;
+}
+
+func lookup(ctx: *mut ElabCtx, pos: *Pos, name: *Char): *mut Sym {
+    var sym = lookup_in_module_scope(ctx, name);
+    if (sym) {
+        return sym;
+    }
+    match (lookup_in_imports(ctx, name, &sym)) {
+        case 1: {
+            return sym;
+        }
+        case 0: {
+            die_at(pos, "Unknown symbol: %s", name);
+        }
+        case _: {
+            die_at(pos, "Ambiguous symbol: %s", name);
+        }
+    }
 }
 
 func try_get_existing(ctx: *mut ElabCtx, name: *Char): *mut Sym {
@@ -458,10 +498,7 @@ func eval_type(ctx: *mut ElabCtx, type_expr: *mut TypeExpr): *Type {
             } else if (str_eq(name, "Int") || str_eq(name, "Int64")) {
                 return mk_int_type(8);
             } else {
-                var sym = lookup(ctx, name);
-                if (!sym) {
-                    die_at(&type_expr.pos, "Unknown type");
-                }
+                var sym = lookup(ctx, &type_expr.pos, name);
                 match (sym.kind) {
                     case Sym_Enum: {
                         return mk_enum_type(sym as *mut EnumSym);
@@ -581,10 +618,7 @@ func elab_literal_pattern(ctx: *mut ElabCtx, pattern: *mut LiteralPattern, type_
 func elab_name_pattern(ctx: *mut ElabCtx, pattern: *mut NamePattern, type_hint: *Type) {
     var name = pattern.name;
 
-    var sym = lookup(ctx, name);
-    if (!sym) {
-        die_at(&pattern.pos, "Unknown symbol");
-    }
+    var sym = lookup(ctx, &pattern.pos, name);
     if (sym.kind != Sym_Const) {
         die_at(&pattern.pos, "Expected a constant");
     }
@@ -702,13 +736,7 @@ func elab_expr_int(ctx: *mut ElabCtx, expr: *mut *mut Expr, type_hint: *Type) {
 }
 
 func elab_ident_expr(ctx: *mut ElabCtx, expr: *mut IdentExpr) {
-    var name = expr.name;
-
-    var sym = lookup(ctx, name);
-    if (!sym) {
-        die_at(&expr.pos, "Unknown symbol");
-    }
-
+    var sym = lookup(ctx, &expr.pos, expr.name);
     var type: *Type;
     var const_val: *ConstValue = null;
     match (sym.kind) {
@@ -781,10 +809,7 @@ func elab_call_expr(ctx: *mut ElabCtx, expr: *mut CallExpr) {
     if (callee.kind != Expr_Ident) {
         die_at(&callee.pos, "Expected function name");
     }
-    var sym = lookup(ctx, (callee as *mut IdentExpr).name);
-    if (!sym) {
-        die_at(&callee.pos, "Unknown function");
-    }
+    var sym = lookup(ctx, &(callee as *IdentExpr).pos, (callee as *IdentExpr).name);
     if (sym.kind != Sym_Func) {
         die_at(&callee.pos, "Expected a function");
     }
@@ -1058,10 +1083,7 @@ func elab_cast_expr(ctx: *mut ElabCtx, expr: *mut CastExpr) {
 }
 
 func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type) {
-    var sym = lookup(ctx, expr.name);
-    if (!sym) {
-        die_at(&expr.pos, "Unknown record type");
-    }
+    var sym = lookup(ctx, &expr.pos, expr.name);
     if (sym.kind != Sym_Record) {
         die_at(&expr.pos, "Expected a record type");
     }
@@ -1540,16 +1562,6 @@ func elab_record_decl(ctx: *mut ElabCtx, decl: *mut RecordDecl) {
     }
 }
 
-func string_list_contains(list: *mut List, value: *Char): Bool {
-    for (var i = 0; i < list_len(list); i += 1) {
-        var item = list_get(list, i) as *Char;
-        if (str_eq(item, value)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 func ensure_unique_params(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
     var seen = list_new();
     for (var i = 0; i < list_len(decl.params); i += 1) {
@@ -1728,6 +1740,9 @@ func elab_global_decl(ctx: *mut ElabCtx, decl: *mut GlobalDecl) {
 
 func seed_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
     match (decl.kind) {
+        case Decl_ModuleName | Decl_Import: {
+            // Skip
+        }
         case Decl_Record: {
             seed_record_decl(ctx, decl as *mut RecordDecl);
         }
@@ -1749,8 +1764,29 @@ func seed_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
     }
 }
 
+func handle_invalid_module_name_declaration(ctx: *mut ElabCtx, decl: *mut ModuleNameDecl) {
+    die_at(&decl.pos, "Module name can only be declared at the beginning of the file");
+}
+
+func elab_import_decl(ctx: *mut ElabCtx, decl: *mut ImportDecl) {
+    var n_imports = list_len(ctx.imports);
+    for (var i = 0; i < n_imports; i += 1) {
+        var existing = list_get(ctx.imports, i) as *Module;
+        if (existing == decl.resolved_mod) {
+            return;
+        }
+    }
+    list_push(ctx.imports, decl.resolved_mod);
+}
+
 func elab_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
     match (decl.kind) {
+        case Decl_ModuleName: {
+            handle_invalid_module_name_declaration(ctx, decl as *mut ModuleNameDecl);
+        }
+        case Decl_Import: {
+            elab_import_decl(ctx, decl as *mut ImportDecl);
+        }
         case Decl_Record: {
             elab_record_decl(ctx, decl as *mut RecordDecl);
         }
@@ -1772,29 +1808,58 @@ func elab_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
     }
 }
 
-func elab(ast: *mut Ast): *mut List { // *List<*Sym>
+func handle_module_name(ctx: *mut ElabCtx, ast: *mut Ast) {
+    if (list_len(ast.decls) == 0) {
+        return;
+    }
+    var decl = list_get(ast.decls, 0) as *Decl;
+    if (!(decl.kind is Decl_ModuleName)) {
+        return;
+    }
+    var decl = decl as *ModuleNameDecl;
+
+    var name = decl.name;
+    var expected_name = get_stem(ast.file);
+    if (!str_eq(name, expected_name)) {
+        die_at(&decl.pos, "Module name '%s' does not match file name '%s'", name, expected_name);
+    }
+
+    ctx.module_name = name;
+}
+
+func elab(ast: *mut Ast): *mut List {
     var ctx = box(sizeof(ElabCtx), &ElabCtx {
+        imports: list_new(),
         syms: list_new(),
         scope: scope_new(null),
+        module_name: null,
         current_func: null,
         loop_depth: 0,
         or_pattern_depth: 0,
     }) as *mut ElabCtx;
 
-    for (var pass = 0; pass < 4; pass += 1) {
+    handle_module_name(ctx, ast);
+
+    for (var pass = 0; pass < 5; pass += 1) {
         for (var i = 0; i < list_len(ast.decls); i += 1) {
             var decl = list_get(ast.decls, i) as *mut Decl;
-            match (decl.kind) {
-                case Decl_Record | Decl_Enum | Decl_Const if pass == 0: {
-                    seed_decl(ctx, decl);
-                }
-                case Decl_Record | Decl_Enum | Decl_Const if pass == 1: {
+            if (i == 0 && ctx.module_name) {
+                continue;
+            }
+            match (pass) {
+                case 0 if decl.kind is (Decl_ModuleName | Decl_Import): {
                     elab_decl(ctx, decl);
                 }
-                case Decl_Func | Decl_Global if pass == 2: {
+                case 1 if decl.kind is (Decl_Record | Decl_Enum | Decl_Const): {
                     seed_decl(ctx, decl);
                 }
-                case Decl_Func | Decl_Global if pass == 3: {
+                case 2 if decl.kind is (Decl_Record | Decl_Enum | Decl_Const): {
+                    elab_decl(ctx, decl);
+                }
+                case 3 if decl.kind is (Decl_Func | Decl_Global): {
+                    seed_decl(ctx, decl);
+                }
+                case 4 if decl.kind is (Decl_Func | Decl_Global): {
                     elab_decl(ctx, decl);
                 }
             }

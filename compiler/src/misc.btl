@@ -12,6 +12,12 @@ struct List {
     cap: Int,
 }
 
+func dbg(fmt: *Char, ...args) {
+    fprintf(stderr, "[DEBUG] ");
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+}
+
 func assert(cond: Bool, because: *Char) {
     if (!cond) {
         fprintf(stderr, "\n*** Assertion failed: %s\n", because);
@@ -30,23 +36,27 @@ func unreachable_enum_case(function: *Char, value: Int): ! {
 }
 
 func error_at(pos: *Pos) {
-    fprintf(stderr, "%s:%d:%d: Error: ", pos.file, pos.row, pos.col);
+    var file_name = pos.file ? pos.file : "<stdin>";
+    fprintf(stderr, "%s:%d:%d: Error: ", file_name, pos.row, pos.col);
 }
 
-func die(msg: *Char): ! {
-    fprintf(stderr, "%s\n", msg);
+func die(fmt: *Char, ...args): ! {
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
     exit(1);
 }
 
-func die_at(pos: *Pos, msg: *Char, ...args): ! {
+func die_at(pos: *Pos, fmt: *Char, ...args): ! {
     error_at(pos);
-    vfprintf(stderr, msg, args);
+    vfprintf(stderr, fmt, args);
     fprintf(stderr, "\n");
     exit(1);
 }
 
 func sb_new(): *mut StringBuffer {
-    return calloc(1, sizeof(StringBuffer)) as *mut StringBuffer;
+    var self = calloc(1, sizeof(StringBuffer)) as *mut StringBuffer;
+    self.buf = str_clone("");
+    return self;
 }
 
 func sb_free(self: *mut StringBuffer) {
@@ -140,6 +150,10 @@ func list_len(self: *List): Int {
     return self.len;
 }
 
+func list_buf(self: *List): *mut Void {
+    return self.elems;
+}
+
 func list_get(self: *List, i: Int): *Void {
     assert(i >= 0 && i < self.len, "list_get: index out of bounds");
     return self.elems[i];
@@ -162,6 +176,25 @@ func list_pop(self: *mut List): *Void {
     return self.elems[self.len];
 }
 
+func list_finish(self: *mut List, len_p: *mut Int = null): *mut Void {
+    if (len_p) {
+        *len_p = self.len;
+    }
+    var elems = self.elems;
+    free(self);
+    return elems;
+}
+
+func string_list_contains(haystack: *mut List, needle: *Char): Bool {
+    for (var i = 0; i < list_len(haystack); i += 1) {
+        var item = list_get(haystack, i) as *Char;
+        if (str_eq(item, needle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 func box(size: Int64, data: *Void): *mut Void {
     var copy = malloc(size + sizeof(*Void));
     memcpy(copy, data, size);
@@ -170,6 +203,45 @@ func box(size: Int64, data: *Void): *mut Void {
 
 func str_eq(a: *Char, b: *Char): Bool {
     return strcmp(a, b) == 0;
+}
+
+func str_ends_with(s: *Char, suffix: *Char): Bool {
+    var s_len = strlen(s);
+    var suffix_len = strlen(suffix);
+    if (s_len < suffix_len) {
+        return false;
+    }
+    return str_eq(&s[s_len - suffix_len], suffix);
+}
+
+func str_find_char(s: *Char, c: Char): Int {
+    for (var i = 0; s[i]; i += 1) {
+        if (s[i] == c) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+func str_rfind_char(s: *Char, c: Char): Int {
+    var last = -1;
+    for (var i = 0; s[i]; i += 1) {
+        if (s[i] == c) {
+            last = i;
+        }
+    }
+    return last;
+}
+
+func str_clone_n(s: *Char, n: Int): *mut Char {
+    var buf = malloc(n + 1) as *mut Char;
+    memcpy(buf, s, n);
+    buf[n] = '\0';
+    return buf;
+}
+
+func str_clone(s: *Char): *mut Char {
+    return str_clone_n(s, strlen(s));
 }
 
 func align_up(size: Int , align: Int): Int {
@@ -216,26 +288,40 @@ func read_file(file: *mut File): *mut Char {
     return buf;
 }
 
-func get_directory(path: *Char): *mut Char {
-    var i = strlen(path);
-    while (true) {
-        if (i == 0)
-            return box(1 + 1, ".") as *mut Char;
-        i -= 1;
-        if (path[i] == '/') {
-            var dir = malloc(i + 1) as *mut Char;
-            memcpy(dir, path, i);
-            dir[i] = '\0';
-            return dir;
-        }
+func get_dirname(path: *Char): *mut Char {
+    var last_slash = str_rfind_char(path, '/');
+    if (last_slash == -1) {
+        return str_clone_n(".", 1);
     }
-    unreachable("get_directory");
+    var len = last_slash + 1;
+    return str_clone_n(path, len);
+}
+
+func get_basename(path: *Char): *Char {
+    var last_slash = str_rfind_char(path, '/');
+    if (last_slash == -1) {
+        return path;
+    }
+    return &path[last_slash + 1];
+}
+
+func get_stem(path: *Char): *mut Char {
+    var base_name = get_basename(path);
+    var last_dot = str_rfind_char(base_name, '.');
+    var len = last_dot != -1 ? last_dot : strlen(base_name);
+    return str_clone_n(base_name, len);
 }
 
 func join_paths(dir: *Char, file: *Char): *mut Char {
     var sb = sb_new();
-    sb_append(sb, dir);
-    sb_push(sb, '/');
+
+    if (file[0] != '/') {
+        sb_append(sb, dir);
+        if (sb_get(sb, sb_len(sb) - 1) != '/') {
+            sb_append(sb, "/");
+        }
+    }
+
     sb_append(sb, file);
     return sb_finish(sb);
 }
