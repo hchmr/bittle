@@ -1,4 +1,12 @@
-include "bittle.btls";
+module utils;
+
+import "libc";
+
+struct Pos {
+    file: *Char,
+    row: Int32,
+    col: Int32,
+}
 
 struct StringBuffer {
     buf: *mut Char,

@@ -1,4 +1,178 @@
-include "bittle.btls";
+module hir;
+
+import "../semantics/core";
+import "../semantics/type";
+import "../support/libc";
+import "../support/utils";
+
+struct HirTemp {
+    type: *Type,
+    slot_id: Int,
+}
+
+enum HirOpKind {
+    HirOp_Or,
+    HirOp_Xor,
+    HirOp_And,
+    HirOp_Shl,
+    HirOp_Shr,
+    HirOp_Eq,
+    HirOp_Ne,
+    HirOp_Lt,
+    HirOp_Le,
+    HirOp_Gt,
+    HirOp_Ge,
+    HirOp_Add,
+    HirOp_Sub,
+    HirOp_Mul,
+    HirOp_Div,
+    HirOp_Rem,
+}
+
+enum HirExprKind {
+    // Composition primitives
+    HirExpr_Skip,
+    HirExpr_Seq,
+
+    // Constants
+    HirExpr_Int,
+    HirExpr_Str,
+
+    // Variables
+    HirExpr_Var,
+    HirExpr_Temp,
+
+    // Control flow
+    HirExpr_Cond,
+    HirExpr_Loop,
+    HirExpr_Jump,
+    HirExpr_Return,
+
+    // Expressions
+    HirExpr_BinaryOp,
+    HirExpr_Call,
+    HirExpr_Member,
+    HirExpr_Index,
+    HirExpr_Deref,
+    HirExpr_Addr,
+    HirExpr_Assign,
+    HirExpr_Cast,
+
+    // Special
+    HirExpr_Unreachable,
+}
+
+struct HirExpr {
+    kind: HirExprKind,
+    type: *Type,
+    pos: Pos,
+}
+
+struct HirSkipExpr: HirExpr {
+    kind = HirExpr_Skip,
+}
+
+struct HirSeqExpr: HirExpr {
+    kind = HirExpr_Seq,
+    first: *mut HirExpr,
+    second: *mut HirExpr,
+}
+
+struct HirIntExpr: HirExpr {
+    kind = HirExpr_Int,
+    value: Int,
+}
+
+struct HirStrExpr: HirExpr {
+    kind = HirExpr_Str,
+    value: *StringBuffer,
+}
+
+struct HirVarExpr: HirExpr {
+    kind = HirExpr_Var,
+    sym: *mut Sym,
+}
+
+struct HirTempExpr: HirExpr {
+    kind = HirExpr_Temp,
+    temp: *mut HirTemp,
+}
+
+struct HirCondExpr: HirExpr {
+    kind = HirExpr_Cond,
+    cond: *mut HirExpr,
+    then_expr: *mut HirExpr,
+    else_expr: *mut HirExpr,
+}
+
+struct HirLoopExpr: HirExpr {
+    kind = HirExpr_Loop,
+    cond: *mut HirExpr,
+    body: *mut HirExpr,
+    step: *mut HirExpr,
+}
+
+struct HirReturnExpr: HirExpr {
+    kind = HirExpr_Return,
+    expr: *mut HirExpr,
+}
+
+struct HirJumpExpr: HirExpr {
+    kind = HirExpr_Jump,
+    is_break: Bool,
+}
+
+struct HirAssignExpr: HirExpr {
+    kind = HirExpr_Assign,
+    dst: *mut HirExpr,
+    src: *mut HirExpr,
+}
+
+struct HirBinaryOpExpr: HirExpr {
+    kind = HirExpr_BinaryOp,
+    op: HirOpKind,
+    left: *mut HirExpr,
+    right: *mut HirExpr,
+}
+
+struct HirCallExpr: HirExpr {
+    kind = HirExpr_Call,
+    callee: *mut FuncSym,
+    args: *mut *mut HirExpr,
+    n_args: Int,
+}
+
+struct HirMemberExpr: HirExpr {
+    kind = HirExpr_Member,
+    left: *mut HirExpr,
+    name: *Char,
+    field: *mut RecordField,
+}
+
+struct HirIndexExpr: HirExpr {
+    kind = HirExpr_Index,
+    indexee: *mut HirExpr,
+    index: *mut HirExpr,
+}
+
+struct HirDerefExpr: HirExpr {
+    kind = HirExpr_Deref,
+    expr: *mut HirExpr,
+}
+
+struct HirAddrExpr: HirExpr {
+    kind = HirExpr_Addr,
+    expr: *mut HirExpr,
+}
+
+struct HirCastExpr: HirExpr {
+    kind = HirExpr_Cast,
+    expr: *mut HirExpr,
+}
+
+struct HirUnreachableExpr: HirExpr {
+    kind = HirExpr_Unreachable,
+}
 
 func hir_is_lvalue(e: *HirExpr): Bool {
     return e.kind is (

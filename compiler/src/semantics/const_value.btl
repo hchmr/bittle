@@ -1,4 +1,9 @@
-include "bittle.btls";
+module const_value;
+
+import "../support/utils";
+import "../syntax/tok";
+import "core";
+import "type";
 
 func mk_bool_const_value(value: Bool): *BoolConstValue {
     return box(sizeof(BoolConstValue), &BoolConstValue {

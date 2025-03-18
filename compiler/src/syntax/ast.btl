@@ -1,0 +1,493 @@
+module ast;
+
+import "../semantics/core";
+import "../semantics/type";
+import "../support/utils";
+import "tok";
+
+// Type
+
+enum TypeExprKind {
+    TypeExpr_Named,
+    TypeExpr_Ptr,
+    TypeExpr_Arr,
+    TypeExpr_Never,
+    TypeExpr_Typeof,
+    TypeExpr_RestParam,
+}
+
+struct TypeExpr {
+    kind: TypeExprKind,
+    pos: Pos,
+}
+
+struct NamedTypeExpr: TypeExpr {
+    kind = TypeExpr_Named,
+    name: *Char,
+}
+
+struct PtrTypeExpr: TypeExpr {
+    kind = TypeExpr_Ptr,
+    pointee: *mut TypeExpr,
+    is_mut: Bool,
+}
+
+struct ArrTypeExpr: TypeExpr {
+    kind = TypeExpr_Arr,
+    elem: *mut TypeExpr,
+    size: *mut Expr,
+}
+
+struct NeverTypeExpr: TypeExpr {
+    kind = TypeExpr_Never,
+}
+
+struct TypeofTypeExpr: TypeExpr {
+    kind = TypeExpr_Typeof,
+    expr: *mut Expr,
+}
+
+struct RestParamTypeExpr: TypeExpr {
+    kind = TypeExpr_RestParam,
+}
+
+// Literal
+
+enum LiteralKind {
+    Literal_Null,
+    Literal_Bool,
+    Literal_Int,
+    Literal_Char,
+    Literal_String,
+}
+
+struct Literal {
+    kind: LiteralKind,
+}
+
+struct NullLiteral: Literal {
+    kind = Literal_Null,
+}
+
+struct BoolLiteral: Literal {
+    kind = Literal_Bool,
+    value: Bool,
+}
+struct IntLiteral: Literal {
+    kind = Literal_Int,
+    value: Int,
+}
+struct CharLiteral: Literal {
+    kind = Literal_Char,
+    value: Char,
+}
+struct StringLiteral: Literal {
+    kind = Literal_String,
+    value: *StringBuffer,
+}
+
+// Pattern
+
+enum PatternKind {
+    Pattern_Grouped,
+    Pattern_Literal,
+    Pattern_Name,
+    Pattern_Wildcard,
+    Pattern_Var,
+    Pattern_Range,
+    Pattern_Or,
+}
+
+struct Pattern {
+    kind: PatternKind,
+    pos: Pos,
+    type: *Type,
+}
+
+struct GroupedPattern: Pattern {
+    kind = Pattern_Grouped,
+    pattern: *mut Pattern,
+}
+
+struct LiteralPattern: Pattern {
+    kind = Pattern_Literal,
+    literal: *Literal,
+    value: *ConstValue,
+}
+
+struct NamePattern: Pattern {
+    kind = Pattern_Name,
+    name: *Char,
+    sym: *mut ConstSym,
+}
+
+struct WildcardPattern: Pattern {
+    kind = Pattern_Wildcard,
+}
+
+struct VarPattern: Pattern {
+    kind = Pattern_Var,
+    name: *Char,
+    pattern: *mut Pattern,
+    sym: *mut LocalSym,
+}
+
+struct RangePattern: Pattern {
+    kind = Pattern_Range,
+    lower: *mut Expr,
+    upper: *mut Expr,
+    lower_value: *ConstValue,
+    upper_value: *ConstValue,
+}
+
+struct OrPattern: Pattern {
+    kind = Pattern_Or,
+    patterns: *mut List, // List<Pattern>
+}
+
+// Expr
+
+enum ExprKind {
+    Expr_Ident,
+    Expr_Literal,
+    Expr_Array,
+    Expr_Call,
+    Expr_Index,
+    Expr_Member,
+    Expr_Sizeof,
+    Expr_Unary,
+    Expr_Binary,
+    Expr_Ternary,
+    Expr_Is,
+    Expr_Cast,
+    Expr_Record,
+}
+
+struct Expr {
+    kind: ExprKind,
+    pos: Pos,
+    type: *Type,
+    const_value: *ConstValue,
+}
+
+struct IdentExpr: Expr {
+    kind = Expr_Ident,
+    name: *Char,
+    sym: *mut Sym,
+}
+
+struct LiteralExpr: Expr {
+    kind = Expr_Literal,
+    literal: *Literal,
+}
+
+struct ArrayExpr: Expr {
+    kind = Expr_Array,
+    elems: *mut List, // List<Expr>
+}
+
+struct CallExpr: Expr {
+    kind = Expr_Call,
+    callee: *mut Expr,
+    args: *mut List, // List<CallArg>
+    resolved_callee: *mut FuncSym,
+}
+
+struct CallArg {
+    label: *Char,
+    expr: *mut Expr,
+    positional_index: Int,
+}
+
+struct IndexExpr: Expr {
+    kind = Expr_Index,
+    indexee: *mut Expr,
+    index: *mut Expr,
+}
+
+struct MemberExpr: Expr {
+    kind = Expr_Member,
+    left: *mut Expr,
+    name: *Char,
+    resolved_field: *mut RecordField,
+}
+
+struct SizeofExpr: Expr {
+    kind = Expr_Sizeof,
+    type_expr: *mut TypeExpr,
+    size: Int,
+}
+
+struct UnaryExpr: Expr {
+    kind = Expr_Unary,
+    op: TokKind,
+    right: *mut Expr,
+}
+
+struct BinaryExpr: Expr {
+    kind = Expr_Binary,
+    op: TokKind,
+    left: *mut Expr,
+    right: *mut Expr,
+}
+
+struct TernaryExpr: Expr {
+    kind = Expr_Ternary,
+    cond: *mut Expr,
+    then_expr: *mut Expr,
+    else_expr: *mut Expr,
+}
+
+struct IsExpr: Expr {
+    kind = Expr_Is,
+    left: *mut Expr,
+    pattern: *mut Pattern,
+}
+
+struct CastExpr: Expr {
+    kind = Expr_Cast,
+    expr: *mut Expr,
+    type_expr: *mut TypeExpr,
+}
+
+struct FieldInitializer {
+    pos: Pos,
+    name: *Char,
+    expr: *mut Expr,
+}
+
+struct RecordExpr: Expr {
+    kind = Expr_Record,
+    name: *Char,
+    fields: *mut List, // List<FieldInit>
+}
+
+// Stmt
+
+enum StmtKind {
+    Stmt_Block,
+    Stmt_Const,
+    Stmt_Local,
+    Stmt_If,
+    Stmt_Match,
+    Stmt_While,
+    Stmt_For,
+    Stmt_Return,
+    Stmt_Break,
+    Stmt_Continue,
+    Stmt_Expr,
+}
+
+struct Stmt {
+    kind: StmtKind,
+    pos: Pos,
+}
+
+struct BlockStmt: Stmt {
+    kind = Stmt_Block,
+    stmts: *mut List, // List<Stmt>
+}
+
+struct ConstStmt: Stmt {
+    kind = Stmt_Const,
+    decl: *mut ConstDecl,
+}
+
+struct LocalStmt: Stmt {
+    kind = Stmt_Local,
+    name: *Char,
+    type: *mut TypeExpr,
+    init: *mut Expr,
+    sym: *mut LocalSym,
+}
+
+struct IfStmt: Stmt {
+    kind = Stmt_If,
+    cond: *mut Expr,
+    then_stmt: *mut Stmt,
+    else_stmt: *mut Stmt,
+}
+
+struct MatchCase {
+    pattern: *mut Pattern,
+    guard: *mut Expr,
+    body: *mut Stmt,
+}
+
+struct MatchStmt: Stmt {
+    kind = Stmt_Match,
+    scrutinee: *mut Expr,
+    cases: *mut List, // List<MatchCase>
+}
+
+struct WhileStmt: Stmt {
+    kind = Stmt_While,
+    cond: *mut Expr,
+    body: *mut Stmt,
+}
+
+struct ForStmt: Stmt {
+    kind = Stmt_For,
+    init: *mut Stmt,
+    cond: *mut Expr,
+    step: *mut Expr,
+    body: *mut Stmt,
+}
+
+struct ReturnStmt: Stmt {
+    kind = Stmt_Return,
+    expr: *mut Expr,
+}
+
+struct BreakStmt: Stmt {
+    kind = Stmt_Break,
+}
+
+struct ContinueStmt: Stmt {
+    kind = Stmt_Continue,
+}
+
+struct ExprStmt: Stmt {
+    kind = Stmt_Expr,
+    expr: *mut Expr,
+}
+
+// Decl
+
+enum DeclKind {
+    Decl_ModuleName,
+    Decl_Import,
+    Decl_Record,
+    Decl_Func,
+    Decl_Enum,
+    Decl_Const,
+    Decl_Global,
+}
+
+struct Decl {
+    kind: DeclKind,
+    pos: Pos,
+}
+
+struct ModuleNameDecl: Decl {
+    kind = Decl_ModuleName,
+    name: *Char,
+}
+
+struct ImportDecl: Decl {
+    kind = Decl_Import,
+    path: *StringBuffer,
+    resolved_mod: *mut Module,
+}
+
+struct RecordFieldDecl {
+    pos: Pos,
+    name: *Char,
+    default_value: *mut Expr,
+    type: *mut TypeExpr,
+}
+
+struct RecordDecl: Decl {
+    kind = Decl_Record,
+    is_union: Bool,
+    name: *Char,
+    base: *mut TypeExpr,
+    fields: *mut List, // List<RecordFieldDecl>
+    sym: *mut RecordSym,
+}
+
+struct FuncParamDecl {
+    pos: Pos,
+    name: *Char,
+    type: *mut TypeExpr,
+    default_value: *mut Expr,
+}
+
+struct RestParamDecl {
+    pos: Pos,
+    name: *Char,
+}
+
+struct FuncDecl: Decl {
+    kind = Decl_Func,
+    is_extern: Bool,
+    name: *Char,
+    params: *mut List, // List<FuncParam>
+    rest_param: *mut RestParamDecl,
+    return_type: *mut TypeExpr,
+    body: *mut Stmt,
+    sym: *mut FuncSym,
+}
+
+struct EnumMember {
+    pos: Pos,
+    name: *Char,
+    value: *mut Expr,
+    sym: *mut ConstSym,
+}
+
+struct EnumDecl: Decl {
+    kind = Decl_Enum,
+    name: *Char,
+    members: *mut List, // List<EnumMember>
+    sym: *mut EnumSym,
+}
+
+struct ConstDecl: Decl {
+    kind = Decl_Const,
+    name: *Char,
+    type: *mut TypeExpr,
+    value: *mut Expr,
+    sym: *mut ConstSym,
+}
+
+struct GlobalDecl: Decl {
+    kind = Decl_Global,
+    is_extern: Bool,
+    name: *Char,
+    type: *mut TypeExpr,
+    sym: *mut GlobalSym,
+}
+
+struct Ast {
+    file: *Char,
+    decls: *mut List, // List<Decl>
+}
+
+func is_lvalue(expr: *Expr): Bool {
+    return expr.kind == Expr_Ident && (expr as *IdentExpr).sym.kind is (Sym_Local | Sym_Global)
+        || expr.kind == Expr_Index
+        || expr.kind == Expr_Member
+        || expr.kind == Expr_Unary && (expr as *UnaryExpr).op == Tok_Star;
+}
+
+func is_mutable_lvalue(expr: *Expr): Bool {
+    match (expr.kind) {
+        case Expr_Ident: {
+            var expr = expr as *IdentExpr;
+            return expr.sym.kind is (Sym_Local | Sym_Global);
+        }
+        case Expr_Member: {
+            var expr = expr as *MemberExpr;
+            if (expr.left.type.kind == Type_Ptr) {
+                return (expr.left.type as *PtrType).is_mut;
+            }
+            return is_mutable_lvalue(expr.left);
+        }
+        case Expr_Index: {
+            var expr = expr as *IndexExpr;
+            var indexee = expr.indexee;
+            if (indexee.type.kind == Type_Ptr) {
+                return (indexee.type as *PtrType).is_mut;
+            }
+            return is_mutable_lvalue(indexee);
+        }
+        case Expr_Unary if (expr as *UnaryExpr).op == Tok_Star: {
+            var expr = expr as *UnaryExpr;
+            return expr.right.type.kind == Type_Ptr && (expr.right.type as *PtrType).is_mut;
+        }
+        case _: {
+            return false;
+        }
+    }
+}

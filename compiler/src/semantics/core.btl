@@ -1,0 +1,178 @@
+module core;
+
+import "../support/utils";
+
+//==============================================================================
+//== Type
+
+enum TypeKind {
+    Type_Void,
+    Type_Bool,
+    Type_Int,
+    Type_Ptr,
+    Type_Arr,
+    Type_Enum,
+    Type_Record,
+    Type_Never,
+    Type_RestParam,
+}
+
+struct Type {
+    kind: TypeKind,
+}
+
+struct VoidType: Type {
+    kind = Type_Void,
+}
+
+struct BoolType: Type {
+    kind = Type_Bool,
+}
+
+struct IntType: Type {
+    kind = Type_Int,
+    size: Int,
+}
+
+struct PtrType: Type {
+    kind = Type_Ptr,
+    pointee: *Type,
+    is_mut: Bool,
+}
+
+struct ArrType: Type {
+    kind = Type_Arr,
+    elem: *Type,
+    size: Int,
+}
+
+struct EnumType: Type {
+    kind = Type_Enum,
+    sym: *mut EnumSym,
+}
+
+struct RecordType: Type {
+    kind = Type_Record,
+    sym: *mut RecordSym,
+}
+
+struct NeverType: Type {
+    kind = Type_Never,
+}
+
+struct RestParamType: Type {
+    kind = Type_RestParam,
+}
+
+//==============================================================================
+//== ConstValue
+
+enum ValueKind {
+    ConstValue_Bool,
+    ConstValue_Int,
+    ConstValue_Null,
+    ConstValue_String,
+}
+
+struct ConstValue {
+    kind: ValueKind,
+    type: *Type,
+}
+
+struct BoolConstValue: ConstValue {
+    kind = ConstValue_Bool,
+    bool: Bool,
+}
+
+struct IntConstValue: ConstValue {
+    kind = ConstValue_Int,
+    int: Int,
+}
+
+struct NullConstValue: ConstValue {
+    kind = ConstValue_Null,
+}
+
+struct StringConstValue: ConstValue {
+    kind = ConstValue_String,
+    string: *StringBuffer,
+}
+
+//==============================================================================
+//== Sym
+
+enum SymKind {
+    Sym_Enum,
+    Sym_Record,
+    Sym_Global,
+    Sym_Const,
+    Sym_Func,
+    Sym_Local,
+}
+
+struct Sym {
+    kind: SymKind,
+    name: *Char,
+    is_defined: Bool,
+}
+
+struct RecordField {
+    name: *Char,
+    type: *Type,
+    default_value: *ConstValue,
+    offset: Int,
+}
+
+struct EnumSym: Sym {
+    kind = Sym_Enum,
+    size: Int,
+}
+
+struct RecordSym: Sym {
+    kind = Sym_Record,
+    is_union: Bool,
+    base: *mut RecordSym,
+    fields: *mut List, // List<RecordField>
+    unpadded_size: Int,
+    align: Int,
+}
+
+struct GlobalSym: Sym {
+    kind = Sym_Global,
+    type: *Type,
+}
+
+struct ConstSym: Sym {
+    kind = Sym_Const,
+    value: *ConstValue,
+}
+
+struct FuncParam {
+    name: *Char,
+    type: *Type,
+    default_value: *ConstValue,
+}
+
+struct FuncSym: Sym {
+    kind = Sym_Func,
+    params: *mut List, // List<FuncParam>
+    return_type: *Type,
+    is_variadic: Bool,
+    rest_param_name: *Char,
+    locals: *mut List, // List<Sym>
+    temps: *mut List, // List<HirTemp>
+    body: *mut Void, // Stmt
+}
+
+struct LocalSym: Sym {
+    kind = Sym_Local,
+    type: *Type,
+    slot_id: Int,
+    is_indirect: Bool,
+}
+
+struct Module {
+    name: *Char,
+    path: *Char,
+    syms: *mut List, // List<*Sym>
+}

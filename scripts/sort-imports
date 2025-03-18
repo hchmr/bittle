@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import argparse
+
+def normalize_import_path(file_path, import_path):
+    file_dir = os.path.dirname(file_path)
+    full_path = os.path.normpath(os.path.join(file_dir, import_path))
+    return os.path.relpath(full_path, file_dir)
+
+def clean_imports_in_file(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+
+    import_lines = []
+    import_pattern = re.compile(r'^import "(.*?)(.btl)?";$', re.MULTILINE)
+
+    for line in lines:
+        if m := import_pattern.match(line):
+            relative_path = m.group(1)
+            relative_path = normalize_import_path(file_path, relative_path)
+            import_lines.append(f'import "{relative_path}";\n')
+
+    import_lines.sort()
+
+    new_lines = []
+    for line in lines:
+        if import_pattern.match(line):
+            if len(import_lines) == 0:
+                continue
+            for import_line in import_lines:
+                new_lines.append(import_line)
+            import_lines = []
+        else:
+            new_lines.append(line)
+
+    with open(file_path, 'w') as file:
+        file.writelines(new_lines)
+
+def main(dirname):
+    for root, _, files in os.walk(dirname):
+        for file in files:
+            if file.endswith('.btl'):
+                file_path = os.path.join(root, file)
+                clean_imports_in_file(file_path)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Clean up imports in Bittle files')
+    parser.add_argument('dirname', type=str, help='Directory to clean up')
+    args = parser.parse_args()
+    main(args.dirname)

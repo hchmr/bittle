@@ -1,4 +1,14 @@
-include "bittle.btls";
+module codegen;
+
+import "../hir/hir";
+import "../hir/hir_lower";
+import "../semantics/core";
+import "../semantics/type";
+import "../support/libc";
+import "../support/utils";
+import "../syntax/ast";
+import "asm";
+import "call_conv";
 
 /// Note: [Frame layout]
 /// ~~~~~~~~~~~~~~~~~~~~
@@ -1025,7 +1035,7 @@ func layout_slots(ctx: *mut CodegenCtx, start_fp_offset: Int): Int {
 }
 
 func emit_func(ctx: *mut CodegenCtx, sym: *mut FuncSym) {
-    var hir_body = hir_lower(sym, sym.body);
+    var hir_body = hir_lower(sym, sym.body as *Stmt);
 
     ctx.current_func = sym;
     ctx.ret_label = next_label(ctx);

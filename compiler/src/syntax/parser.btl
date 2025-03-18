@@ -1,4 +1,11 @@
-include "bittle.btls";
+module parser;
+
+import "../support/libc";
+import "../support/utils";
+import "../support/utils";
+import "ast";
+import "lexer";
+import "tok";
 
 //==============================================================================
 //== Parser core
@@ -17,7 +24,6 @@ func try_add_include(self: *Parser, file_name: *Char): Bool {
     list_push(self.includes, file_name);
     return true;
 }
-
 
 func advance(self: *mut Parser) {
     self.tok = self.lookahead;
