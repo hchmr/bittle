@@ -1,4 +1,50 @@
-include "bittle.btls";
+module call_conv;
+
+import "../hir/hir";
+import "../semantics/core";
+import "../semantics/type";
+import "../support/libc";
+import "../support/utils";
+
+enum ArgLocationKind {
+    ArgLocation_Reg,
+    ArgLocation_Stack,
+}
+
+struct ArgLocationBase {
+    kind: ArgLocationKind,
+}
+
+struct RegArgLocation: ArgLocationBase {
+    kind = ArgLocation_Reg,
+    reg: Int,
+    n_regs: Int,
+}
+
+struct StackArgLocation: ArgLocationBase {
+    kind = ArgLocation_Stack,
+    offset: Int,
+}
+
+union ArgLocation: ArgLocationBase {
+    Reg: RegArgLocation,
+    Stack: StackArgLocation,
+}
+
+struct RetLocation {
+    is_reg: Bool,
+    is_indirect: Bool,
+// if is_reg:
+    n_regs: Int,
+}
+
+struct CallLayout {
+    n_args: Int,
+    arg_locs: *mut ArgLocation,
+    ret_loc: RetLocation,
+    stack_space: Int,
+    next_gpr: Int,
+}
 
 func call_layout_drop(self: *mut CallLayout) {
     free(self.arg_locs);

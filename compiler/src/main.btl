@@ -1,4 +1,12 @@
-include "bittle.btls";
+module main;
+
+import "codegen/codegen";
+import "semantics/core";
+import "semantics/elab";
+import "support/libc";
+import "support/utils";
+import "syntax/ast";
+import "syntax/parser";
 
 struct GlobalCtx {
     // Modules that have been loaded
@@ -86,8 +94,6 @@ func load_module(ctx: *mut GlobalCtx, file_name: *Char): *mut Module {
 
 //==============================================================================
 //== Args
-
-
 
 struct Args {
     out_dir: *Char,

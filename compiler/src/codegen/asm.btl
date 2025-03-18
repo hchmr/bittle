@@ -1,4 +1,29 @@
-include "bittle.btls";
+module asm;
+
+import "../support/libc";
+import "../support/utils";
+
+enum Reg {
+    Reg_X0, Reg_X1, Reg_X2, Reg_X3, Reg_X4, Reg_X5, Reg_X6, Reg_X7, Reg_X8,
+    Reg_X9, Reg_X10, Reg_X11, Reg_X12, Reg_X13, Reg_X14, Reg_X15,
+    Reg_X16, Reg_X17, Reg_X18, Reg_X19, Reg_X20, Reg_X21, Reg_X22, Reg_X23, Reg_X24,
+    Reg_X25, Reg_X26, Reg_X27, Reg_X28, Reg_X29, Reg_X30, Reg_X31,
+    FP = Reg_X29, LR = Reg_X30, SP = Reg_X31,
+}
+
+const N_REGS = 32;
+const N_CALLEE_SAVED_REGS = Reg_X28 - Reg_X19 + 1;
+
+struct AsmInstrBuilder;
+
+struct AsmFunc {
+    name: *Char,
+    builder: *mut AsmInstrBuilder,
+    frame_size: Int,
+    n_spills: Int,
+    spills: [Reg; N_REGS],
+    spills_size: Int,
+}
 
 enum AsmOperandKind {
     AsmOperand_Reg,
@@ -184,12 +209,14 @@ func asm_mk_instr(op: *Char, n_args: Int): *mut AsmInstr {
 //==============================================================================
 //== Instruction building
 
+// Creates a new assembly instruction builder
 func asm_builder_new(): *mut AsmInstrBuilder {
     return box(sizeof(AsmInstrBuilder), &AsmInstrBuilder {
         instrs: list_new(),
     }) as *mut AsmInstrBuilder;
 }
 
+// Writes an instruction to the builder with the specified operation and number of arguments
 func asm_write_instr(builder: *mut AsmInstrBuilder, op: *Char, n_args: Int): *mut AsmInstr {
     var instr = asm_mk_instr(op, n_args);
     list_push(builder.instrs, instr);
@@ -198,6 +225,7 @@ func asm_write_instr(builder: *mut AsmInstrBuilder, op: *Char, n_args: Int): *mu
 
 // Data Movement
 
+// Returns the appropriate load operation based on width
 func asm_get_load_op(width: Int): *Char {
     match (width) {
         case 1: return "ldrsb";
@@ -207,6 +235,7 @@ func asm_get_load_op(width: Int): *Char {
     }
 }
 
+// Returns the appropriate store operation based on width
 func asm_get_store_op(width: Int): *Char {
     match (width) {
         case 1: return "strb";
@@ -215,12 +244,17 @@ func asm_get_store_op(width: Int): *Char {
     }
 }
 
+// mov {xd}, {x1}
 func asm_write_mov_r(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg) {
     var instr = asm_write_instr(builder, "mov", n_args: 2);
     instr.args[0] = asm_mk_reg_operand(width, xd);
     instr.args[1] = asm_mk_reg_operand(width, x1);
 }
 
+// mov {xd}, #{value}
+// movz {xd}, #{value & 0xffff}
+// ...
+// movk {xd}, #{value >> 48}, lsl 48
 func asm_write_mov_i(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, value: Int) {
     if (value == 0) {
         var instr = asm_write_instr(builder, "mov", n_args: 2);
@@ -252,6 +286,7 @@ func asm_write_mov_i(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, value: 
     assert(n_gen > 0, "asm_write_mov_i: should generate at least one instruction.");
 }
 
+// Helper function for load instructions
 func asm_write_ldrs(builder: *mut AsmInstrBuilder, width: Int, dst: AsmOperand, src: AsmOperand) {
     var op = asm_get_load_op(width);
     var instr = asm_write_instr(builder, op, n_args: 2);
@@ -259,28 +294,33 @@ func asm_write_ldrs(builder: *mut AsmInstrBuilder, width: Int, dst: AsmOperand, 
     instr.args[1] = src;
 }
 
+// ldr {xd}, [{xs}, #{offset}]
 func asm_write_ldrs_ri(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, xs: Reg, offset: Int) {
     var dst_operand = asm_mk_reg_operand(8, xd);
     var src_operand = asm_mk_reg_mem_operand(xs, offset);
     asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
+// ldr {xd}, [{xs}]
 func asm_write_ldrs_r(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, xs: Reg) {
     asm_write_ldrs_ri(builder, width, xd, xs, 0);
 }
 
+// ldr {xd}, [fp, #{frame_start_from_fp + offset}]
 func asm_write_ldrs_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, offset: Int) {
     var dst_operand = asm_mk_reg_operand(8, xd);
     var src_operand = asm_mk_fp_from_frame_start_mem_operand(offset);
     asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
+// ldr {xd}, [sp, #{stack_size + fp_offset}]
 func asm_write_ldrs_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, fp_offset: Int) {
     var dst_operand = asm_mk_reg_operand(8, xd);
     var src_operand = asm_mk_sp_from_fp_mem_operand(fp_offset);
     asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
+// Helper function for store instructions
 func asm_write_str(builder: *mut AsmInstrBuilder, width: Int, src: AsmOperand, dst: AsmOperand) {
     var op = asm_get_store_op(width);
     var instr = asm_write_instr(builder, op, n_args: 2);
@@ -288,6 +328,7 @@ func asm_write_str(builder: *mut AsmInstrBuilder, width: Int, src: AsmOperand, d
     instr.args[1] = dst;
 }
 
+// str {xs}, [{xd}, #{offset}]
 func asm_write_str_ri(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, xd: Reg, offset: Int) {
     var src_width = reg_width_from_size(width);
     var src_operand = asm_mk_reg_operand(src_width, xs);
@@ -295,10 +336,12 @@ func asm_write_str_ri(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, xd: Re
     asm_write_str(builder, width, src_operand, dst_operand);
 }
 
+// str {xs}, [{xd}]
 func asm_write_str_r(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, xd: Reg) {
     asm_write_str_ri(builder, width, xs, xd, 0);
 }
 
+// str {xs}, [sp, #{stack_size + fp_offset}]
 func asm_write_str_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, fp_offset: Int) {
     var src_width = reg_width_from_size(width);
     var src_operand = asm_mk_reg_operand(src_width, xs);
@@ -308,6 +351,7 @@ func asm_write_str_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xs: R
 
 // Arithmetic, Logic and Comparison
 
+// sxt {xd}, {x1}
 func asm_write_sxt(builder: *mut AsmInstrBuilder, dst_size: Int, src_size: Int, xd: Reg, x1: Reg) {
     var op =
         src_size == 1 ? "sxtb" :
@@ -322,6 +366,7 @@ func asm_write_sxt(builder: *mut AsmInstrBuilder, dst_size: Int, src_size: Int, 
     instr.args[1] = asm_mk_reg_operand(src_width, x1);
 }
 
+// {op} {xd}, {x1}, {x2}
 func asm_write_binary_op_rr(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg) {
     var instr = asm_write_instr(builder, op, n_args: 3);
     instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -329,6 +374,7 @@ func asm_write_binary_op_rr(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x
     instr.args[2] = asm_mk_reg_operand(8, x2);
 }
 
+// {op} {xd}, {x1}, #{imm}
 func asm_write_binary_op_ri(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, imm: Int) {
     var instr = asm_write_instr(builder, op, n_args: 3);
     instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -336,6 +382,7 @@ func asm_write_binary_op_ri(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x
     instr.args[2] = asm_mk_int_operand(imm);
 }
 
+// {op} {xd}, {x1}, {x2}, {x3}
 func asm_write_binary_op_rrr(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, x1: Reg, x2: Reg, x3: Reg) {
     var instr = asm_write_instr(builder, op, n_args: 4);
     instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -344,10 +391,12 @@ func asm_write_binary_op_rrr(builder: *mut AsmInstrBuilder, op: *Char, xd: Reg, 
     instr.args[3] = asm_mk_reg_operand(8, x3);
 }
 
+// add {xd}, {x1}, #{imm}
 func asm_write_add_ri(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, imm: Int) {
     asm_write_binary_op_ri(builder, "add", xd, x1, imm);
 }
 
+// add {xd}, fp, #{frame_start_from_fp + offset}
 func asm_write_add_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, offset: Int) {
     var instr = asm_write_instr(builder, "add", n_args: 3);
     instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -355,16 +404,19 @@ func asm_write_add_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: I
     instr.args[2] = asm_mk_fp_from_frame_start_operand(offset);
 }
 
+// add {xd}, {x1}, {x2}
 func asm_write_add_rr(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg, x2: Reg) {
     asm_write_binary_op_rr(builder, "add", xd, x1, x2);
 }
 
+// cmp {xd}, {x1}
 func asm_write_cmp_rr(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Reg) {
     var instr = asm_write_instr(builder, "cmp", n_args: 2);
     instr.args[0] = asm_mk_reg_operand(8, xd);
     instr.args[1] = asm_mk_reg_operand(8, x1);
 }
 
+// cset {xd}, {op}
 func asm_write_cset(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, op: *Char) {
     var instr = asm_write_instr(builder, "cset", n_args: 2);
     instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -373,17 +425,20 @@ func asm_write_cset(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, op: *Cha
 
 // Control Flow
 
+// cbz {xd}, {label}
 func asm_write_cbz(builder: *mut AsmInstrBuilder, xd: Reg, counter: Int, label_suffix: *Char) {
     var instr = asm_write_instr(builder, "cbz", n_args: 2);
     instr.args[0] = asm_mk_reg_operand(8, xd);
     instr.args[1] = asm_mk_label_operand(counter, label_suffix);
 }
 
+// b {label}
 func asm_write_b(builder: *mut AsmInstrBuilder, counter: Int, suffix: *Char) {
     var instr = asm_write_instr(builder, "b", n_args: 1);
     instr.args[0] = asm_mk_label_operand(counter, suffix);
 }
 
+// bl {name}
 func asm_write_bl(builder: *mut AsmInstrBuilder, name: *Char) {
     var instr = asm_write_instr(builder, "bl", n_args: 1);
     instr.args[0] = asm_mk_global_operand("", name, -1);
@@ -391,6 +446,8 @@ func asm_write_bl(builder: *mut AsmInstrBuilder, name: *Char) {
 
 // Addressing
 
+// addrp {xd}, {name}
+// add {xd}, {xd}, :lo12:{name}
 func asm_write_global_addr(builder: *mut AsmInstrBuilder, xd: Reg, name: *Char) {
     var addrp_instr = asm_write_instr(builder, "adrp", n_args: 2);
     addrp_instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -402,6 +459,8 @@ func asm_write_global_addr(builder: *mut AsmInstrBuilder, xd: Reg, name: *Char) 
     instr.args[2] = asm_mk_global_operand(":lo12:", name, -1);
 }
 
+// addrp {xd}, :got:{name}
+// ldr {xd}, [{xd}, :got_lo12:{name}]
 func asm_write_got_global_addr(builder: *mut AsmInstrBuilder, xd: Reg, name: *Char) {
     var addrp_instr = asm_write_instr(builder, "adrp", n_args: 2);
     addrp_instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -416,6 +475,8 @@ func asm_write_got_global_addr(builder: *mut AsmInstrBuilder, xd: Reg, name: *Ch
     ldr_instr.args[1] = mem_operand;
 }
 
+// addrp {xd}, str{id}
+// add {xd}, {xd}, :lo12:str{id}
 func asm_write_string_addr(builder: *mut AsmInstrBuilder, xd: Reg, id: Int) {
     var addrp_instr = asm_write_instr(builder, "adrp", n_args: 2);
     addrp_instr.args[0] = asm_mk_reg_operand(8, xd);
@@ -429,15 +490,18 @@ func asm_write_string_addr(builder: *mut AsmInstrBuilder, xd: Reg, id: Int) {
 
 // Miscellaneous
 
+// .L{counter}.{suffix}:
 func asm_write_label(builder: *mut AsmInstrBuilder, counter: Int, suffix: *Char) {
     var instr = asm_write_instr(builder, op: null, n_args: 1);
     instr.args[0] = asm_mk_label_operand(counter, suffix);
 }
 
+// {raw}
 func asm_write_raw(builder: *mut AsmInstrBuilder, raw: *Char) {
     asm_write_instr(builder, raw, n_args: 0);
 }
 
+// // {comment}
 func asm_write_comment(builder: *mut AsmInstrBuilder, fmt: *Char, ...args) {
     var sb = sb_new();
     sb_printf(sb, "// ");
@@ -446,6 +510,7 @@ func asm_write_comment(builder: *mut AsmInstrBuilder, fmt: *Char, ...args) {
     asm_write_raw(builder, text);
 }
 
+// \b // {comment}
 func asm_add_comment_to_last(builder: *mut AsmInstrBuilder, fmt: *Char, ...args) {
     var sb = sb_new();
     sb_printf(sb, "// ");

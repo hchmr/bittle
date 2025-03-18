@@ -1,4 +1,13 @@
-include "bittle.btls";
+module hir_lower;
+
+import "../semantics/core";
+import "../semantics/sym";
+import "../semantics/type";
+import "../support/libc";
+import "../support/utils";
+import "../syntax/ast";
+import "../syntax/tok";
+import "hir";
 
 func translate_binary_op(tok_kind: TokKind): HirOpKind {
     match (tok_kind) {

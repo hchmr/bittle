@@ -1,4 +1,100 @@
-include "bittle.btls";
+module tok;
+
+import "../support/utils";
+
+// NOTE: When updating this declaration, remember to also update `pretty_tok_kind` and `lookup_keyword`.
+enum TokKind {
+    Tok_Eof = 1,
+    // Identifier
+    Tok_Ident,
+    // Literals
+    Tok_Int,
+    Tok_String,
+    Tok_Char,
+    // Keywords
+    Tok_As,
+    Tok_Break,
+    Tok_Case,
+    Tok_Const,
+    Tok_Continue,
+    Tok_Else,
+    Tok_Enum,
+    Tok_Extern,
+    Tok_False,
+    Tok_For,
+    Tok_Func,
+    Tok_If,
+    Tok_Import,
+    Tok_Include,
+    Tok_Is,
+    Tok_Match,
+    Tok_Module,
+    Tok_Mut,
+    Tok_Null,
+    Tok_Return,
+    Tok_Sizeof,
+    Tok_Struct,
+    Tok_True,
+    Tok_Typeof,
+    Tok_Underscore,
+    Tok_Union,
+    Tok_Var,
+    Tok_While,
+    // Symbols
+    Tok_LParen,
+    Tok_RParen,
+    Tok_LBrace,
+    Tok_RBrace,
+    Tok_LBracket,
+    Tok_RBracket,
+    Tok_Comma,
+    Tok_Semicolon,
+    Tok_Dot,
+    Tok_DotDot,
+    Tok_DotDotDot,
+    Tok_Colon,
+    Tok_ColonColon,
+    Tok_At,
+    Tok_Arrow,
+    Tok_Plus,
+    Tok_PlusEq,
+    Tok_Minus,
+    Tok_MinusEq,
+    Tok_Star,
+    Tok_StarEq,
+    Tok_Slash,
+    Tok_SlashEq,
+    Tok_Percent,
+    Tok_PercentEq,
+    Tok_Amp,
+    Tok_AmpEq,
+    Tok_AmpAmp,
+    Tok_Bar,
+    Tok_BarEq,
+    Tok_BarBar,
+    Tok_Caret,
+    Tok_CaretEq,
+    Tok_Bang,
+    Tok_Tilde,
+    Tok_Question,
+    Tok_Lt,
+    Tok_LtLtEq,
+    Tok_LtLt,
+    Tok_LtEq,
+    Tok_Gt,
+    Tok_GtEq,
+    Tok_GtGt,
+    Tok_GtGtEq,
+    Tok_Eq,
+    Tok_EqEq,
+    Tok_BangEq,
+}
+
+struct Tok {
+    kind: TokKind,
+    pos: Pos,
+    lexeme: *Char,
+}
 
 func pretty_tok_kind(kind: TokKind): *Char {
     match (kind) {
@@ -90,4 +186,44 @@ func pretty_tok_kind(kind: TokKind): *Char {
             unreachable("pretty_tok_kind");
         }
     }
+}
+
+func try_keyword(lexeme: *Char, keyword: *Char, out: *mut TokKind, kind: TokKind): Bool {
+    if (str_eq(lexeme, keyword)) {
+        *out = kind;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+func lookup_keyword(lexeme: *Char, out: *mut TokKind): Bool {
+    return try_keyword(lexeme, "as", out, Tok_As)
+        || try_keyword(lexeme, "break", out, Tok_Break)
+        || try_keyword(lexeme, "case", out, Tok_Case)
+        || try_keyword(lexeme, "const", out, Tok_Const)
+        || try_keyword(lexeme, "continue", out, Tok_Continue)
+        || try_keyword(lexeme, "else", out, Tok_Else)
+        || try_keyword(lexeme, "enum", out, Tok_Enum)
+        || try_keyword(lexeme, "extern", out, Tok_Extern)
+        || try_keyword(lexeme, "false", out, Tok_False)
+        || try_keyword(lexeme, "for", out, Tok_For)
+        || try_keyword(lexeme, "func", out, Tok_Func)
+        || try_keyword(lexeme, "if", out, Tok_If)
+        || try_keyword(lexeme, "import", out, Tok_Import)
+        || try_keyword(lexeme, "include", out, Tok_Include)
+        || try_keyword(lexeme, "is", out, Tok_Is)
+        || try_keyword(lexeme, "match", out, Tok_Match)
+        || try_keyword(lexeme, "module", out, Tok_Module)
+        || try_keyword(lexeme, "mut", out, Tok_Mut)
+        || try_keyword(lexeme, "null", out, Tok_Null)
+        || try_keyword(lexeme, "return", out, Tok_Return)
+        || try_keyword(lexeme, "sizeof", out, Tok_Sizeof)
+        || try_keyword(lexeme, "struct", out, Tok_Struct)
+        || try_keyword(lexeme, "true", out, Tok_True)
+        || try_keyword(lexeme, "typeof", out, Tok_Typeof)
+        || try_keyword(lexeme, "union", out, Tok_Union)
+        || try_keyword(lexeme, "var", out, Tok_Var)
+        || try_keyword(lexeme, "while", out, Tok_While)
+        || try_keyword(lexeme, "_", out, Tok_Underscore);
 }

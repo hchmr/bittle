@@ -1,4 +1,13 @@
-include "bittle.btls";
+module elab;
+
+import "../support/libc";
+import "../support/utils";
+import "../syntax/ast";
+import "../syntax/tok";
+import "const_value";
+import "core";
+import "sym";
+import "type";
 
 //==============================================================================
 //== Scope

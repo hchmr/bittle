@@ -1,4 +1,8 @@
-include "bittle.btls";
+module sym;
+
+import "../support/utils";
+import "core";
+import "type";
 
 func find_record_field_by_name(sym: *Sym, name: *Char): Int {
     var fields = (sym as *RecordSym).fields;

@@ -1,3 +1,8 @@
+module type;
+
+import "../support/utils";
+import "core";
+
 /// Note: [Pointer Subtyping]
 /// ~~~~~~~~~~~~~~~~~~~~~~~~~
 ///
@@ -12,8 +17,6 @@
 /// - `*mut T <: *mut T` (reflexivity)
 /// - `*mut ! <: *mut T` (bottom type)
 /// - `*mut T <: *mut Void` (top type)
-
-include "bittle.btls";
 
 func mk_void_type(): *VoidType {
     return box(sizeof(VoidType), &VoidType { }) as *VoidType;
