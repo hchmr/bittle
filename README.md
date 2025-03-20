@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/hchmr/bittle/actions/workflows/ci.yml/badge.svg)](https://github.com/hchmr/bittle/actions/workflows/ci.yml)
 
-Bittle is a minimalist programming language inspired by C, designed for simplicity and expressiveness. It's a hobby project that serves as a playground for exploring programming language design and implementation. The goal is to create a language that's as simple as C but more fun, while also providing a platform to learn about compiler techniques and language tooling.
+Bittle is a simple programming language inspired by C, designed for simplicity and expressiveness. It's a hobby project that serves as a playground for exploring programming language design and implementation. The goal of this project is to create a language that's simple like C but more fun, while also providing a platform to learn about compiler techniques and language tooling.
 
 ## Feature overview
 
@@ -18,12 +18,13 @@ Bittle resembles a smaller, more modern C, with the following core features:
     - Structured control flow with `if`, `while`, `for`, `break`, etc.
     - Procedures.
     - Local and global variables.
+- Modularity:
+    - Separate compilation of modules.
 - Value and reference semantics:
     - All types are passed by value and returned by value.
     - Pointers can be used for reference semantics.
 - Other:
     - Memory is managed manually. Support for dynamic memory allocation using externally provided functions.
-    - Separate compilation with external declarations and header files (for now).
 
 Bittle can also interoperate with C. Currently, there is no standard library, so basic functionality like I/O must be provided externally.
 
@@ -40,7 +41,7 @@ func main(): Int32 {
 
 ### Compiler
 
-The language is self-hosting, meaning that the compiler is written in Bittle and can compile itself. More details on bootstrapping are provided below. The only supported platform is Linux on Arm64. The compiler is fairly basic, emitting naive assembly code directly to stdout and halting on the first error. Dynamically allocated memory is handled carelessly, but for a short-lived process like a compiler, memory leaks are of no concern.
+The language is self-hosting, meaning that the compiler is written in Bittle and can compile itself. More details on bootstrapping are provided below. The only supported platform is Linux on Arm64. The compiler is fairly basic, generating very inefficient assembly code and halts on the first error. Dynamically allocated memory is handled carelessly, but for a short-lived process like a compiler, memory leaks are of no concern.
 
 ### Language Extension
 
@@ -72,9 +73,8 @@ The host platform for the bootstrapping process is Linux on Arm64. A minimal set
 **Planned Enhancements:**
 
 - Initialization of global variables
-- Module system with export/import (replacing header files)
 - A small standard library
-- More ergonomic pattern matching
+- More expressive pattern matching
 - Basic generics with type parameters
 
 ### Compiler
