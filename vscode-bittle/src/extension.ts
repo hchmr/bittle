@@ -12,6 +12,7 @@ import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
 import { SyntaxErrorProvider } from './features/syntaxErrors';
 import { CompilerService } from './services/compilerService';
 import { FileGraphService } from './services/fileGraphService';
+import { ModuleListService } from './services/moduleListService';
 import { ParsingServiceImpl } from './services/parsingService';
 import { PathResolver } from './services/pathResolver';
 import { SemanticsService } from './services/semanticsService';
@@ -33,6 +34,8 @@ export function activate(context: vscode.ExtensionContext) {
     const semanticsService = new SemanticsService(parsingService, pathResolver, cache);
 
     const fileGraphService = new FileGraphService(parsingService, vfs, pathResolver);
+
+    const moduleListService = new ModuleListService(parsingService, vfs, cache);
 
     const compilerService = new CompilerService();
 
@@ -107,7 +110,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Completion
 
     context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider('bittle', new CompletionProvider(parsingService, semanticsService), '.'),
+        vscode.languages.registerCompletionItemProvider('bittle', new CompletionProvider(parsingService, semanticsService, moduleListService), '.', '"'),
     );
 
     context.subscriptions.push(
