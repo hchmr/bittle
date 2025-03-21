@@ -120,7 +120,6 @@ struct RecordField {
     name: *Char,
     type: *Type,
     default_value: *ConstValue,
-    offset: Int,
 }
 
 struct EnumSym: Sym {
@@ -133,8 +132,6 @@ struct RecordSym: Sym {
     is_union: Bool,
     base: *mut RecordSym,
     fields: *mut List, // List<RecordField>
-    unpadded_size: Int,
-    align: Int,
 }
 
 struct GlobalSym: Sym {

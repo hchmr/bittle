@@ -182,8 +182,6 @@ func declare_record(
         is_union,
         base: null,
         fields: null,
-        unpadded_size: 0,
-        align: 0,
     }) as *mut Sym;
     add_sym(ctx, sym);
     return sym as *mut RecordSym;
@@ -1464,26 +1462,13 @@ func add_field_to_record(ctx: *mut ElabCtx, sym: *mut RecordSym, field_decl: *mu
         default_value = const_eval_expect(ctx, field_decl.default_value, field_type);
     }
 
-    var field_size = type_size(field_type);
-    var field_align = type_align(field_type);
-    var field_offset = sym.is_union
-        ? 0
-        : align_up(sym.unpadded_size, field_align);
-
     var field = box(sizeof(RecordField), &RecordField {
         name: field_name,
         type: field_type,
         default_value,
-        offset: field_offset,
     }) as *mut RecordField;
 
     list_push(sym.fields, field);
-    if (sym.is_union) {
-        sym.unpadded_size = int_max(sym.unpadded_size, field_size);
-    } else {
-        sym.unpadded_size = field_offset + field_size;
-    }
-    sym.align = int_max(sym.align, field_align);
 }
 
 func add_default_value_to_field(ctx: *mut ElabCtx, sym: *mut RecordSym, field_decl: *mut RecordFieldDecl) {
@@ -1536,8 +1521,6 @@ func elab_record_base(ctx: *mut ElabCtx, base: *mut TypeExpr, record_sym: *mut R
         is_defined: record_sym.is_defined,
         base: baseSym,
         fields: fields,
-        unpadded_size: baseSym.unpadded_size,
-        align: baseSym.align,
     };
 }
 

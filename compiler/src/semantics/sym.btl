@@ -41,3 +41,21 @@ func find_param_by_name(sym: *FuncSym, name: *Int8): Int {
     }
     return -1;
 }
+
+func field_offset(sym: *RecordSym, field_index: Int): Int {
+    if (sym.is_union) {
+        return 0;
+    }
+
+    var unpadded_size = 0;
+    var offset = 0;
+
+    for (var i = 0; i <= field_index; i += 1) {
+        var field = list_get(sym.fields, i) as *RecordField;
+        var layout = type_layout(field.type);
+        offset = align_up(unpadded_size, layout.align);
+        unpadded_size = offset + layout.size;
+    }
+
+    return offset;
+}

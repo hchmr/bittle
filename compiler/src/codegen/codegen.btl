@@ -4,6 +4,7 @@ import "../hir/hir";
 import "../hir/hir_lower";
 import "../semantics/core";
 import "../semantics/type";
+import "../semantics/sym";
 import "../support/libc";
 import "../support/utils";
 import "../syntax/ast";
@@ -374,9 +375,16 @@ func asm_lower_expr_addr(ctx: *mut CodegenCtx, e: *HirExpr, xd: Reg) {
         case HirExpr_Member: {
             var e = e as *HirMemberExpr;
             var field = e.field;
+
+            assert(e.left.type.kind == Type_Record, "asm_lower_expr_addr: left operand should be a record.");
+            var sym = (e.left.type as *RecordType).sym;
+            var field_index = find_record_field_by_name(sym, field.name);
+            assert(field_index != -1, "asm_lower_expr_addr: field should exist in the record.");
+            var field_offset = field_offset(sym, field_index);
+
             asm_lower_expr_addr(ctx, e.left, xd);
-            // add {xd}, {xd}, #{offset}
-            asm_write_add_ri(ctx.builder, 8, xd, xd, field.offset);
+            // add {xd}, {xd}, #{field_offset}
+            asm_write_add_ri(ctx.builder, 8, xd, xd, field_offset);
             asm_add_comment_to_last(ctx.builder, "member '%s'", field.name);
         }
         case HirExpr_Deref: {
