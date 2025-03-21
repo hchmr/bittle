@@ -85,13 +85,16 @@ export class Elaborator {
     // Current pattern
     orPatternDepth: number = 0;
 
+    importChain: string[];
+
     private constructor(
         private parsingService: ParsingService,
         private pathResolver: PathResolver,
         private cache: ReactiveCache,
         private path: string,
-        private importChain: string[],
+        importChain: string[],
     ) {
+        this.importChain = [...importChain, path];
         this.rootNode = this.parsingService.parseAsAst(path);
         this.scope = new Scope(this.path, this.rootNode.syntax);
     }
@@ -844,7 +847,7 @@ export class Elaborator {
             this.pathResolver,
             this.cache,
             path,
-            [...this.importChain, path],
+            this.importChain,
         );
         if (!elaboratorResult.moduleName) {
             this.reportError(node, `Imported file is not a module.`);
