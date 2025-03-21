@@ -1,8 +1,10 @@
 import assert from 'assert';
+import path from 'path';
 import * as vscode from 'vscode';
 import { builtinTypes, builtinValues } from '../semantics/builtins';
 import { FuncParamSym, prettySym, RecordFieldSym, RecordKind, Sym, SymKind } from '../semantics/sym';
 import { TypeKind } from '../semantics/type';
+import { ModuleListService } from '../services/moduleListService';
 import { ParsingService } from '../services/parsingService';
 import { SemanticsService } from '../services/semanticsService';
 import { ClosestNodes, pointEq, rangeContains, SyntaxNode } from '../syntax';
@@ -11,6 +13,7 @@ import { keywords } from '../syntax/token';
 import { unreachable } from '../utils';
 import { fuzzySearch } from '../utils/fuzzySearch';
 import { interceptExceptions } from '../utils/interceptExceptions';
+import { parseString } from '../utils/literalParsing';
 import { countPrecedingCommas, countPrecedingNamedArgs } from '../utils/nodeSearch';
 import { stream } from '../utils/stream';
 import { fromVscPosition, toVscRange } from '../utils/vscode';
@@ -19,6 +22,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
     constructor(
         private parsingService: ParsingService,
         private semanticsService: SemanticsService,
+        private moduleListService: ModuleListService,
     ) { }
 
     @interceptExceptions
@@ -38,11 +42,36 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
             return;
         }
 
-        return this.autoCompleteFieldAccess(filePath, closest)
+        return this.autoCompleteImport(filePath, closest)
+            ?? this.autoCompleteFieldAccess(filePath, closest)
             ?? this.autoCompleteFieldInit(filePath, closest)
             ?? this.autoCompleteArgumentLabel(filePath, closest)
             ?? this.autoCompleteDefinition(filePath, closest)
             ?? this.autoCompleteDefault(filePath, closest);
+    }
+
+    private autoCompleteImport(
+        filePath: string,
+        closest: ClosestNodes,
+    ): vscode.CompletionItem[] | undefined {
+        const node = closest.left;
+        if (!node || node.type !== 'string_literal' || node.parent?.type !== TopLevelNodeTypes.Import) {
+            return;
+        }
+
+        let stringLiteral = firstLineOf(node.text);
+        if (!/.["]$/.test(stringLiteral)) {
+            stringLiteral += '"';
+        }
+
+        const searchText = parseString(stringLiteral) ?? '';
+        const hasExtension = path.basename(searchText).includes('.');
+
+        const rows = this.moduleListService.getModuleList()
+            .map(modulePath => ({ path: path.relative(path.dirname(filePath), modulePath) }));
+
+        return fuzzySearch(searchText, rows, { key: 'path' })
+            .map(row => toModuleCompletionItem(node, row.path, hasExtension));
     }
 
     private autoCompleteFieldAccess(
@@ -370,4 +399,20 @@ function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
             unreachable(kind);
         }
     }
+}
+
+function toModuleCompletionItem(stringNode: SyntaxNode, modulePath: string, includeExtension: boolean): vscode.CompletionItem {
+    if (!includeExtension) {
+        modulePath = modulePath.replace(/.btl$/, '');
+    }
+
+    const item = new vscode.CompletionItem(modulePath, vscode.CompletionItemKind.Module);
+    item.insertText = `"${modulePath}";`;
+    item.filterText = item.insertText;
+    item.range = toVscRange(stringNode.startPosition, stringNode.parent!.endPosition);
+    return item;
+}
+
+function firstLineOf(text: string): string {
+    return text.slice(0, text.indexOf('\n'));
 }
