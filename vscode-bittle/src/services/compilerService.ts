@@ -1,6 +1,8 @@
+import assert from 'assert';
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import { log } from '../log';
+import { unreachable } from '../utils';
 
 export class CompilerService {
     async compile(filePath: string) {
@@ -22,9 +24,16 @@ export class CompilerService {
             stderr += data.toString();
         });
 
-        const code = await new Promise((resolve, reject) => {
-            process.on('close', code => {
-                resolve(code ?? 'unknown');
+        const code = await new Promise<number>((resolve, reject) => {
+            process.on('exit', (code, signal) => {
+                if (signal) {
+                    log.log(`Compiler killed by signal ${signal}`);
+                    reject(new Error('Compiler killed by signal ' + signal));
+                } else if (typeof code === 'number') {
+                    resolve(code);
+                } else {
+                    assert(false, 'One of the two values will always be set');
+                }
             });
             process.on('error', error => {
                 log.log(`Error invoking compiler: ${error}`);
@@ -33,6 +42,6 @@ export class CompilerService {
         });
         log.log(`Compiler exited with code ${code}`);
 
-        return { ok: code == 0, stderr };
+        return { exitCode: code, stderr };
     }
 }
