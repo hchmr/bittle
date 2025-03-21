@@ -104,10 +104,8 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
     }
 
     private existsUncached(path: string): boolean {
-        return this.cache.compute(`vfs:exists:${path}`, () =>
-            vscode.workspace.textDocuments.some(doc => doc.uri.fsPath === path)
-            || fs.existsSync(path) && fs.statSync(path).isFile(),
-        );
+        return vscode.workspace.textDocuments.some(doc => doc.uri.fsPath === path)
+            || fs.existsSync(path) && fs.statSync(path).isFile();
     };
 
     private listFilesUncached(): string[] {
