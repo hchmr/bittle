@@ -172,13 +172,21 @@ export class TypeDefinitionProvider implements vscode.TypeDefinitionProvider {
     }
 
     fromType(filePath: string, type: Type): Sym | undefined {
-        if (type.kind === TypeKind.Ptr) {
-            type = type.pointeeType;
+        while (true) {
+            switch (type.kind) {
+                case TypeKind.Record:
+                case TypeKind.Enum:
+                    return this.semanticsService.getSymbol(filePath, type.sym.qualifiedName);
+                case TypeKind.Ptr:
+                    type = type.pointeeType;
+                    break;
+                case TypeKind.Arr:
+                    type = type.elemType;
+                    break;
+                default:
+                    return;
+            }
         }
-        if (type.kind !== TypeKind.Record) {
-            return;
-        }
-        return this.semanticsService.getSymbol(filePath, type.sym.qualifiedName);
     }
 }
 
