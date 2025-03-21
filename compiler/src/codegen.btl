@@ -397,8 +397,8 @@ func asm_lower_expr_addr(ctx: *mut CodegenCtx, e: *HirExpr, xd: Reg) {
             asm_write_binary_op_rrr(ctx.builder, "madd", xd, x1, x2, xd);
             free_reg(ctx, x1);
         }
-        case _: {
-            unreachable("asm_lower_expr_addr");
+        case other @ _: {
+            unreachable_enum_case("asm_lower_expr_addr", other);
         }
     }
     lock_reg(ctx, xd);

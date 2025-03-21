@@ -415,6 +415,26 @@ func lower_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *mut Pattern):
 //==============================================================================
 //== Expressions
 
+func lower_expr_to_lvalue(ctx: *mut Context, expr: *Expr): *mut HirExpr {
+    if (is_lvalue(expr)) {
+        return lower_expr(ctx, expr);
+    } else {
+        /*
+            Desugar
+                e
+            to
+                temp t1: typeof(e);
+                *(t1 = e; &t1)
+        */
+        var temp_var = mk_temp_var(ctx, expr.type);
+        var temp = hir_mk_temp_expr(temp_var, &expr.pos);
+        var temp_init = lower_assign_expr(ctx, temp, expr, &expr.pos);
+        var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
+        var sequence = hir_mk_seq_expr(temp_init, addr_temp);
+        return hir_mk_deref_expr(sequence, &expr.pos);
+    }
+}
+
 func lower_ident_expr(ctx: *mut Context, expr: *IdentExpr): *mut HirExpr {
     match (expr.sym.kind) {
         case Sym_Global | Sym_Local: {
@@ -468,21 +488,7 @@ func lower_arg(ctx: *mut Context, expr: *Expr): *mut HirExpr {
         // Already an lvalue. Can be safely passed directly since it's not passed by pointer which risks mutation.
         return lower_expr(ctx, expr);
     } else {
-        /*
-            Desugar
-                e
-            to
-                temp t1: typeof(e);
-                *(t1 = e; &t1)
-            -> An lvalue instead of an rvalue
-        */
-        var temp_var = mk_temp_var(ctx, expr.type);
-        var temp = hir_mk_temp_expr(temp_var, &expr.pos);
-        var temp_init = lower_assign_expr(ctx, temp, expr, &expr.pos);
-        var addr_temp = hir_mk_addr_expr(temp, &expr.pos);
-        var sequence = hir_mk_seq_expr(temp_init, addr_temp);
-        var deref = hir_mk_deref_expr(sequence, &expr.pos);
-        return deref;
+        return lower_expr_to_lvalue(ctx, expr);
     }
 }
 
@@ -524,7 +530,7 @@ func lower_call_expr(ctx: *mut Context, expr: *CallExpr, dest: *mut HirExpr): *m
     var hir_expr = hir_mk_call_expr(sym, hir_args, n_hir_args, &expr.pos);
 
     if (!dest && is_composite(sym.return_type)) {
-        var temp_var = mk_temp_var(ctx, expr.type);
+        var temp_var = mk_temp_var(ctx, sym.return_type);
         dest = hir_mk_temp_expr(temp_var, &expr.pos);
     }
 
@@ -539,7 +545,7 @@ func lower_index_expr(ctx: *mut Context, expr: *IndexExpr): *mut HirExpr {
     var ast_indexee = expr.indexee;
     var ast_index = expr.index;
 
-    var hir_indexee = lower_expr(ctx, ast_indexee);
+    var hir_indexee = lower_expr_to_lvalue(ctx, ast_indexee);
     var hir_index = lower_expr(ctx, ast_index);
 
     return hir_mk_index_expr(hir_indexee, hir_index);
@@ -550,7 +556,7 @@ func lower_member_expr(ctx: *mut Context, expr: *MemberExpr): *mut HirExpr {
     var name = expr.name;
     var field = expr.resolved_field;
 
-    var hir_left = lower_expr(ctx, ast_left);
+    var hir_left = lower_expr_to_lvalue(ctx, ast_left);
     if (hir_left.type.kind == Type_Ptr) {
         hir_left = hir_mk_deref_expr(hir_left, &expr.pos);
     }

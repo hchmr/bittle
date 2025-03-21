@@ -24,6 +24,11 @@ func unreachable(function: *Char): ! {
     exit(1);
 }
 
+func unreachable_enum_case(function: *Char, value: Int): ! {
+    fprintf(stderr, "\n*** Unhandled enum case %d in %s\n", value, function);
+    exit(1);
+}
+
 func error_at(pos: *Pos) {
     fprintf(stderr, "%s:%d:%d: Error: ", pos.file, pos.row, pos.col);
 }

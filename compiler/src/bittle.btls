@@ -15,6 +15,7 @@ struct List;
 
 func assert(cond: Bool, because: *Char);
 func unreachable(function: *Char): !;
+func unreachable_enum_case(function: *Char, value: Int): !;
 
 func error_at(pos: *Pos);
 func die(msg: *Char): !;

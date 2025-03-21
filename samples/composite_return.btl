@@ -1,0 +1,50 @@
+extern func exit(code: Int32): Void;
+
+extern func printf(fmt: *Char, ...): Int32;
+
+func assert_eq(a: Int, b: Int) {
+    if (a != b) {
+        printf("assertion failed: %d == %d\n", a, b);
+        exit(1);
+    }
+}
+
+struct Point2d {
+    x: Int,
+    y: Int,
+}
+
+struct Point3d {
+    x: Int,
+    y: Int,
+    z: Int,
+}
+
+// 16 bytes, will be returned in registers
+func mk_point2d(x: Int, y: Int): Point2d {
+    return Point2d { x: x, y: y };
+}
+
+// 24 bytes, will be returned on the stack
+func mk_point3d(x: Int, y: Int, z: Int): Point3d {
+    return Point3d { x: x, y: y, z: z };
+}
+
+// 16 bytes, will be returned in registers
+func mk_array2(): [Int; 2] {
+    return [1, 2];
+}
+
+// 80 bytes, will be returned on the stack
+func mk_array10(): [Int; 10] {
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+}
+
+func main(): Int32 {
+    assert_eq(mk_point2d(x: 1, y: 2).x, 1);
+    assert_eq(mk_point3d(x: 1, y: 2, z: 3).z, 3);
+    assert_eq(mk_array2()[1], 2);
+    assert_eq(mk_array10()[5], 6);
+
+    return 0;
+}
