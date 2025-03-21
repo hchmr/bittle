@@ -5,7 +5,11 @@ export class ReactiveCache {
     private dependents = new Map<string, Set<string>>();
     private values = new Map<string, unknown>();
 
-    private currentComputation: string | null = null;
+    private currentComputations: string[] = [];
+
+    private get currentComputation() {
+        return this.currentComputations[this.currentComputations.length - 1];
+    }
 
     compute<T>(key: string, compute: () => T): T {
         if (this.values.has(key)) {
@@ -29,13 +33,17 @@ export class ReactiveCache {
     }
 
     inScope<T>(key: string, compute: () => T) {
-        const outerComputation = this.currentComputation;
-        this.currentComputation = key;
+        if (this.currentComputations.includes(key)) {
+            const cycleStart = this.currentComputations.indexOf(key);
+            const cyclePath = [...this.currentComputations.slice(cycleStart), key].join(' -> ');
+            throw new Error(`Cyclic dependency detected: ${cyclePath}`);
+        }
+        this.currentComputations.push(key);
         try {
             log.log(`Computing ${key}`);
             return compute();
         } finally {
-            this.currentComputation = outerComputation;
+            this.currentComputations.pop();
         }
     }
 
