@@ -970,10 +970,6 @@ export class Elaborator {
                     this.reportError(paramNode, `Non-default parameter cannot follow a default parameter.`);
                 }
                 hasSeenDefaultParam ||= !!paramNode.value;
-            } else if (paramNode instanceof RestParamTypeNode) {
-                if (hasSeenDefaultParam) {
-                    this.reportError(paramNode, `Variadic parameter cannot follow a default parameter.`);
-                }
             }
         }
     }
