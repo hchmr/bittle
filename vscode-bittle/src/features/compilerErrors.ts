@@ -60,14 +60,15 @@ class CompilerErrorProviderImpl implements CompilerErrorProvider {
     }
 
     async getFileDiagnostic(document: vscode.TextDocument) {
-        const { ok, stderr } = await this.compilerService.compile(document.fileName);
+        const { exitCode, stderr } = await this.compilerService.compile(document.fileName);
 
-        log.log(`Compiler output: ${ok}, '${stderr}'`);
+        log.log(`Compiler exited with code ${exitCode}.`);
+        log.log(`Compiler output: ${stderr}`);
 
-        if (ok) {
+        if (exitCode === 0) {
             return;
         }
-        return makeDiagnostic(stderr, document);
+        return makeDiagnostic(exitCode, stderr, document);
     }
 }
 
@@ -76,7 +77,7 @@ type FileDiagnostic = {
     diagnostic: vscode.Diagnostic;
 };
 
-function makeDiagnostic(stderr: string, document: vscode.TextDocument): FileDiagnostic {
+function makeDiagnostic(exitCode: number | undefined, stderr: string, document: vscode.TextDocument): FileDiagnostic {
     const match = /^(.*?):(\d+):(\d+):(.*)/s.exec(stderr);
     if (match) {
         let fileName = match[1];
@@ -104,9 +105,15 @@ function makeDiagnostic(stderr: string, document: vscode.TextDocument): FileDiag
             diagnostic,
         };
     } else {
+        let message: string;
+        if (stderr.trim()) {
+            message = 'Compiler error: ' + stderr;
+        } else {
+            message = `Unknown compiler error (exit code ${exitCode}).`;
+        }
         const diagnostic = new vscode.Diagnostic(
             new vscode.Range(0, 0, 0, 0),
-            stderr,
+            message,
             vscode.DiagnosticSeverity.Error,
         );
         diagnostic.source = 'Bittle compiler';
