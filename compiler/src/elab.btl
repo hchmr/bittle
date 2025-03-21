@@ -1596,9 +1596,6 @@ func check_default_params_order(param_decls: *mut List, rest_param: *mut RestPar
         }
         seen_default = seen_default || param_decl.default_value;
     }
-    if (rest_param && seen_default) {
-        die_at(&rest_param.pos, "Variadic parameter cannot follow default parameters");
-    }
 }
 
 func verify_main_signature(decl: *mut FuncDecl, sym: *mut FuncSym) {
