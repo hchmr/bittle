@@ -125,7 +125,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
 //  FieldInit
 //    name: null
 //    value: NameExpr
-//      identifierToken: ${nameNode}
+//      name: ${nameNode}
 function isShorthandFieldInit(nameNode: SyntaxNode) {
     if (nameNode.parent?.type !== NodeTypes.NameExpr) {
         return false;

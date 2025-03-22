@@ -1,7 +1,7 @@
 import assert from 'assert';
-import { identity, unreachable } from '../utils/index.js';
+import { identity } from '../utils/index.js';
 import { ErrorSink } from './errorSink.js';
-import { CompositeNodeType, CompositeNodeTypes, ExprNodeType, ExprNodeTypes, NodeTypes } from './nodeTypes.js';
+import { CompositeNodeType, CompositeNodeTypes, NodeTypes } from './nodeTypes.js';
 import { Point, pointEq } from './position';
 import { Token, TokenKind } from './token.js';
 import { Tree } from './tree.js';
@@ -421,6 +421,11 @@ export class Parser extends ParserBase {
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
+        if (this.match('<')) {
+            this.beginField('typeParams');
+            this.typeParams();
+            this.finishField('typeParams');
+        }
         if (this.match(':')) {
             this.expect(':');
             this.beginField('base');
@@ -476,6 +481,11 @@ export class Parser extends ParserBase {
         this.beginField('name');
         this.expect('identifier');
         this.finishField('name');
+        if (this.match('<')) {
+            this.beginField('typeParams');
+            this.typeParams();
+            this.finishField('typeParams');
+        }
         this.beginField('params');
         this.paramList();
         this.finishField('params');
@@ -582,6 +592,20 @@ export class Parser extends ParserBase {
         this.finishField('value');
         this.expect(';');
         this.finishNode(CompositeNodeTypes.ConstDecl);
+    }
+
+    typeParams() {
+        this.beginNode(CompositeNodeTypes.TypeParamList);
+        this.delimited('<', '>', ',', () => this.typeParam());
+        this.finishNode(CompositeNodeTypes.TypeParamList);
+    }
+
+    typeParam() {
+        this.beginNode(CompositeNodeTypes.TypeParam);
+        this.beginField('name');
+        this.expect('identifier');
+        this.finishField('name');
+        this.finishNode(CompositeNodeTypes.TypeParam);
     }
 
     //=========================================================================
@@ -1149,7 +1173,14 @@ export class Parser extends ParserBase {
 
     nameType() {
         this.beginNode(CompositeNodeTypes.NameType);
+        this.beginField('name');
         this.bump('identifier');
+        this.finishField('name');
+        if (this.match('<')) {
+            this.beginField('typeArgs');
+            this.typeArgs();
+            this.finishField('typeArgs');
+        }
         this.finishNode(CompositeNodeTypes.NameType);
     }
 
@@ -1200,6 +1231,12 @@ export class Parser extends ParserBase {
         this.beginNode(CompositeNodeTypes.RestParamType);
         this.bump('...');
         this.finishNode(CompositeNodeTypes.RestParamType);
+    }
+
+    typeArgs() {
+        this.beginNode(CompositeNodeTypes.TypeArgList);
+        this.delimited('<', '>', ',', () => this.type());
+        this.finishNode(CompositeNodeTypes.TypeArgList);
     }
 
     //=========================================================================

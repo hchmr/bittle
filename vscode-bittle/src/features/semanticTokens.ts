@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ParsingService } from '../services/parsingService';
 import { SyntaxNode } from '../syntax';
-import { ExprNodeTypes, TopLevelNodeTypes, TypeNodeTypes } from '../syntax/nodeTypes';
+import { ExprNodeTypes, NodeTypes, TopLevelNodeTypes, TypeNodeTypes } from '../syntax/nodeTypes';
 import { Nullish } from '../utils';
 import { interceptExceptions } from '../utils/interceptExceptions';
 import { toVscRange } from '../utils/vscode';
@@ -34,6 +34,9 @@ export class SemanticTokensProvider implements vscode.DocumentSemanticTokensProv
                 const nameNode = node.childForFieldName('callee')?.firstChild;
                 makeToken(builder, nameNode, 'function');
             } else if (node.type === ExprNodeTypes.RecordExpr) {
+                const nameNode = node.childForFieldName('name');
+                makeToken(builder, nameNode, 'type');
+            } else if (node.type === NodeTypes.TypeParam) {
                 const nameNode = node.childForFieldName('name');
                 makeToken(builder, nameNode, 'type');
             }

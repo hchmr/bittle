@@ -387,6 +387,8 @@ function toCompletionType(kind: SymKind): vscode.CompletionItemKind {
             return vscode.CompletionItemKind.Struct;
         case SymKind.RecordField:
             return vscode.CompletionItemKind.Field;
+        case SymKind.TypeParam:
+            return vscode.CompletionItemKind.TypeParameter;
         case SymKind.Global:
             return vscode.CompletionItemKind.Variable;
         case SymKind.Local:

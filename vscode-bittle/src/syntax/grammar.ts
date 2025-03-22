@@ -64,6 +64,7 @@ export const grammar = createGrammar({
     RecordDecl: $ => seq(
         choice('struct', 'union'),
         label('name', 'identifier'),
+        label('typeParams', $.TypeParamList),
         optional(seq(
             ':',
             label('base', $.Type),
@@ -92,6 +93,7 @@ export const grammar = createGrammar({
     FuncDecl: $ => seq(
         'func',
         label('name', 'identifier'),
+        label('typeParams', $.TypeParamList),
         label('params', $.FuncParamList),
         optional(seq(
             ':',
@@ -154,6 +156,16 @@ export const grammar = createGrammar({
         ';',
     ),
 
+    TypeParamList: $ => seq(
+        '<',
+        commaSep($.TypeParam),
+        '>',
+    ),
+
+    TypeParam: $ => seq(
+        label('name', 'identifier'),
+    ),
+
     Type: $ => choice(
         $.GroupedType,
         $.NameType,
@@ -170,7 +182,10 @@ export const grammar = createGrammar({
         ')',
     ),
 
-    NameType: $ => terminal('identifier'),
+    NameType: $ => seq(
+        label('name', 'identifier'),
+        label('typeArgs', $.TypeArgList),
+    ),
 
     PointerType: $ => seq(
         '*',
@@ -197,6 +212,12 @@ export const grammar = createGrammar({
 
     RestParamType: $ => seq(
         '...',
+    ),
+
+    TypeArgList: $ => seq(
+        '<',
+        commaSep($.Type),
+        '>',
     ),
 
     Stmt: $ => choice(

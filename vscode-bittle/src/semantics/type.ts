@@ -1,6 +1,6 @@
 import { unreachable } from '../utils';
 import { stream } from '../utils/stream';
-import { EnumSym, RecordKind, RecordSym } from './sym';
+import { EnumSym, RecordKind, RecordSym, TypeParamSym } from './sym';
 
 export type Type =
     | VoidType
@@ -10,6 +10,7 @@ export type Type =
     | ArrayType
     | EnumType
     | RecordType
+    | TypeParamType
     | NeverType
     | RestParamType
     | ErrorType;
@@ -22,6 +23,7 @@ export enum TypeKind {
     Arr = 'Arr',
     Enum = 'Enum',
     Record = 'Record',
+    TypeParam = 'TypeParam',
     Never = 'Never',
     RestParam = 'RestParam',
     Err = 'Err',
@@ -60,6 +62,12 @@ export type EnumType = Readonly<{
 export type RecordType = Readonly<{
     kind: TypeKind.Record;
     sym: RecordSym;
+    args: readonly Type[];
+}>;
+
+export type TypeParamType = Readonly<{
+    kind: TypeKind.TypeParam;
+    sym: TypeParamSym;
 }>;
 
 export type NeverType = Readonly<{
@@ -103,6 +111,8 @@ const MUT_POINTER_TYPES = new WeakMap<Type, PointerType>();
 const ENUM_TYPES = new WeakMap<EnumSym, EnumType>();
 
 const RECORD_TYPES = new WeakMap<RecordSym, RecordType>();
+
+const TYPE_PARAM_TYPES = new WeakMap<TypeParamSym, TypeParamType>();
 
 export function mkVoidType(): Type {
     return VOID_TYPE;
@@ -153,13 +163,32 @@ export function mkEnumType(sym: EnumSym): EnumType {
     return enumType;
 }
 
-export function mkRecordType(sym: RecordSym): RecordType {
+export function mkNonGenericRecordType(sym: RecordSym): RecordType {
     let recordType = RECORD_TYPES.get(sym);
     if (!recordType) {
-        recordType = { kind: TypeKind.Record, sym };
+        recordType = { kind: TypeKind.Record, sym, args: [] };
         RECORD_TYPES.set(sym, recordType);
     }
     return recordType;
+}
+
+export function mkRecordType(sym: RecordSym, args: readonly Type[]): RecordType {
+    if (args.length !== sym.typeParams.length) {
+        throw new Error('Type argument count mismatch.');
+    }
+    if (args.length === 0) {
+        return mkNonGenericRecordType(sym);
+    }
+    return { kind: TypeKind.Record, sym, args };
+}
+
+export function mkTypeParamType(sym: TypeParamSym): TypeParamType {
+    let typeParamType = TYPE_PARAM_TYPES.get(sym);
+    if (!typeParamType) {
+        typeParamType = { kind: TypeKind.TypeParam, sym };
+        TYPE_PARAM_TYPES.set(sym, typeParamType);
+    }
+    return typeParamType;
 }
 
 export function mkErrorType(): Type {
@@ -233,6 +262,7 @@ export function typeLayout(type: Type): TypeLayout | undefined {
         case TypeKind.RestParam: {
             return { size: 32, align: 8 };
         }
+        case TypeKind.TypeParam:
         case TypeKind.Never:
         case TypeKind.Err: {
             return undefined;
@@ -277,6 +307,12 @@ export function tryUnifyTypes(t1: Type, t2: Type, onError: () => void): Type {
         const size = unifySize(t1.size, t2.size, onError);
         return mkArrayType(elemType, size);
     } else if ((t1.kind === TypeKind.Enum || t1.kind === TypeKind.Record) && t2.kind === t1.kind) {
+        if (t1.sym.qualifiedName !== t2.sym.qualifiedName) {
+            onError();
+            return mkErrorType();
+        }
+        return t1;
+    } else if (t1.kind === TypeKind.TypeParam && t2.kind === TypeKind.TypeParam) {
         if (t1.sym.qualifiedName !== t2.sym.qualifiedName) {
             onError();
             return mkErrorType();
@@ -343,6 +379,9 @@ export function typeEq(t1: Type, t2: Type): boolean {
         return typeEq(t1.elemType, t2.elemType) && t1.size === t2.size;
     } else if (t1.kind === TypeKind.Enum || t1.kind === TypeKind.Record) {
         t2 = t2 as EnumType | RecordType;
+        return t1.sym.qualifiedName === t2.sym.qualifiedName;
+    } else if (t1.kind === TypeKind.TypeParam) {
+        t2 = t2 as TypeParamType;
         return t1.sym.qualifiedName === t2.sym.qualifiedName;
     } else {
         return true;
@@ -447,6 +486,179 @@ function pointerTypeLe(t1: PointerType, t2: PointerType): boolean {
         );
 }
 
+//================================================================================
+//== Type substitution
+
+export type SubstCtx = Map<TypeParamSym, Type>;
+
+export function createEmptySubstCtx(): SubstCtx {
+    return new Map();
+}
+
+export function createSubstCtx(params: TypeParamSym[], args: readonly Type[]): SubstCtx {
+    if (params.length !== args.length) {
+        throw new Error('Parameter and argument count mismatch in substitution context.');
+    }
+    const map = new Map<TypeParamSym, Type>();
+    for (let i = 0; i < params.length; i++) {
+        map.set(params[i], args[i]);
+    }
+    return map;
+}
+
+export function createSubstCtxFromRecordType(recordType: RecordType): SubstCtx {
+    return createSubstCtx(recordType.sym.typeParams, recordType.args);
+}
+
+export function typeSubst(ctx: SubstCtx, type: Type): Type {
+    switch (type.kind) {
+        case TypeKind.TypeParam: {
+            return ctx.get(type.sym) ?? type;
+        }
+        case TypeKind.Ptr: {
+            return mkPointerType(typeSubst(ctx, type.pointeeType), type.isMut);
+        }
+        case TypeKind.Arr: {
+            return mkArrayType(typeSubst(ctx, type.elemType), type.size);
+        }
+        case TypeKind.Record: {
+            const newArgs = type.args.map(arg => typeSubst(ctx, arg));
+            return mkRecordType(type.sym, newArgs);
+        }
+        case TypeKind.Enum:
+        case TypeKind.Bool:
+        case TypeKind.Int:
+        case TypeKind.Void:
+        case TypeKind.Never:
+        case TypeKind.RestParam:
+        case TypeKind.Err: {
+            return type;
+        }
+        default: {
+            unreachable(type);
+        }
+    }
+}
+
+export function containsTypeParam(type: Type, params: TypeParamSym[]): boolean {
+    switch (type.kind) {
+        case TypeKind.TypeParam: {
+            return params.includes(type.sym);
+        }
+        case TypeKind.Ptr: {
+            return containsTypeParam(type.pointeeType, params);
+        }
+        case TypeKind.Arr: {
+            return containsTypeParam(type.elemType, params);
+        }
+        case TypeKind.Record:
+        case TypeKind.Enum:
+        case TypeKind.Bool:
+        case TypeKind.Int:
+        case TypeKind.Void:
+        case TypeKind.Never:
+        case TypeKind.RestParam:
+        case TypeKind.Err: {
+            return false;
+        }
+        default: {
+            unreachable(type);
+        }
+    }
+}
+
+//================================================================================
+//== Type inference
+
+export type InferCtx = {
+    params: TypeParamSym[];
+    args: (Type | undefined)[];
+};
+
+export function createInferCtx(params: TypeParamSym[]): InferCtx {
+    return {
+        params,
+        args: Array(params.length).fill(undefined),
+    };
+}
+
+export function tryAddInferenceConstraint(ctx: InferCtx, expected: Type, actual: Type): boolean {
+    if (expected.kind === TypeKind.Err) {
+        return true;
+    }
+    if (expected.kind === TypeKind.TypeParam) {
+        const index = ctx.params.indexOf(expected.sym);
+        if (index === -1) {
+            return false;
+        }
+        const existing = ctx.args[index];
+        if (existing && existing.kind !== TypeKind.Err) {
+            return tryAddInferenceConstraint(ctx, existing, actual);
+        } else {
+            ctx.args[index] = actual;
+            return true;
+        }
+    }
+    if (expected.kind !== actual.kind) {
+        return false;
+    }
+    switch (expected.kind) {
+        case TypeKind.Ptr: {
+            actual = actual as PointerType;
+            return tryAddInferenceConstraint(ctx, expected.pointeeType, actual.pointeeType);
+        }
+        case TypeKind.Arr: {
+            actual = actual as ArrayType;
+            return tryAddInferenceConstraint(ctx, expected.elemType, actual.elemType);
+        }
+        case TypeKind.Int: {
+            actual = actual as IntType;
+            return expected.size === actual.size;
+        }
+        case TypeKind.Record: {
+            actual = actual as RecordType;
+            if (expected.sym !== actual.sym) {
+                return false;
+            }
+            for (const [arg, param] of stream(expected.args).zipLongest(actual.args)) {
+                if (!arg || !param || !tryAddInferenceConstraint(ctx, arg, param)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case TypeKind.Enum: {
+            actual = actual as EnumType;
+            return expected.sym === actual.sym;
+        }
+        case TypeKind.Bool:
+        case TypeKind.Void:
+        case TypeKind.Never:
+        case TypeKind.RestParam: {
+            return true;
+        }
+        default: {
+            unreachable(expected);
+        }
+    }
+}
+
+export function tryFinishInference(ctx: InferCtx): boolean {
+    for (let i = 0; i < ctx.params.length; i++) {
+        const arg = ctx.args[i];
+        if (!arg) {
+            return false;
+        }
+        if (containsTypeParam(arg, ctx.params)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+//================================================================================
+//== Type printing
+
 export function prettyType(t: Type): string {
     switch (t.kind) {
         case TypeKind.Void: return 'Void';
@@ -454,10 +666,18 @@ export function prettyType(t: Type): string {
         case TypeKind.Int: return `Int${t.size ?? ''}`;
         case TypeKind.Ptr: return '*' + (t.isMut ? 'mut ' : '') + prettyType(t.pointeeType);
         case TypeKind.Arr: return `[${prettyType(t.elemType)}; ${t.size ?? '?'}]`;
+        case TypeKind.Record: return t.sym.name + prettyTypeArgs(t.args);
         case TypeKind.Enum:
-        case TypeKind.Record: return t.sym.name;
+        case TypeKind.TypeParam: return t.sym.name;
         case TypeKind.Never: return '!';
         case TypeKind.RestParam: return '...';
         case TypeKind.Err: return '{unknown}';
     }
+}
+
+function prettyTypeArgs(args: readonly Type[]): string {
+    if (args.length === 0) {
+        return '';
+    }
+    return '<' + args.map(prettyType).join(', ') + '>';
 }

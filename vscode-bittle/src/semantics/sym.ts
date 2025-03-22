@@ -1,12 +1,13 @@
 import { SyntaxNode } from '../syntax';
 import { unreachable } from '../utils';
 import { ConstValue, ConstValueKind } from './const';
-import { mkEnumType, mkErrorType, mkRecordType, prettyType, Type } from './type';
+import { mkEnumType, mkErrorType, mkRecordType, mkTypeParamType, prettyType, Type } from './type';
 
 export enum SymKind {
     Record = 'Record',
     RecordField = 'RecordField',
     Enum = 'Enum',
+    TypeParam = 'TypeParam',
     Func = 'Func',
     FuncParam = 'FuncParam',
     Global = 'Global',
@@ -23,6 +24,7 @@ export type Sym =
     | RecordSym
     | RecordFieldSym
     | EnumSym
+    | TypeParamSym
     | FuncSym
     | FuncParamSym
     | GlobalSym
@@ -47,6 +49,7 @@ export type RecordSym = SymBase & {
     recordKind: RecordKind;
     base: RecordSym | undefined;
     fields: RecordFieldSym[];
+    typeParams: TypeParamSym[]; // Added type parameters
 };
 
 export type RecordFieldSym = SymBase & {
@@ -55,12 +58,17 @@ export type RecordFieldSym = SymBase & {
     defaultValue: ConstValue | undefined;
 };
 
+export type TypeParamSym = SymBase & {
+    kind: SymKind.TypeParam;
+};
+
 export type FuncSym = SymBase & {
     kind: SymKind.Func;
     params: FuncParamSym[];
     returnType: Type;
     isVariadic: boolean;
     restParamName: string | undefined;
+    typeParams: TypeParamSym[]; // Added type parameters
 };
 
 export type FuncParamSym = SymBase & {
@@ -93,11 +101,13 @@ export type Origin = {
 
 export function symRelatedType(sym: Sym): Type {
     if (sym.kind === SymKind.Record) {
-        return mkRecordType(sym);
+        return mkRecordType(sym, sym.typeParams.map(mkTypeParamType));
     } else if (sym.kind === SymKind.RecordField) {
         return sym.type;
     } else if (sym.kind === SymKind.Enum) {
         return mkEnumType(sym);
+    } else if (sym.kind === SymKind.TypeParam) {
+        return mkTypeParamType(sym);
     } else if (sym.kind === SymKind.Func) {
         return sym.returnType;
     } else if (sym.kind === SymKind.Global) {
@@ -117,8 +127,9 @@ export function prettySym(sym: Sym): string {
     if (sym.kind === SymKind.Enum) {
         return `enum ${sym.name}`;
     } else if (sym.kind === SymKind.Record) {
-        const keyword = sym.recordKind === RecordKind.Struct ? 'struct' : 'union';
-        return `${keyword} ${sym.name}${prettyBase(sym)}`;
+        return prettyRecordSym(sym);
+    } else if (sym.kind === SymKind.TypeParam) {
+        return `(type parameter) ${sym.name}`;
     } else if (sym.kind === SymKind.RecordField) {
         const defaultValue = sym.defaultValue !== undefined ? ` = ${prettyConstValue(sym.defaultValue)}` : '';
         return `(field) ${sym.name}: ${prettyType(sym.type)}${defaultValue}`;
@@ -139,11 +150,19 @@ export function prettySym(sym: Sym): string {
     }
 }
 
+function prettyRecordSym(sym: RecordSym) {
+    const keyword = sym.recordKind === RecordKind.Struct ? 'struct' : 'union';
+    const typeParams = prettyTypeParams(sym.typeParams);
+    const base = sym.base ? `: ${sym.base.name}` : '';
+    return `${keyword} ${sym.name}${typeParams}${base}`;
+}
+
 export function prettyFuncSym(sym: FuncSym): string {
+    const typeParams = prettyTypeParams(sym.typeParams);
     const params = sym.params.map(prettyFuncParam).join(', ');
     const dots = sym.isVariadic ? sym.params.length ? ', ...' : '...' : '';
     const returnType = prettyType(sym.returnType);
-    return `${sym.name}(${params}${dots}): ${returnType}`;
+    return `${sym.name}${typeParams}(${params}${dots}): ${returnType}`;
 }
 
 function prettyFuncParam(sym: FuncParamSym): string {
@@ -161,8 +180,11 @@ function prettyRecordField(sym: RecordFieldSym): string {
     return `${sym.name}: ${prettyType(sym.type)}${defaultValue}`;
 }
 
-function prettyBase(sym: RecordSym) {
-    return sym.base ? `: ${sym.base.name}` : '';
+function prettyTypeParams(typeParams: TypeParamSym[]): string {
+    if (typeParams.length === 0) {
+        return '';
+    }
+    return '<' + typeParams.map(x => x.name).join(', ') + '>';
 }
 
 function prettyConstValue(value: ConstValue): string {
