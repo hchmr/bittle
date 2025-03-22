@@ -20,18 +20,27 @@ export class ElaborationDiagnosticProvider implements vscode.Disposable {
 
     @interceptExceptions
     updateDiagnostics() {
-        this.diagnosticsCollection.clear();
-        stream(vscode.workspace.textDocuments)
-            .filter(doc => doc.languageId === 'bittle')
-            .flatMap<[vscode.Uri, vscode.Diagnostic[]]>(doc => this.createDiagnostics(doc))
-            .groupBy(([uri, _]) => uri.toString())
-            .map<[vscode.Uri, vscode.Diagnostic[]]>(([_key, pairs]) => [
-                pairs[0][0],
-                pairs.flatMap(([_, diagnostic]) => diagnostic),
-            ])
-            .forEach(([uri, diagnostics]) => {
-                this.diagnosticsCollection.set(uri, diagnostics);
-            });
+        const map = new Map<vscode.Uri, vscode.Diagnostic[] | undefined>();
+        for (const [uri] of this.diagnosticsCollection) {
+            map.set(uri, undefined);
+        }
+        for (const doc of vscode.workspace.textDocuments) {
+            if (doc.languageId !== 'bittle') {
+                continue;
+            }
+            const groups = this.createDiagnostics(doc);
+            for (const [uri, diags] of groups) {
+                const existing = map.get(uri);
+                if (existing) {
+                    existing.push(...diags);
+                } else {
+                    map.set(uri, diags);
+                }
+            }
+        }
+        for (const [uri, diags] of map) {
+            this.diagnosticsCollection.set(uri, diags);
+        }
     }
 
     createDiagnostics(document: vscode.TextDocument) {
