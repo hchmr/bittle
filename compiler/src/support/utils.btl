@@ -38,8 +38,8 @@ func unreachable(function: *Char): ! {
     exit(1);
 }
 
-func unreachable_enum_case(function: *Char, value: Int): ! {
-    fprintf(stderr, "\n*** Unhandled enum case %d in %s\n", value, function);
+func unreachable_enum_case(function: *Char, value: Int, msg: *Char = null): ! {
+    fprintf(stderr, "\n*** Unhandled enum case %d in %s%s%s\n", value, function, msg ? ": " : "", msg);
     exit(1);
 }
 

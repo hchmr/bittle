@@ -541,8 +541,8 @@ func eval_type(ctx: *mut ElabCtx, type_expr: *mut TypeExpr): *Type {
         case TypeExpr_RestParam: {
             return mk_rest_param_type();
         }
-        case _: {
-            unreachable("eval_type");
+        case other @ _: {
+            unreachable_enum_case("eval_type", other);
         }
     }
 }
@@ -597,8 +597,8 @@ func elab_literal(ctx: *mut ElabCtx, literal: *Literal, type_hint: *Type): *Cons
             var literal = literal as *StringLiteral;
             return mk_string_const_value(literal.value);
         }
-        case _: {
-            unreachable("elab_literal");
+        case other @ _: {
+            unreachable_enum_case("elab_literal", other);
         }
     }
 }
@@ -718,8 +718,8 @@ func elab_pattern_infer(ctx: *mut ElabCtx, pattern: *mut Pattern, type_hint: *Ty
         case Pattern_Or: {
             elab_or_pattern(ctx, pattern as *mut OrPattern, type_hint);
         }
-        case _: {
-            unreachable("elab_pattern_infer");
+        case other @ _: {
+            unreachable_enum_case("elab_pattern_infer", other);
         }
     }
     assert(pattern.type, "elab_pattern_infer");
@@ -967,8 +967,8 @@ func elab_unary_expr(ctx: *mut ElabCtx, expr: *mut UnaryExpr, type_hint: *Type) 
             var is_mut = is_mutable_lvalue(right);
             expr.type = mk_ptr_type(right.type, is_mut);
         }
-        case _: {
-            unreachable("elab_unary_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_unary_expr", other);
         }
     }
     if (right.const_value) {
@@ -1032,8 +1032,8 @@ func elab_binary_expr(ctx: *mut ElabCtx, expr: *mut BinaryExpr, type_hint: *Type
             expr.left = left;
             expr.right = right;
         }
-        case _: {
-            unreachable("elab_binary_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_binary_expr", other);
         }
     }
     if (left.const_value && right.const_value) {
@@ -1189,8 +1189,8 @@ func elab_expr_infer(ctx: *mut ElabCtx, expr: *mut Expr, type_hint: *Type) {
         case Expr_Record: {
             elab_record_expr(ctx, expr as *mut RecordExpr, type_hint);
         }
-        case _: {
-            unreachable("elab_expr_infer");
+        case other @ _: {
+            unreachable_enum_case("elab_expr_infer", other);
         }
     }
     assert(expr.type, "elab_expr_infer");
@@ -1392,8 +1392,8 @@ func elab_stmt(ctx: *mut ElabCtx, stmt: *mut Stmt) {
         case Stmt_Expr: {
             elab_expr_stmt(ctx, stmt as *mut ExprStmt);
         }
-        case _: {
-            unreachable("elab_stmt");
+        case other @ _: {
+            unreachable_enum_case("elab_stmt", other);
         }
     }
 }
@@ -1750,8 +1750,8 @@ func seed_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
         case Decl_Global: {
             seed_global_decl(ctx, decl as *mut GlobalDecl);
         }
-        case _: {
-            unreachable("seed_decl");
+        case other @ _: {
+            unreachable_enum_case("seed_decl", other);
         }
     }
 }
@@ -1794,8 +1794,8 @@ func elab_decl(ctx: *mut ElabCtx, decl: *mut Decl) {
         case Decl_Global: {
             elab_global_decl(ctx, decl as *mut GlobalDecl);
         }
-        case _: {
-            unreachable("elab_decl");
+        case other @ _: {
+            unreachable_enum_case("elab_decl", other);
         }
     }
 }

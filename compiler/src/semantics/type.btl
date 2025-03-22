@@ -234,8 +234,8 @@ func type_layout(type: *Type): TypeLayout {
         case Type_RestParam: {
             return TypeLayout { size: 32, align: 8 };
         }
-        case _: {
-            unreachable("type_layout");
+        case other @ _: {
+            unreachable_enum_case("type_layout", other);
         }
     }
 }
@@ -302,8 +302,8 @@ func sb_pretty_type(sb: *mut StringBuffer, type: *Type) {
         case Type_RestParam: {
             sb_printf(sb, "...");
         }
-        case _: {
-            unreachable("pretty_type");
+        case other @ _: {
+            unreachable_enum_case("pretty_type", other);
         }
     }
 }

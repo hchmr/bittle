@@ -27,7 +27,7 @@ func translate_binary_op(tok_kind: TokKind): HirOpKind {
         case Tok_Star: return HirOp_Mul;
         case Tok_Slash: return HirOp_Div;
         case Tok_Percent: return HirOp_Rem;
-        case _: unreachable("translate_binary_op");
+        case other @ _: unreachable_enum_case("translate_binary_op", other);
     }
 }
 
@@ -43,7 +43,7 @@ func translate_assign_op(tok_kind: TokKind): HirOpKind {
         case Tok_StarEq: return HirOp_Mul;
         case Tok_SlashEq: return HirOp_Div;
         case Tok_PercentEq: return HirOp_Rem;
-        case _: unreachable("translate_assign_op");
+        case other @ _: unreachable_enum_case("translate_assign_op", other);
     }
 }
 
@@ -280,8 +280,8 @@ func lower_const_value(value: *ConstValue, pos: *Pos): *mut HirExpr {
             var value = value as *StringConstValue;
             return hir_mk_str_expr(value.string, pos);
         }
-        case _: {
-            unreachable("elab_ident_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_ident_expr", other);
         }
     }
 }
@@ -415,8 +415,8 @@ func lower_pattern(ctx: *mut Context, lhs: *mut HirExpr, pattern: *mut Pattern):
         case Pattern_Or: {
             return lower_or_pattern(ctx, lhs, pattern as *OrPattern);
         }
-        case _: {
-            unreachable("lower_pattern_infer");
+        case other @ _: {
+            unreachable_enum_case("lower_pattern_infer", other);
         }
     }
 }
@@ -453,8 +453,8 @@ func lower_ident_expr(ctx: *mut Context, expr: *IdentExpr): *mut HirExpr {
             var value = (expr.sym as *ConstSym).value;
             return lower_const_value(value, &expr.pos);
         }
-        case _: {
-            unreachable("elab_ident_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_ident_expr", other);
         }
     }
 }
@@ -478,8 +478,8 @@ func lower_literal_expr(ctx: *mut Context, expr: *LiteralExpr): *mut HirExpr {
         case Literal_String: {
             return hir_mk_str_expr((literal as *StringLiteral).value, &expr.pos);
         }
-        case _: {
-            unreachable("elab_literal_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_literal_expr", other);
         }
     }
 }
@@ -620,8 +620,8 @@ func lower_unary_expr(ctx: *mut Context, expr: *UnaryExpr): *mut HirExpr {
                 result = hir_mk_seq_expr(temp_init, addr_temp);
             }
         }
-        case _: {
-            unreachable("elab_unary_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_unary_expr", other);
         }
     }
 
@@ -677,8 +677,8 @@ func lower_binary_expr(ctx: *mut Context, expr: *BinaryExpr): *mut HirExpr {
             var op = translate_binary_op(ast_op);
             result = hir_mk_binary_op_expr(op, left, right, expr.type);
         }
-        case _: {
-            unreachable("elab_binary_expr");
+        case other @ _: {
+            unreachable_enum_case("elab_binary_expr", other);
         }
     }
     return result;
@@ -780,8 +780,8 @@ func lower_expr(ctx: *mut Context, expr: *Expr): *mut HirExpr {
         case Expr_Record: {
             return lower_record_expr(ctx, expr as *RecordExpr);
         }
-        case _: {
-            unreachable("lower_expr");
+        case other @ _: {
+            unreachable_enum_case("lower_expr", other);
         }
     }
 }
@@ -1096,8 +1096,8 @@ func lower_stmt(ctx: *mut Context, stmt: *Stmt): *mut HirExpr {
         case Stmt_Expr: {
             return lower_expr_stmt(ctx, stmt as *ExprStmt);
         }
-        case _: {
-            unreachable("lower_stmt");
+        case other @ _: {
+            unreachable_enum_case("lower_stmt", other);
         }
     }
 }

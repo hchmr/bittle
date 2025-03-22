@@ -51,7 +51,7 @@ func signed_cmp(op: TokKind, a: Int, b: Int): Bool {
         case Tok_LtEq: return a <= b;
         case Tok_Gt: return a > b;
         case Tok_GtEq: return a >= b;
-        case _: unreachable("Invalid comparison operator");
+        case other @ _: unreachable_enum_case("signed_cmp", other, "Invalid comparison operator");
     }
 }
 

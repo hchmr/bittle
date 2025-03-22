@@ -182,8 +182,8 @@ func pretty_tok_kind(kind: TokKind): *Char {
         case Tok_Eq: return "'='";
         case Tok_EqEq: return "'=='";
         case Tok_BangEq: return "'!='";
-        case _: {
-            unreachable("pretty_tok_kind");
+        case other @ _: {
+            unreachable_enum_case("pretty_tok_kind", other);
         }
     }
 }

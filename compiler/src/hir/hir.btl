@@ -363,8 +363,8 @@ func hir_dump_child(name: *Char, e: *HirExpr) {
                 begin_block("Unreachable");
                 end_block();
             }
-            case _: {
-                unreachable("hir_dump_");
+            case other @ _: {
+                unreachable_enum_case("hir_dump_", other);
             }
         }
     }
