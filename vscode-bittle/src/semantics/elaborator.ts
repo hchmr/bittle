@@ -39,7 +39,8 @@ export type SymReference = {
 
 export type ElaboratorResult = {
     moduleName: string | undefined;
-    scope: Scope;
+    imports: Map<string, ElaboratorResult>;
+    rootScope: Scope;
     symbols: Map<string, Sym>;
     nodeSymMap: WeakMap<SyntaxNode, string[]>;
     nodeTypeMap: WeakMap<SyntaxNode, Type>;
@@ -103,7 +104,8 @@ export class Elaborator {
         this.elabRoot(this.rootNode);
         return {
             moduleName: this.moduleName,
-            scope: this.scope,
+            imports: this.imports,
+            rootScope: this.scope,
             symbols: this.symbols,
             nodeSymMap: this.nodeSymMap,
             nodeTypeMap: this.nodeTypeMap,
@@ -148,7 +150,7 @@ export class Elaborator {
         }
 
         return stream(this.imports.values())
-            .filterMap(result => result.scope.lookup(name))
+            .filterMap(result => result.rootScope.lookup(name))
             .map(qname => this.symbols.get(qname)!)
             .toArray();
     }

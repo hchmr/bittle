@@ -30,17 +30,24 @@ export class SemanticsService {
 
     getSymbolsAtNode(path: string, node: SyntaxNode): Stream<Sym> {
         const module = this.elaborateFile(path);
-        const innerScope = module.scope.findScopeForPosition(path, node.startPosition);
+        const innerScope = module.rootScope.findScopeForPosition(path, node.startPosition);
         if (!innerScope) {
             return stream([]);
         }
         return stream(function* go(scope: Scope | Nullish): Iterable<Sym> {
             if (!scope) {
+                for (const [_, importedModule] of module.imports) {
+                    yield * stream(getSymbolsInScope(importedModule.rootScope));
+                }
                 return;
             }
-            yield * stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
+            yield * stream(getSymbolsInScope(scope));
             yield * go(scope.parent);
         }(innerScope));
+
+        function getSymbolsInScope(scope: Scope): Iterable<Sym> {
+            return stream(scope.symbols.values()).map(qname => module.symbols.get(qname)!);
+        }
     }
 
     resolveSymbol(path: string, nameNode: SyntaxNode): Sym[] {
