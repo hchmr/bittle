@@ -400,11 +400,6 @@ export function typeImplicitlyCastable(src: Type, dst: Type): boolean {
     }
 }
 
-function pointerTypeConvertible(src: PointerType, dst: PointerType): boolean {
-    return !(!src.isMut && dst.isMut && (pointeeTypeLe(src.pointeeType, dst.pointeeType) || pointeeTypeLe(dst.pointeeType, src.pointeeType)))
-        || ([src.pointeeType.kind, dst.pointeeType.kind].includes(TypeKind.Void));
-}
-
 export function typeCastable(src: Type, dst: Type): boolean {
     if (typeImplicitlyCastable(src, dst)) {
         return true;
@@ -412,9 +407,12 @@ export function typeCastable(src: Type, dst: Type): boolean {
 
     if (dst.kind === TypeKind.Int) {
         return isScalarType(src);
-    } else if (dst.kind === TypeKind.Ptr) {
-        return (src.kind === TypeKind.Int && src.size === 64)
-            || src.kind === TypeKind.Ptr && pointerTypeConvertible(src, dst);
+    } else if (dst.kind === TypeKind.Ptr && src.kind === TypeKind.Int) {
+        return src.size === 64;
+    } else if (dst.kind === TypeKind.Ptr && src.kind === TypeKind.Ptr) {
+        return src.pointeeType.kind === TypeKind.Void
+            || dst.pointeeType.kind === TypeKind.Void
+            || !(!src.isMut && dst.isMut);
     } else if (dst.kind === TypeKind.Enum) {
         return src.kind === TypeKind.Int
             || src.kind === TypeKind.Enum;
