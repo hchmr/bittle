@@ -114,8 +114,8 @@ func ptr_type_le(t1: *PtrType, t2: *PtrType): Bool {
         // *mut T <: *mut U
         || t1.is_mut && t2.is_mut
         && (
-            t1.kind == Type_Never
-            || t2.kind == Type_Void
+            t1.pointee.kind == Type_Never
+            || t2.pointee.kind == Type_Void
             || type_eq(t1.pointee, t2.pointee)
         );
 }
@@ -137,19 +137,12 @@ func type_implicitly_castable(src: *Type, dst: *Type): Bool {
         case Type_Ptr if src.kind == Type_Ptr: {
             var dst = dst as *PtrType;
             var src = src as *PtrType;
-            return ptr_type_convertible(src, dst);
+            return ptr_type_le(src, dst);
         }
         case _: {
             return false;
         }
     }
-}
-
-func ptr_type_convertible(src: *PtrType, dst: *PtrType): Bool {
-    return
-        src.pointee.kind == Type_Void // Casting from void pointer
-        || dst.pointee.kind == Type_Void // Casting to void pointer
-        || !(!src.is_mut && dst.is_mut); // Cannot cast away constness in general
 }
 
 func type_castable(src: *Type, dst: *Type): Bool {
@@ -165,7 +158,11 @@ func type_castable(src: *Type, dst: *Type): Bool {
             return type_size(src) == 8;
         }
         case Type_Ptr if src.kind == Type_Ptr: {
-            return ptr_type_le(src as *PtrType, dst as *PtrType);
+            var dst = dst as *PtrType;
+            var src = src as *PtrType;
+            return src.pointee.kind == Type_Void // Casting from void pointer
+                || dst.pointee.kind == Type_Void // Casting to void pointer
+                || !(!src.is_mut && dst.is_mut); // Cannot cast away constness
         }
         case Type_Enum: {
             return src.kind is (Type_Int | Type_Enum);
@@ -278,7 +275,7 @@ func sb_pretty_type(sb: *mut StringBuffer, type: *Type) {
         case Type_Ptr: {
             sb_printf(sb, "*");
             if ((type as *PtrType).is_mut) {
-                sb_printf(sb, "");
+                sb_printf(sb, "mut ");
             }
             sb_pretty_type(sb, (type as *PtrType).pointee);
         }
