@@ -169,9 +169,9 @@ func hir_mk_bit_not_expr(expr: *mut HirExpr): *mut HirExpr {
     return hir_mk_binary_op_expr(HirOp_Xor, expr, minus_one, expr.type);
 }
 
-func hir_mk_call_expr(callee: *mut FuncSym, args: *mut *mut HirExpr, n_args: Int, pos: *Pos): *mut HirExpr {
+func hir_mk_call_expr(callee: *FuncSymInstance, type: *Type, args: *mut *mut HirExpr, n_args: Int, pos: *Pos): *mut HirExpr {
     return box(sizeof(HirCallExpr), &HirCallExpr {
-        type: callee.return_type,
+        type,
         pos: *pos,
         callee,
         args,
@@ -502,8 +502,11 @@ func lower_arg(ctx: *mut Context, expr: *Expr): *mut HirExpr {
 }
 
 func lower_call_expr(ctx: *mut Context, expr: *CallExpr, dest: *mut HirExpr): *mut HirExpr {
-    var sym = expr.resolved_callee;
-    var n_params = list_len(sym.params);
+    var callee = expr.resolved_callee;
+
+    var subst_ctx = subst_ctx_from_type_args(callee.sym.type_params, callee.sym.n_type_params, callee.type_args.types, callee.type_args.len);
+
+    var n_params = list_len(callee.sym.params);
 
     var ast_args = expr.args;
     var n_ast_args = list_len(ast_args);
@@ -525,7 +528,7 @@ func lower_call_expr(ctx: *mut Context, expr: *CallExpr, dest: *mut HirExpr): *m
             continue;
         }
 
-        var param = list_get(sym.params, i) as *FuncParam;
+        var param = list_get(callee.sym.params, i) as *FuncParam;
         if (hir_args[i]) {
             continue;
         }
@@ -536,10 +539,12 @@ func lower_call_expr(ctx: *mut Context, expr: *CallExpr, dest: *mut HirExpr): *m
         hir_args[i] = lower_const_value(default_value, &expr.pos);
     }
 
-    var hir_expr = hir_mk_call_expr(sym, hir_args, n_hir_args, &expr.pos);
+    var return_type = type_subst(&subst_ctx, callee.sym.return_type);
 
-    if (!dest && is_composite(sym.return_type)) {
-        var temp_var = mk_temp_var(ctx, sym.return_type);
+    var hir_expr = hir_mk_call_expr(callee, return_type, hir_args, n_hir_args, &expr.pos);
+
+    if (!dest && is_composite(return_type)) {
+        var temp_var = mk_temp_var(ctx, return_type);
         dest = hir_mk_temp_expr(temp_var, &expr.pos);
     }
 
@@ -816,14 +821,17 @@ func lower_assign_expr_record(ctx: *mut Context, dst: *mut HirExpr, ast_src: *Re
     var temp = hir_mk_temp_expr(temp_var, pos);
     var temp_init = hir_mk_assign_expr(temp, addr_dst);
 
+    var subst_ctx = subst_ctx_from_record_type(record_type);
+
     var body: *mut HirExpr = temp_init;
     for (var init_index = 0; init_index < n_initializers; init_index += 1) {
         var initializer = list_get(initializers, init_index) as *FieldInitializer;
         var field_index = find_record_field_by_name(record_type.sym, initializer.name);
         var field = list_get(record_type.sym.fields, field_index) as *mut RecordField;
+        var field_type = type_subst(&subst_ctx, field.type);
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
-        var field_access = hir_mk_member_expr(temp_deref, field.name, field, field.type);
+        var field_access = hir_mk_member_expr(temp_deref, field.name, field, field_type);
         var assignment = lower_assign_expr(ctx, field_access, initializer.expr, &initializer.expr.pos);
         body = hir_mk_seq_expr(body, assignment);
     }
@@ -836,9 +844,10 @@ func lower_assign_expr_record(ctx: *mut Context, dst: *mut HirExpr, ast_src: *Re
         if (!field.default_value) {
             continue;
         }
+        var field_type = type_subst(&subst_ctx, field.type);
 
         var temp_deref = hir_mk_deref_expr(temp, pos);
-        var field_access = hir_mk_member_expr(temp_deref, field.name, field, field.type);
+        var field_access = hir_mk_member_expr(temp_deref, field.name, field, field_type);
         var default_value = lower_const_value(field.default_value, pos);
         var assignment = hir_mk_assign_expr(field_access, default_value);
         body = hir_mk_seq_expr(body, assignment);

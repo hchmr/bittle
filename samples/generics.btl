@@ -1,0 +1,42 @@
+extern func printf(fmt: *Char, ...): Int32;
+extern func exit(code: Int32): Void;
+extern func memcpy(dest: *mut Void, src: *Void, n: Int): *mut Void;
+
+struct List<T> {
+    elems: *mut T,
+    elem_size: Int,
+    len: Int,
+    cap: Int,
+}
+
+func list_push<T>(xs: *mut List<T>, elem_p: *T) {
+    if (xs.len == xs.cap) {
+        printf("list is full\n");
+        exit(1);
+    }
+
+    var dest_p = (xs.elems as Int + xs.len * xs.elem_size) as *mut Void;
+    memcpy(dest_p, elem_p, xs.elem_size);
+    xs.len += 1;
+}
+
+func main(): Int32 {
+    var buf: [Int; 10];
+
+    var my_list: List<Int> = List {
+        elems: &buf[0],
+        elem_size: sizeof(Int),
+        len: 0,
+        cap: 10,
+    };
+
+    for (var i = 0; i < 10; i += 1) {
+        list_push(&my_list, &i);
+    }
+
+    for (var i = 0; i < my_list.len; i += 1) {
+        printf("%d\n", my_list.elems[i]);
+    }
+
+    return 0;
+}

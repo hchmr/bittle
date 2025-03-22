@@ -137,7 +137,7 @@ struct HirBinaryOpExpr: HirExpr {
 
 struct HirCallExpr: HirExpr {
     kind = HirExpr_Call,
-    callee: *mut FuncSym,
+    callee: *FuncSymInstance,
     args: *mut *mut HirExpr,
     n_args: Int,
 }
@@ -308,7 +308,17 @@ func hir_dump_child(name: *Char, e: *HirExpr) {
                 var e = e as *HirCallExpr;
                 begin_block("Call");
                 begin_inline_child("name");
-                fprintf(stderr, "\"%s\"\n", e.callee.name);
+                fprintf(stderr, "\"%s\"\n", e.callee.sym.name);
+                if (e.callee.type_args.len > 0) {
+                    begin_inline_child("type_args");
+                    for (var i = 0; i < e.callee.type_args.len; i += 1) {
+                        if (i > 0) {
+                            fprintf(stderr, ", ");
+                        }
+                        hir_dump_type(e.callee.type_args.types[i]);
+                    }
+                    fprintf(stderr, "\n");
+                }
                 begin_child("args");
                 for (var i = 0; i < e.n_args; i += 1) {
                     hir_dump_child(name: null, e: e.args[i]);

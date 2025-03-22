@@ -13,9 +13,17 @@ enum TypeKind {
     Type_Arr,
     Type_Enum,
     Type_Record,
+    Type_TypeParam,
     Type_Never,
     Type_RestParam,
 }
+
+struct TypeList {
+    types: **Type,
+    len: Int,
+}
+
+var empty_type_list: TypeList;
 
 struct Type {
     kind: TypeKind,
@@ -48,12 +56,18 @@ struct ArrType: Type {
 
 struct EnumType: Type {
     kind = Type_Enum,
-    sym: *mut EnumSym,
+    sym: *EnumSym,
 }
 
 struct RecordType: Type {
     kind = Type_Record,
-    sym: *mut RecordSym,
+    sym: *RecordSym,
+    type_args: TypeList,
+}
+
+struct TypeParamType: Type {
+    kind = Type_TypeParam,
+    sym: *TypeParamSym,
 }
 
 struct NeverType: Type {
@@ -108,6 +122,7 @@ enum SymKind {
     Sym_Const,
     Sym_Func,
     Sym_Local,
+    Sym_TypeParam,
 }
 
 struct Sym {
@@ -130,7 +145,9 @@ struct EnumSym: Sym {
 struct RecordSym: Sym {
     kind = Sym_Record,
     is_union: Bool,
-    base: *mut RecordSym,
+    type_params: **TypeParamSym,
+    n_type_params: Int,
+    base: *RecordType,
     fields: *mut List, // List<RecordField>
 }
 
@@ -152,6 +169,8 @@ struct FuncParam {
 
 struct FuncSym: Sym {
     kind = Sym_Func,
+    type_params: **TypeParamSym,
+    n_type_params: Int,
     params: *mut List, // List<FuncParam>
     return_type: *Type,
     is_variadic: Bool,
@@ -161,11 +180,20 @@ struct FuncSym: Sym {
     body: *mut Void, // Stmt
 }
 
+struct FuncSymInstance {
+    sym: *FuncSym,
+    type_args: TypeList,
+}
+
 struct LocalSym: Sym {
     kind = Sym_Local,
     type: *Type,
     slot_id: Int,
     is_indirect: Bool,
+}
+
+struct TypeParamSym: Sym {
+    kind = Sym_TypeParam,
 }
 
 struct Module {

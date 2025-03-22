@@ -60,14 +60,24 @@ struct ElabCtx {
     or_pattern_depth: Int,
 }
 
+func push_scope(ctx: *mut ElabCtx, scope: *mut Scope) {
+    assert(scope.parent == ctx.scope, "push_scope: scope.parent must match");
+    ctx.scope = scope;
+}
+
+func pop_scope(ctx: *mut ElabCtx): *mut Scope {
+    assert(ctx.scope, "pop_scope: there must be a scope to pop");
+    var scope = ctx.scope;
+    ctx.scope = scope.parent;
+    return scope;
+}
+
 func enter_scope(ctx: *mut ElabCtx) {
-    ctx.scope = scope_new(ctx.scope);
+    push_scope(ctx, scope_new(ctx.scope));
 }
 
 func exit_scope(ctx: *mut ElabCtx) {
-    var scope = ctx.scope;
-    ctx.scope = scope.parent;
-    scope_drop(scope);
+    scope_drop(pop_scope(ctx));
 }
 
 //==============================================================================
@@ -136,6 +146,52 @@ func add_sym(ctx: *mut ElabCtx, sym: *mut Sym) {
     list_push(ctx.scope.entries, entry);
 }
 
+func type_params_eq(xs: **TypeParamSym, xs_len: Int, ys: **TypeParamSym, ys_len: Int): Bool {
+    if (xs_len != ys_len) {
+        return false;
+    }
+    for (var i = 0; i < xs_len; i += 1) {
+        if (xs[i] != ys[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+func params_eq(xs: *mut List, ys: *mut List): Bool {
+    if (list_len(xs) != list_len(ys)) {
+        return false;
+    }
+    for (var i = 0; i < list_len(xs); i += 1) {
+        var param1 = list_get(xs, i) as *mut FuncParam;
+        var param2 = list_get(ys, i) as *mut FuncParam;
+        if (!str_eq(param1.name, param2.name)) {
+            return false;
+        }
+        if (!type_eq(param1.type, param2.type)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+func declare_type_param(ctx: *mut ElabCtx, pos: *Pos, name: *Char): *mut TypeParamSym {
+    var existing = try_get_existing(ctx, name);
+    if (existing) {
+        if (existing.kind != Sym_TypeParam) {
+            die_at(pos, "Another symbol with the same name already exists");
+        }
+        return existing as *mut TypeParamSym;
+    }
+
+    var sym = box(sizeof(TypeParamSym), &TypeParamSym {
+        name,
+        is_defined: true,
+    }) as *mut Sym;
+    add_sym(ctx, sym);
+    return sym as *mut TypeParamSym;
+}
+
 func declare_enum(ctx: *mut ElabCtx, pos: *Pos, name: *Char): *mut EnumSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
@@ -167,19 +223,27 @@ func declare_record(
     pos: *Pos,
     is_union: Bool,
     name: *Char,
+    type_params: **TypeParamSym,
+    n_type_params: Int
 ): *mut RecordSym {
     var existing = try_get_existing(ctx, name);
     if (existing) {
         if (existing.kind != Sym_Record) {
             die_at(pos, "Another symbol with the same name already exists");
         }
-        return existing as *mut RecordSym;
+        var existing = existing as *mut RecordSym;
+        if (!type_params_eq(existing.type_params, existing.n_type_params, type_params, n_type_params)) {
+            die_at(pos, "Symbol redeclared with different type parameters");
+        }
+        return existing;
     }
 
     var sym = box(sizeof(RecordSym), &RecordSym {
         name,
         is_defined: false,
         is_union,
+        type_params,
+        n_type_params,
         base: null,
         fields: null,
     }) as *mut Sym;
@@ -221,27 +285,12 @@ func define_const(ctx: *mut ElabCtx, pos: *Pos, sym: *mut ConstSym, value: *Cons
     sym.value = value;
 }
 
-func params_eq(xs: *mut List, ys: *mut List): Bool {
-    if (list_len(xs) != list_len(ys)) {
-        return false;
-    }
-    for (var i = 0; i < list_len(xs); i += 1) {
-        var param1 = list_get(xs, i) as *mut FuncParam;
-        var param2 = list_get(ys, i) as *mut FuncParam;
-        if (!str_eq(param1.name, param2.name)) {
-            return false;
-        }
-        if (!type_eq(param1.type, param2.type)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 func declare_func(
     ctx: *mut ElabCtx,
     pos: *Pos,
     name: *Char,
+    type_params: **TypeParamSym,
+    n_type_params: Int,
     params: *mut List,
     rest_param: *mut RestParamDecl,
     return_type: *Type
@@ -254,6 +303,9 @@ func declare_func(
             die_at(pos, "Another symbol with the same name already exists");
         }
         var existing = existing as *mut FuncSym;
+        if (!type_params_eq(existing.type_params, existing.n_type_params, type_params, n_type_params)) {
+            die_at(pos, "Symbol redeclared with different type parameters");
+        }
         if (!params_eq(existing.params, params)) {
             die_at(pos, "Symbol redeclared with different parameters");
         }
@@ -278,6 +330,8 @@ func declare_func(
     var sym = box(sizeof(FuncSym), &FuncSym {
         name,
         is_defined: false,
+        type_params,
+        n_type_params,
         params,
         return_type,
         is_variadic,
@@ -406,7 +460,7 @@ func try_coerce_expr_to_union(e: *mut Expr, target: *Type, out: *mut *mut Expr):
 
     var sym = target.sym;
 
-    var field_index = find_record_field_by_type(sym, e.type);
+    var field_index = find_record_field_by_type(target, e.type);
     if (field_index == -1) {
         return false;
     }
@@ -451,8 +505,7 @@ func try_coerce_expr_to_int(e: *mut Expr, out: *mut *mut Expr): Bool {
 }
 
 func check_expr_type(e: *mut *mut Expr, expected: *Type) {
-    try_coerce_expr(*e, expected, e);
-    if (!type_eq((*e).type, expected)) {
+    if (!try_coerce_expr(*e, expected, e)) {
         report_type_mismatch(&(*e).pos, expected, (*e).type);
     }
 }
@@ -488,34 +541,63 @@ func check_pattern_type_int(p: *mut Pattern) {
 //==============================================================================
 //== Types
 
+func eval_type_list(ctx: *mut ElabCtx, type_exprs: *mut List): TypeList {
+    var len = list_len(type_exprs);
+    var types = calloc(len, sizeof(*Type)) as *mut *Type;
+
+    for (var i = 0; i < len; i += 1) {
+        var type_expr = list_get(type_exprs, i) as *mut TypeExpr;
+        types[i] = eval_type(ctx, type_expr);
+    }
+    return TypeList { len, types };
+}
+
+func elab_record_type(ctx: *mut ElabCtx, sym: *RecordSym, type_expr: *NamedTypeExpr): *RecordType {
+    var type_args: TypeList = empty_type_list;
+    if (type_expr.type_args) {
+        type_args = eval_type_list(ctx, type_expr.type_args);
+    }
+
+    if (sym.n_type_params == 0 && type_args.len != 0) {
+        die_at(&type_expr.pos, "'%s' does not accept type arguments", sym.name);
+    } else if (type_args.len != sym.n_type_params) {
+        die_at(&type_expr.pos, "Expected %d type arguments, got %d", sym.n_type_params, type_args.len);
+    }
+
+    return mk_record_type(sym, type_args);
+}
+
 func eval_type(ctx: *mut ElabCtx, type_expr: *mut TypeExpr): *Type {
     match (type_expr.kind) {
         case TypeExpr_Named: {
-            var name = (type_expr as *NamedTypeExpr).name;
-            if (str_eq(name, "Void")) {
-                return mk_void_type();
-            } else if (str_eq(name, "Bool")) {
-                return mk_bool_type();
-            } else if (str_eq(name, "Char") || str_eq(name, "Int8")) {
-                return mk_int_type(1);
-            } else if (str_eq(name, "Int16")) {
-                return mk_int_type(2);
-            } else if (str_eq(name, "Int32")) {
-                return mk_int_type(4);
-            } else if (str_eq(name, "Int") || str_eq(name, "Int64")) {
-                return mk_int_type(8);
-            } else {
-                var sym = lookup(ctx, &type_expr.pos, name);
-                match (sym.kind) {
-                    case Sym_Enum: {
-                        return mk_enum_type(sym as *mut EnumSym);
-                    }
-                    case Sym_Record: {
-                        return mk_record_type(sym as *mut RecordSym);
-                    }
-                    case _: {
-                        die_at(&type_expr.pos, "Expected a type");
-                    }
+            var type_expr = type_expr as *NamedTypeExpr;
+            var name = type_expr.name;
+
+            var builtin = lookup_primitive_type(name);
+            if (builtin) {
+                if (type_expr.type_args) {
+                    die_at(&type_expr.pos, "'%s' does not accept type arguments", name);
+                }
+                return builtin;
+            }
+
+            var sym = lookup(ctx, &type_expr.pos, name);
+            if (type_expr.type_args && sym.kind != Sym_Record) {
+                die_at(&type_expr.pos, "'%s' does not accept type arguments", name);
+            }
+
+            match (sym.kind) {
+                case Sym_Enum: {
+                    return mk_enum_type(sym as *EnumSym);
+                }
+                case Sym_Record: {
+                    return elab_record_type(ctx, sym as *RecordSym, type_expr);
+                }
+                case Sym_TypeParam: {
+                    return mk_type_param_type(sym as *TypeParamSym);
+                }
+                case _: {
+                    die_at(&type_expr.pos, "Expected a type");
                 }
             }
         }
@@ -815,70 +897,126 @@ func elab_array_expr(ctx: *mut ElabCtx, expr: *mut ArrayExpr, type_hint: *Type) 
     expr.type = mk_array_type(elem_type, elem_count);
 }
 
-func elab_call_expr(ctx: *mut ElabCtx, expr: *mut CallExpr) {
-    var callee = expr.callee;
-    var args = expr.args;
-
+func validate_callee(ctx: *mut ElabCtx, callee: *Expr, pos: *Pos): *FuncSym {
     if (callee.kind != Expr_Ident) {
-        die_at(&callee.pos, "Expected function name");
+        die_at(pos, "Expected function name");
     }
     var sym = lookup(ctx, &(callee as *IdentExpr).pos, (callee as *IdentExpr).name);
     if (sym.kind != Sym_Func) {
-        die_at(&callee.pos, "Expected a function");
+        die_at(pos, "Expected a function");
     }
-    var sym = sym as *mut FuncSym;
+    return sym as *FuncSym;
+}
 
-    var param_count = list_len(sym.params);
-    var arg_count = list_len(args);
+func elab_call_arg(ctx: *mut ElabCtx, sym: *FuncSym, param_index: Int, arg: *mut CallArg) {
+    var n_params = list_len(sym.params);
+    if (param_index != -1) {
+        var param = list_get(sym.params, param_index) as *mut FuncParam;
+        // Don't propagate uninstantiated type parameters into argument nodes
+        var type_hint = !contains_one_of_type_params(param.type, sym.type_params, sym.n_type_params) ? param.type : null;
+        elab_expr_infer(ctx, arg.expr, type_hint: type_hint);
+    } else {
+        elab_expr_infer(ctx, arg.expr, type_hint: null);
+        if (!is_sized(arg.expr.type)) {
+            die_at(&arg.expr.pos, "Cannot pass an unsized type as a variadic argument");
+        }
+    }
+}
 
-    var is_initialized = calloc(param_count, sizeof(*Bool)) as *mut Bool;
+func elab_call_args(ctx: *mut ElabCtx, sym: *FuncSym, expr: *CallExpr): **mut CallArg {
+    var n_params = list_len(sym.params);
+    var initialized_params = calloc(n_params, sizeof(*CallArg)) as *mut *mut CallArg;
     var seen_named_arg = false;
 
-    for (var i = 0; i < arg_count; i += 1) {
-        var arg = list_get(args, i) as *mut CallArg;
+    var n_args = list_len(expr.args);
+    for (var i = 0; i < n_args; i += 1) {
+        var arg = list_get(expr.args, i) as *mut CallArg;
         if (arg.label) {
             var param_index = find_param_by_name(sym, arg.label);
             if (param_index == -1) {
                 die_at(&arg.expr.pos, "Unknown parameter '%s'", arg.label);
-            } else if (is_initialized[param_index]) {
+            } else if (initialized_params[param_index]) {
                 die_at(&arg.expr.pos, "Parameter '%s' is already initialized", arg.label);
             }
-            var param = list_get(sym.params, param_index) as *mut FuncParam;
-            elab_expr_expect(ctx, &arg.expr, param.type);
-
-            is_initialized[param_index] = true;
+            elab_call_arg(ctx, sym, param_index, arg);
+            initialized_params[param_index] = arg;
             arg.positional_index = param_index;
             seen_named_arg = true;
         } else if (seen_named_arg) {
             die_at(&arg.expr.pos, "Positional argument cannot follow a named argument");
-        } else if (i >= param_count) {
+        } else if (i >= n_params) {
             if (!sym.is_variadic) {
                 die_at(&arg.expr.pos, "Too many arguments provided");
             }
-            elab_expr_infer(ctx, arg.expr, type_hint: null);
-            if (!is_sized(arg.expr.type)) {
-                die_at(&arg.expr.pos, "Cannot pass an unsized type as a variadic argument");
-            }
+            elab_call_arg(ctx, sym, -1, arg);
             arg.positional_index = i;
         } else {
-            var param = list_get(sym.params, i) as *mut FuncParam;
-            elab_expr_expect(ctx, &arg.expr, param.type);
-
-            is_initialized[i] = true;
+            elab_call_arg(ctx, sym, i, arg);
+            initialized_params[i] = arg;
             arg.positional_index = i;
         }
     }
 
-    for (var i = 0; i < param_count; i += 1) {
-        var param = list_get(sym.params, i) as *mut FuncParam;
-        if (!is_initialized[i] && !param.default_value) {
+    for (var i = 0; i < n_params; i += 1) {
+        if (!initialized_params[i] && !(list_get(sym.params, i) as *FuncParam).default_value) {
             var param = list_get(sym.params, i) as *mut FuncParam;
             die_at(&expr.pos, "Missing argument for parameter '%s'", param.name);
         }
     }
 
-    expr.resolved_callee = sym;
-    expr.type = sym.return_type;
+    return initialized_params;
+}
+
+func infer_func_call_type_args(ctx: *ElabCtx, pos: *Pos, sym: *FuncSym, initialized_params: **mut CallArg, type_hint: *Type): TypeList {
+    if (sym.n_type_params == 0) {
+        return empty_type_list;
+    }
+
+    var infer_ctx = mk_infer_ctx(sym.type_params, sym.n_type_params);
+
+    if (type_hint) {
+        try_add_constraint(&infer_ctx, sym.return_type, type_hint);
+    }
+
+    var n_params = list_len(sym.params);
+    for (var i = 0; i < n_params; i += 1) {
+        var param = list_get(sym.params, i) as *FuncParam;
+        var arg = initialized_params[i];
+        if (arg) {
+            try_add_constraint(&infer_ctx, param.type, arg.expr.type);
+        }
+    }
+
+    var type_args: TypeList;
+    if (!try_finish_inference(&infer_ctx, &type_args)) {
+        die_at(pos, "Unable to infer type arguments");
+    }
+
+    return type_args;
+}
+
+func check_argument_types(sym: *FuncSym, initialized_params: **mut CallArg, subst_ctx: *SubstCtx) {
+    var n_params = list_len(sym.params);
+    for (var i = 0; i < n_params; i += 1) {
+        var arg = initialized_params[i];
+        if (!arg) {
+            continue;
+        }
+        var param = list_get(sym.params, i) as *FuncParam;
+        var param_type = type_subst(subst_ctx, param.type);
+        check_expr_type(&arg.expr, param_type);
+    }
+}
+
+func elab_call_expr(ctx: *mut ElabCtx, expr: *mut CallExpr, type_hint: *Type) {
+    var sym = validate_callee(ctx, expr.callee, &expr.pos);
+    var initialized_params = elab_call_args(ctx, sym, expr);
+    var type_args = infer_func_call_type_args(ctx, &expr.pos, sym, initialized_params, type_hint);
+    var subst_ctx = subst_ctx_from_type_args(sym.type_params, sym.n_type_params, type_args.types, type_args.len);
+    check_argument_types(sym, initialized_params, &subst_ctx);
+
+    expr.resolved_callee = mk_func_sym_instance(sym, type_args);
+    expr.type = type_subst(&subst_ctx, sym.return_type);
 }
 
 func elab_index_expr(ctx: *mut ElabCtx, expr: *mut IndexExpr) {
@@ -929,7 +1067,7 @@ func elab_member_expr(ctx: *mut ElabCtx, expr: *mut MemberExpr) {
 
     var field = list_get(record_sym.fields, field_index) as *mut RecordField;
     expr.resolved_field = field;
-    expr.type = field.type;
+    expr.type = type_subst(&subst_ctx_from_record_type(left_type), field.type);
 }
 
 func elab_sizeof_expr(ctx: *mut ElabCtx, expr: *mut SizeofExpr) {
@@ -1109,6 +1247,17 @@ func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type
         die_at(&expr.pos, "Record has incomplete type");
     }
 
+    var record_type: *RecordType;
+    if (sym.n_type_params == 0) {
+        record_type = mk_record_type(sym, empty_type_list);
+    } else if (type_hint && type_hint.kind == Type_Record && (type_hint as *RecordType).sym == sym) {
+        record_type = type_hint as *RecordType;
+    } else {
+        die_at(&expr.pos, "Record type inference is not supported");
+    }
+
+
+
     var fields = sym.fields;
     var n_fields = list_len(fields);
 
@@ -1116,6 +1265,7 @@ func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type
     var n_initializers = list_len(initializers);
 
     var is_initialized = calloc(n_fields, sizeof(*Bool)) as *mut Bool;
+    var subst_ctx = subst_ctx_from_record_type(record_type);
 
     for (var i = 0; i < n_initializers; i += 1) {
         var initializer = list_get(initializers, i) as *mut FieldInitializer;
@@ -1130,7 +1280,9 @@ func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type
             die_at(&initializer.pos, "Field is already initialized");
         }
         is_initialized[field_index] = true;
-        elab_expr_expect(ctx, &initializer.expr, field.type);
+
+        var field_type = type_subst(&subst_ctx, field.type);
+        elab_expr_expect(ctx, &initializer.expr, field_type);
     }
 
     for (var i = 0; i < n_fields; i += 1) {
@@ -1155,7 +1307,7 @@ func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type
 
     free(is_initialized);
 
-    expr.type = mk_record_type(sym);
+    expr.type = record_type;
 }
 
 func elab_expr_infer(ctx: *mut ElabCtx, expr: *mut Expr, type_hint: *Type) {
@@ -1170,7 +1322,7 @@ func elab_expr_infer(ctx: *mut ElabCtx, expr: *mut Expr, type_hint: *Type) {
             elab_array_expr(ctx, expr as *mut ArrayExpr, type_hint);
         }
         case Expr_Call: {
-            elab_call_expr(ctx, expr as *mut CallExpr);
+            elab_call_expr(ctx, expr as *mut CallExpr, type_hint);
         }
         case Expr_Index: {
             elab_index_expr(ctx, expr as *mut IndexExpr);
@@ -1510,37 +1662,69 @@ func elab_record_base(ctx: *mut ElabCtx, base: *mut TypeExpr, record_sym: *mut R
     if (base_type.kind != Type_Record) {
         die_at(&base.pos, "Expected a record type");
     }
-    var baseSym = (base_type as *RecordType).sym;
-    if (!baseSym.is_defined) {
+    var base_type = base_type as *RecordType;
+    if (!base_type.sym.is_defined) {
         die_at(&base.pos, "Base has incomplete type");
     }
-    if (baseSym == record_sym) {
-        die_at(&base.pos, "Record cannot inherit from itself");
-    }
-    var base_fields = baseSym.fields;
+    var subst_ctx = subst_ctx_from_record_type(base_type);
+    var base_fields = base_type.sym.fields;
     var fields = list_new_with_cap(list_len(base_fields));
     for (var i = 0; i < list_len(base_fields); i += 1) {
         var field = list_get(base_fields, i) as *mut RecordField;
-        var copy = box(sizeof(RecordField), field) as *mut RecordField;
-        list_push(fields, copy);
+        var new_field = calloc(1, sizeof(*RecordField)) as *mut RecordField;
+        var new_type = type_subst(&subst_ctx, field.type);
+        *new_field = RecordField {
+            name: field.name,
+            type: new_type,
+            default_value: field.default_value,
+        };
+        list_push(fields, new_field);
     }
 
     *record_sym = RecordSym {
         is_union: record_sym.is_union,
         name: record_sym.name,
         is_defined: record_sym.is_defined,
-        base: baseSym,
+        type_params: record_sym.type_params,
+        n_type_params: record_sym.n_type_params,
+        base: base_type,
         fields: fields,
     };
 }
 
+func elab_type_params(ctx: *mut ElabCtx, type_params: *mut List): *mut *TypeParamSym {
+    var len = list_len(type_params);
+    if (len == 0) {
+        return null;
+    }
+
+    var syms = calloc(len, sizeof(*TypeParamSym)) as *mut *TypeParamSym;
+    for (var i = 0; i < len; i += 1) {
+        var type_param_decl = list_get(type_params, i) as *TypeParamDecl;
+        syms[i] = declare_type_param(ctx, &type_param_decl.pos, type_param_decl.name);
+    }
+    return syms;
+}
+
 func seed_record_decl(ctx: *mut ElabCtx, decl: *mut RecordDecl) {
-    decl.sym = declare_record(ctx, &decl.pos, decl.is_union, decl.name);
+    enter_scope(ctx);
+
+    var n_type_params = 0;
+    var type_params: *mut *TypeParamSym = null;
+    if (decl.type_params) {
+        n_type_params = list_len(decl.type_params);
+        type_params = elab_type_params(ctx, decl.type_params);
+    }
+
+    decl.scope = pop_scope(ctx);
+    decl.sym = declare_record(ctx, &decl.pos, decl.is_union, decl.name, type_params, n_type_params);
 }
 
 func elab_record_decl(ctx: *mut ElabCtx, decl: *mut RecordDecl) {
     var sym = decl.sym;
     var base = decl.base;
+
+    push_scope(ctx, decl.scope as *mut Scope);
 
     if (base) {
         elab_record_base(ctx, base, sym);
@@ -1558,6 +1742,8 @@ func elab_record_decl(ctx: *mut ElabCtx, decl: *mut RecordDecl) {
             die_at(&decl.pos, "Empty record");
         }
     }
+
+    pop_scope(ctx);
 
     if (base || decl.fields) {
         define_record(ctx, &decl.pos, sym);
@@ -1649,6 +1835,15 @@ func verify_main_signature(decl: *mut FuncDecl, sym: *mut FuncSym) {
 }
 
 func seed_func_decl(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
+    enter_scope(ctx);
+
+    var n_type_params = 0;
+    var type_params: *mut *TypeParamSym = null;
+    if (decl.type_params) {
+        n_type_params = list_len(decl.type_params);
+        type_params = elab_type_params(ctx, decl.type_params);
+    }
+
     var n_params = list_len(decl.params);
     var params = list_new();
     for (var i = 0; i < n_params; i += 1) {
@@ -1667,7 +1862,8 @@ func seed_func_decl(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
         die_at(&decl.pos, "Function return type must have known size");
     }
 
-    decl.sym = declare_func(ctx, &decl.pos, decl.name, params, decl.rest_param, return_type);
+    decl.scope = pop_scope(ctx);
+    decl.sym = declare_func(ctx, &decl.pos, decl.name, type_params, n_type_params, params, decl.rest_param, return_type);
 
     if (str_eq(decl.name, "main")) {
         verify_main_signature(decl, decl.sym);
@@ -1681,12 +1877,10 @@ func elab_func_decl(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
         return;
     }
 
-    var sym = decl.sym;
+    push_scope(ctx, decl.scope as *mut Scope);
+    ctx.current_func = decl.sym;
 
-    enter_scope(ctx);
-    ctx.current_func = sym;
-
-    define_params(ctx, decl.params, sym.params);
+    define_params(ctx, decl.params, decl.sym.params);
 
     if (decl.rest_param) {
         define_local(ctx, &decl.rest_param.pos, decl.rest_param.name, mk_rest_param_type());
@@ -1695,9 +1889,9 @@ func elab_func_decl(ctx: *mut ElabCtx, decl: *mut FuncDecl) {
     elab_stmt(ctx, decl.body);
 
     ctx.current_func = null;
-    exit_scope(ctx);
+    pop_scope(ctx);
 
-    define_func(ctx, &decl.pos, sym, decl.body);
+    define_func(ctx, &decl.pos, decl.sym, decl.body);
 }
 
 func seed_const_decl(ctx: *mut ElabCtx, decl: *mut ConstDecl) {

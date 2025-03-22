@@ -90,12 +90,35 @@ func p_ident(self: *mut Parser): *Char {
 //==============================================================================
 //== Types
 
+func p_type_args(self: *mut Parser): *mut List {
+    expect(self, Tok_Lt);
+    var args = list_new();
+    while (!at_eof(self) && !at(self, Tok_Gt)) {
+        var arg = p_type(self);
+        list_push(args, arg);
+        if (!at(self, Tok_Gt)) {
+            expect(self, Tok_Comma);
+        }
+    }
+    expect(self, Tok_Gt);
+    return args;
+}
+
+func p_optional_type_args(self: *mut Parser): *mut List {
+    if (!at(self, Tok_Lt)) {
+        return null;
+    }
+    return p_type_args(self);
+}
+
 func p_named_type(self: *mut Parser): *mut TypeExpr {
     var pos = self.tok.pos;
     var name = p_ident(self);
+    var args = p_optional_type_args(self);
     return box(sizeof(NamedTypeExpr), &NamedTypeExpr {
         pos,
         name,
+        type_args: args,
     }) as *mut TypeExpr;
 }
 
@@ -997,6 +1020,38 @@ func p_stmt(self: *mut Parser): *mut Stmt {
 //==============================================================================
 //== Declarations
 
+func p_type_param(self: *mut Parser): *mut TypeParamDecl {
+    var pos = self.tok.pos;
+    var name = p_ident(self);
+
+    return box(sizeof(TypeParamDecl), &TypeParamDecl {
+        pos,
+        name,
+    }) as *mut TypeParamDecl;
+}
+
+func p_type_params(self: *mut Parser): *mut List {
+    var type_params = list_new();
+    expect(self, Tok_Lt);
+    while (!at_eof(self) && !at(self, Tok_Gt)) {
+        var type_param = p_type_param(self);
+        list_push(type_params, type_param);
+        if (!at(self, Tok_Gt)) {
+            expect(self, Tok_Comma);
+        }
+    }
+    expect(self, Tok_Gt);
+
+    return type_params;
+}
+
+func p_optional_type_params(self: *mut Parser): *mut List {
+    if (!at(self, Tok_Lt)) {
+        return null;
+    }
+    return p_type_params(self);
+}
+
 func p_module_name_decl(self: *mut Parser): *mut Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Module);
@@ -1052,6 +1107,7 @@ func p_record_decl(self: *mut Parser): *mut Decl {
         expect(self, Tok_Union);
     }
     var name = p_ident(self);
+    var type_params = p_optional_type_params(self);
     var base: *mut TypeExpr = null;
     if (eat(self, Tok_Colon)) {
         base = p_type(self);
@@ -1076,6 +1132,7 @@ func p_record_decl(self: *mut Parser): *mut Decl {
         pos,
         is_union,
         name,
+        type_params,
         base,
         fields: body,
         sym: null,
@@ -1118,6 +1175,7 @@ func p_func_decl(self: *mut Parser, is_extern: Bool): *mut Decl {
     var pos = self.tok.pos;
     expect(self, Tok_Func);
     var name = p_ident(self);
+    var type_params = p_optional_type_params(self);
     var params = list_new();
     expect(self, Tok_LParen);
     while (!at_eof(self) && !at(self, Tok_RParen) && !at(self, Tok_DotDotDot)) {
@@ -1147,6 +1205,7 @@ func p_func_decl(self: *mut Parser, is_extern: Bool): *mut Decl {
         pos,
         is_extern,
         name,
+        type_params,
         params,
         rest_param,
         return_type,

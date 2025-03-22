@@ -377,10 +377,10 @@ func asm_lower_expr_addr(ctx: *mut CodegenCtx, e: *HirExpr, xd: Reg) {
             var field = e.field;
 
             assert(e.left.type.kind == Type_Record, "asm_lower_expr_addr: left operand should be a record.");
-            var sym = (e.left.type as *RecordType).sym;
-            var field_index = find_record_field_by_name(sym, field.name);
+            var record_type = e.left.type as *RecordType;
+            var field_index = find_record_field_by_name(record_type.sym, field.name);
             assert(field_index != -1, "asm_lower_expr_addr: field should exist in the record.");
-            var field_offset = field_offset(sym, field_index);
+            var field_offset = field_offset(record_type, field_index);
 
             asm_lower_expr_addr(ctx, e.left, xd);
             // add {xd}, {xd}, #{field_offset}
@@ -664,7 +664,7 @@ func asm_lower_call_expr(ctx: *mut CodegenCtx, e: *HirCallExpr, xd: Reg, is_comp
     var is_reg_ret_composite = layout.ret_loc.is_reg && is_composite(e.type);
     var is_indirect_ret = layout.ret_loc.is_indirect;
 
-    asm_write_comment(ctx.builder, "prepare call to %s", e.callee.name);
+    asm_write_comment(ctx.builder, "prepare call to %s", e.callee.sym.name);
 
     spill_before_call(ctx);
 
@@ -745,7 +745,7 @@ func asm_lower_call_expr(ctx: *mut CodegenCtx, e: *HirCallExpr, xd: Reg, is_comp
     }
 
     // bl {name}
-    asm_write_bl(ctx.builder, e.callee.name);
+    asm_write_bl(ctx.builder, e.callee.sym.name);
 
     var xm = layout.ret_loc.n_regs as Reg;
 
@@ -774,7 +774,7 @@ func asm_lower_call_expr(ctx: *mut CodegenCtx, e: *HirCallExpr, xd: Reg, is_comp
 
     unspill_after_call(ctx);
 
-    asm_write_comment(ctx.builder, "call to %s done", e.callee.name);
+    asm_write_comment(ctx.builder, "call to %s done", e.callee.sym.name);
 
     ctx.max_arg_pass_size = int_max(ctx.max_arg_pass_size, layout.stack_space);
 

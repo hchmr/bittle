@@ -4,6 +4,13 @@ import "../support/utils";
 import "core";
 import "type";
 
+func mk_func_sym_instance(sym: *FuncSym, type_args: TypeList): *FuncSymInstance {
+    return box(sizeof(FuncSymInstance), &FuncSymInstance {
+        sym: sym,
+        type_args: type_args,
+    }) as *FuncSymInstance;
+}
+
 func find_record_field_by_name(sym: *Sym, name: *Char): Int {
     var fields = (sym as *RecordSym).fields;
     if (!fields) {
@@ -18,14 +25,16 @@ func find_record_field_by_name(sym: *Sym, name: *Char): Int {
     return -1;
 }
 
-func find_record_field_by_type(sym: *Sym, type: *Type): Int {
-    var fields = (sym as *RecordSym).fields;
+func find_record_field_by_type(record_type: *RecordType, type: *Type): Int {
+    var subst_ctx = subst_ctx_from_record_type(record_type);
+    var fields = record_type.sym.fields;
     if (!fields) {
         return -1;
     }
     for (var i = 0; i < list_len(fields); i += 1) {
         var field = list_get(fields, i) as *RecordField;
-        if (type_eq(field.type, type)) {
+        var field_type = type_subst(&subst_ctx, field.type);
+        if (type_eq(field_type, type)) {
             return i;
         }
     }
@@ -42,17 +51,20 @@ func find_param_by_name(sym: *FuncSym, name: *Int8): Int {
     return -1;
 }
 
-func field_offset(sym: *RecordSym, field_index: Int): Int {
-    if (sym.is_union) {
+func field_offset(type: *RecordType, field_index: Int): Int {
+    if (type.sym.is_union) {
         return 0;
     }
+
+    var subst_ctx = subst_ctx_from_record_type(type);
 
     var unpadded_size = 0;
     var offset = 0;
 
     for (var i = 0; i <= field_index; i += 1) {
-        var field = list_get(sym.fields, i) as *RecordField;
-        var layout = type_layout(field.type);
+        var field = list_get(type.sym.fields, i) as *RecordField;
+        var field_type = type_subst(&subst_ctx, field.type);
+        var layout = type_layout(field_type);
         offset = align_up(unpadded_size, layout.align);
         unpadded_size = offset + layout.size;
     }

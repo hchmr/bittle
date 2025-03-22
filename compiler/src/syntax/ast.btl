@@ -24,6 +24,7 @@ struct TypeExpr {
 struct NamedTypeExpr: TypeExpr {
     kind = TypeExpr_Named,
     name: *Char,
+    type_args: *mut List, // List<TypeExpr>
 }
 
 struct PtrTypeExpr: TypeExpr {
@@ -190,7 +191,7 @@ struct CallExpr: Expr {
     kind = Expr_Call,
     callee: *mut Expr,
     args: *mut List, // List<CallArg>
-    resolved_callee: *mut FuncSym,
+    resolved_callee: *FuncSymInstance,
 }
 
 struct CallArg {
@@ -380,6 +381,11 @@ struct ImportDecl: Decl {
     resolved_mod: *mut Module,
 }
 
+struct TypeParamDecl {
+    pos: Pos,
+    name: *Char,
+}
+
 struct RecordFieldDecl {
     pos: Pos,
     name: *Char,
@@ -391,9 +397,11 @@ struct RecordDecl: Decl {
     kind = Decl_Record,
     is_union: Bool,
     name: *Char,
+    type_params: *mut List, // List<TypeParamDecl>
     base: *mut TypeExpr,
     fields: *mut List, // List<RecordFieldDecl>
     sym: *mut RecordSym,
+    scope: *mut Void = null,
 }
 
 struct FuncParamDecl {
@@ -412,11 +420,13 @@ struct FuncDecl: Decl {
     kind = Decl_Func,
     is_extern: Bool,
     name: *Char,
+    type_params: *mut List, // List<TypeParamDecl>
     params: *mut List, // List<FuncParam>
     rest_param: *mut RestParamDecl,
     return_type: *mut TypeExpr,
     body: *mut Stmt,
     sym: *mut FuncSym,
+    scope: *mut Void = null,
 }
 
 struct EnumMember {

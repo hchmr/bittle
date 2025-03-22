@@ -26,9 +26,11 @@ func dbg(fmt: *Char, ...args) {
     fprintf(stderr, "\n");
 }
 
-func assert(cond: Bool, because: *Char) {
+func assert(cond: Bool, fmt: *Char, ...args) {
     if (!cond) {
-        fprintf(stderr, "\n*** Assertion failed: %s\n", because);
+        fprintf(stderr, "\n*** Assertion failed: ");
+        vfprintf(stderr, fmt, args);
+        fprintf(stderr, "\n");
         exit(1);
     }
 }
@@ -162,13 +164,19 @@ func list_buf(self: *List): *mut Void {
     return self.elems;
 }
 
+func list_range_check(self: *List, i: Int) {
+    if (i < 0 || i >= self.len) {
+        die("List index out of bounds: %d not in [0, %d)", i, self.len);
+    }
+}
+
 func list_get(self: *List, i: Int): *Void {
-    assert(i >= 0 && i < self.len, "list_get: index out of bounds");
+    list_range_check(self, i);
     return self.elems[i];
 }
 
 func list_set(self: *mut List, i: Int, elem: *Void) {
-    assert(i >= 0 && i < self.len, "list_set: index out of bounds");
+    list_range_check(self, i);
     self.elems[i] = elem;
 }
 
