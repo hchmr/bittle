@@ -528,6 +528,12 @@ func eval_type(ctx: *mut ElabCtx, type_expr: *mut TypeExpr): *Type {
             var type_expr = type_expr as *mut ArrTypeExpr;
             var elem = eval_type(ctx, type_expr.elem);
             var size = const_eval_int64(ctx, type_expr.size);
+            if (!is_sized(elem)) {
+                die_at(&type_expr.elem.pos, "Array element type must have known size");
+            }
+            if (size < 1) {
+                die_at(&type_expr.size.pos, "Array size must be positive");
+            }
             return mk_array_type(elem, size);
         }
         case TypeExpr_Never: {
@@ -867,7 +873,7 @@ func elab_call_expr(ctx: *mut ElabCtx, expr: *mut CallExpr) {
         var param = list_get(sym.params, i) as *mut FuncParam;
         if (!is_initialized[i] && !param.default_value) {
             var param = list_get(sym.params, i) as *mut FuncParam;
-            die_at(&expr.pos, "Parameter '%s' is not initialized", param.name);
+            die_at(&expr.pos, "Missing argument for parameter '%s'", param.name);
         }
     }
 
@@ -888,8 +894,12 @@ func elab_index_expr(ctx: *mut ElabCtx, expr: *mut IndexExpr) {
     }
 
     var elem_type = indexee_type.kind == Type_Arr
-    ? (indexee_type as *ArrType).elem
-    : (indexee_type as *PtrType).pointee;
+        ? (indexee_type as *ArrType).elem
+        : (indexee_type as *PtrType).pointee;
+
+    if (!is_sized(elem_type)) {
+        die_at(&indexee.pos, "Cannot index into an unsized type");
+    }
 
     check_expr_type_int(&index);
     expr.type = elem_type;
