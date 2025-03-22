@@ -10,8 +10,8 @@ import "syntax/parser";
 
 struct GlobalCtx {
     // Modules that have been loaded
-    modules: *mut List, // List<*Module>
     import_chain: *mut List, // List<*Char>
+    modules: *mut List, // List<Module>
 }
 
 //==============================================================================

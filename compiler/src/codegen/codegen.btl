@@ -109,7 +109,7 @@ struct CodegenCtx {
     ret_label: Int,
 
     // strings
-    strings: *mut List, // List<*StringBuffer>
+    strings: *mut List, // List<StringBuffer>
 
     // asm builder
     builder: *mut AsmInstrBuilder,
@@ -150,19 +150,19 @@ func write_pop(ctx: *mut CodegenCtx, reg: Reg) {
 }
 
 func lock_reg(ctx: *mut CodegenCtx, reg: Reg) {
-    var state = &ctx.regs[reg as Int];
+    var state = &ctx.regs[reg];
     state.is_locked = true;
     state.n_writes += 1;
 }
 
 func unlock_reg(ctx: *mut CodegenCtx, reg: Reg) {
-    var state = &ctx.regs[reg as Int];
+    var state = &ctx.regs[reg];
     assert(state.is_locked, "unlock_reg: register should be locked.");
     state.is_locked = false;
 }
 
 func spill_reg(ctx: *mut CodegenCtx, reg: Reg) {
-    var state = &ctx.regs[reg as Int];
+    var state = &ctx.regs[reg];
     assert(state.is_locked, "spill_reg: register should be locked.");
     write_push(ctx, reg);
     unlock_reg(ctx, reg);
@@ -171,7 +171,7 @@ func spill_reg(ctx: *mut CodegenCtx, reg: Reg) {
 }
 
 func unspill_reg(ctx: *mut CodegenCtx, reg: Reg) {
-    var state = &ctx.regs[reg as Int];
+    var state = &ctx.regs[reg];
     assert(!state.is_locked, "unspill_reg: register should not be locked.");
     write_pop(ctx, reg);
     lock_reg(ctx, reg);
@@ -180,7 +180,7 @@ func unspill_reg(ctx: *mut CodegenCtx, reg: Reg) {
 }
 
 func reserve_reg(ctx: *mut CodegenCtx, reg: Reg) {
-    var state = &ctx.regs[reg as Int];
+    var state = &ctx.regs[reg];
     var spill_needed = state.is_locked;
     if (spill_needed) {
         spill_reg(ctx, reg);
@@ -191,7 +191,7 @@ func reserve_reg(ctx: *mut CodegenCtx, reg: Reg) {
 }
 
 func free_reg(ctx: *mut CodegenCtx, reg: Reg) {
-    var state = &ctx.regs[reg as Int];
+    var state = &ctx.regs[reg];
     var reservation = list_pop(state.reservations) as *mut RegReservation;
     var did_spill = reservation.did_spill;
     free(reservation);
@@ -231,7 +231,7 @@ func next_reg_except_2(ctx: *mut CodegenCtx, x1: Reg, x2: Reg): Reg {
     for (var i = 0; i < 30; i += 1) {
         var reg = priority[i];
         if (reg != x1 && reg != x2) {
-            var state = &ctx.regs[reg as Int];
+            var state = &ctx.regs[reg];
             if (!state.is_locked) {
                 reserve_reg(ctx, reg);
                 return reg;
@@ -570,7 +570,7 @@ func asm_lower_return_expr(ctx: *mut CodegenCtx, e: *HirReturnExpr, xd: Reg) {
                 reserve_reg(ctx, Reg_X0);
                 asm_lower_expr_addr(ctx, e.expr, Reg_X0);
                 for (var i = ret_loc.n_regs - 1; i >= 0; i -= 1) {
-                    var reg = (Reg_X0 as Int + i) as Reg;
+                    var reg = (Reg_X0 + i) as Reg;
                     asm_write_ldrs_ri(ctx.builder, 8, reg, Reg_X0, offset: i * 8);
                 }
                 free_reg(ctx, Reg_X0);
@@ -763,7 +763,7 @@ func asm_lower_call_expr(ctx: *mut CodegenCtx, e: *HirCallExpr, xd: Reg, is_comp
         // str xn, [xm, #8 * n]
         var n_regs = layout.ret_loc.n_regs;
         for (var i = 0; i < n_regs; i += 1) {
-            var reg = (Reg_X0 as Int + i) as Reg;
+            var reg = (Reg_X0 + i) as Reg;
             asm_write_str_ri(ctx.builder, 8, reg, xm, 8 * i);
         }
     } else if (layout.ret_loc.is_reg) {

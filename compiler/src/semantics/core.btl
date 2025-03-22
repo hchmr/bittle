@@ -171,5 +171,5 @@ struct LocalSym: Sym {
 struct Module {
     name: *Char,
     path: *Char,
-    syms: *mut List, // List<*Sym>
+    syms: *mut List, // List<Sym>
 }
