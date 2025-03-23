@@ -348,6 +348,8 @@ stage "feat(compiler): Add syntax for mutable pointers"
 
 stage "feat(compiler): Add support for imports"
 
+stage "feat(compiler): Add basic support for generics"
+
 if [ "$extra_stage" = true ]; then
     stage "$head_commit"
 fi
