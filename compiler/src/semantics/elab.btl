@@ -1237,77 +1237,122 @@ func elab_cast_expr(ctx: *mut ElabCtx, expr: *mut CastExpr) {
     }
 }
 
-func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type) {
+func resolve_record_symbol(ctx: *mut ElabCtx, expr: *mut RecordExpr): *mut RecordSym {
     var sym = lookup(ctx, &expr.pos, expr.name);
     if (sym.kind != Sym_Record) {
         die_at(&expr.pos, "Expected a record type");
     }
-    var sym = sym as *mut RecordSym;
-    if (!sym.is_defined) {
+    var record_sym = sym as *mut RecordSym;
+    if (!record_sym.is_defined) {
         die_at(&expr.pos, "Record has incomplete type");
     }
+    return record_sym;
+}
 
-    var record_type: *RecordType;
+func try_get_record_expr_hint(sym: *mut RecordSym, expr: *mut RecordExpr, type_hint: *Type): *RecordType {
     if (sym.n_type_params == 0) {
-        record_type = mk_record_type(sym, empty_type_list);
+        return mk_record_type(sym, empty_type_list);
     } else if (type_hint && type_hint.kind == Type_Record && (type_hint as *RecordType).sym == sym) {
-        record_type = type_hint as *RecordType;
+        return type_hint as *RecordType;
     } else {
-        die_at(&expr.pos, "Record type inference is not supported");
+        return null;
     }
+}
 
-
-
-    var fields = sym.fields;
-    var n_fields = list_len(fields);
-
-    var initializers = expr.fields;
-    var n_initializers = list_len(initializers);
-
-    var is_initialized = calloc(n_fields, sizeof(*Bool)) as *mut Bool;
-    var subst_ctx = subst_ctx_from_record_type(record_type);
-
-    for (var i = 0; i < n_initializers; i += 1) {
-        var initializer = list_get(initializers, i) as *mut FieldInitializer;
-        var field_name = initializer.name;
-        var field_index = find_record_field_by_name(sym, field_name);
-        if (field_index == -1) {
-            die_at(&initializer.pos, "Unknown field");
+func prepare_field_type_hints(sym: *mut RecordSym, record_type: *RecordType): *mut *Type {
+    var hints = calloc(list_len(sym.fields), sizeof(*Type)) as *mut *Type;
+    if (record_type) {
+        var subst_ctx = subst_ctx_from_record_type(record_type);
+        for (var i = 0; i < list_len(sym.fields); i += 1) {
+            var field = list_get(sym.fields, i) as *mut RecordField;
+            hints[i] = type_subst(&subst_ctx, field.type);
         }
-        var field = list_get(fields, field_index) as *mut RecordField;
-
-        if (is_initialized[field_index]) {
-            die_at(&initializer.pos, "Field is already initialized");
-        }
-        is_initialized[field_index] = true;
-
-        var field_type = type_subst(&subst_ctx, field.type);
-        elab_expr_expect(ctx, &initializer.expr, field_type);
     }
+    return hints;
+}
 
-    for (var i = 0; i < n_fields; i += 1) {
-        var field = list_get(fields, i) as *mut RecordField;
-        is_initialized[i] = is_initialized[i] || field.default_value;
-    }
-
+func ensure_fields_initialized(sym: *mut RecordSym, expr: *mut RecordExpr, initializers: *mut *mut FieldInitializer) {
     if (!sym.is_union) {
+        var n_fields = list_len(sym.fields);
         for (var i = 0; i < n_fields; i += 1) {
-            if (!is_initialized[i]) {
-                var field = list_get(fields, i) as *mut RecordField;
+            var field = list_get(sym.fields, i) as *mut RecordField;
+            if (!initializers[i] && !field.default_value) {
                 die_at(&expr.pos, "Field '%s' is not initialized.", field.name);
             }
         }
     } else {
+        var n_initializers = list_len(expr.fields);
         if (n_initializers == 0) {
             die_at(&expr.pos, "No field is initialized.");
         } else if (n_initializers > 1) {
             die_at(&expr.pos, "Only one field can be initialized in a union");
         }
     }
+}
 
-    free(is_initialized);
+func elab_field_initializers(ctx: *mut ElabCtx, sym: *mut RecordSym, expr: *mut RecordExpr, field_type_hints: *mut *Type): *mut *mut FieldInitializer {
+    var sorted_initializers = calloc(list_len(sym.fields), sizeof(*FieldInitializer)) as *mut *mut FieldInitializer;
 
-    expr.type = record_type;
+    for (var i = 0; i < list_len(expr.fields); i += 1) {
+        var initializer = list_get(expr.fields, i) as *mut FieldInitializer;
+        var field_index = find_record_field_by_name(sym, initializer.name);
+        if (field_index == -1) {
+            die_at(&initializer.pos, "Unknown field");
+        }
+
+        if (sorted_initializers[field_index]) {
+            die_at(&initializer.pos, "Field is already initialized");
+        }
+        sorted_initializers[field_index] = initializer;
+
+        elab_expr_infer(ctx, initializer.expr, field_type_hints[field_index]);
+    }
+
+    ensure_fields_initialized(sym, expr, sorted_initializers);
+
+    return sorted_initializers;
+}
+
+func infer_record_expr_type_args(sym: *mut RecordSym, expr: *mut RecordExpr, initializers: *mut *mut FieldInitializer): TypeList {
+    var infer_ctx = mk_infer_ctx(sym.type_params, sym.n_type_params);
+
+    for (var i = 0; i < list_len(sym.fields); i += 1) {
+        var field = list_get(sym.fields, i) as *mut RecordField;
+        var initializer = initializers[i];
+        if (initializer) {
+            try_add_constraint(&infer_ctx, field.type, initializer.expr.type);
+        }
+    }
+
+    var type_args: TypeList;
+    if (!try_finish_inference(&infer_ctx, &type_args)) {
+        die_at(&expr.pos, "Unable to infer type arguments");
+    }
+    return type_args;
+}
+
+func check_field_types(sym: *mut RecordSym, initialized: *mut *mut FieldInitializer, subst_ctx: SubstCtx) {
+    for (var i = 0; i < list_len(sym.fields); i += 1) {
+        var field = list_get(sym.fields, i) as *mut RecordField;
+        var initializer = initialized[i];
+        if (!initializer) {
+            continue;
+        }
+        var field_type = type_subst(&subst_ctx, field.type);
+        check_expr_type(&initializer.expr, field_type);
+    }
+}
+
+func elab_record_expr(ctx: *mut ElabCtx, expr: *mut RecordExpr, type_hint: *Type) {
+    var sym = resolve_record_symbol(ctx, expr);
+    var record_type_hint = try_get_record_expr_hint(sym, expr, type_hint);
+    var field_type_hints = prepare_field_type_hints(sym, record_type_hint);
+    var initializers = elab_field_initializers(ctx, sym, expr, field_type_hints);
+    var type_args = infer_record_expr_type_args(sym, expr, initializers);
+    var subst_ctx = subst_ctx_from_type_args(sym.type_params, sym.n_type_params, type_args.types, type_args.len);
+    check_field_types(sym, initializers, subst_ctx);
+    free(initializers);
+    expr.type = mk_record_type(sym, type_args);
 }
 
 func elab_expr_infer(ctx: *mut ElabCtx, expr: *mut Expr, type_hint: *Type) {
