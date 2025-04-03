@@ -24,6 +24,7 @@ Bittle resembles a smaller, more modern C, with the following core features:
     - All types are passed by value and returned by value.
     - Pointers can be used for reference semantics.
 - Other:
+    - Pointed-to values are immutable by default.
     - Memory is managed manually. Support for dynamic memory allocation using externally provided functions.
 
 Bittle can also interoperate with C. Currently, there is no standard library, so basic functionality like I/O must be provided externally.
@@ -54,6 +55,90 @@ The language extension for Visual Studio Code provides the following features:
 - References and renaming
 - Code completion
 - Signature help during function calls
+
+## More examples
+
+**Binary Search**
+```
+func binary_search(xs: *Int, n: Int, key: Int): Int {
+    var lo = 0;
+    var hi = n;
+    while (lo < hi) {
+        var mid = (hi - lo) / 2 + lo;
+        if (xs[mid] < key) {
+            lo = mid + 1;
+        } else if (xs[mid] > key) {
+            hi = mid;
+        } else {
+            return mid;
+        }
+    }
+    return -lo - 1;
+}
+```
+
+**Linked List**
+```
+struct LinkedList {
+    head: *mut ListNode,
+    tail: *mut ListNode,
+}
+
+struct ListNode {
+    prev: *mut ListNode,
+    next: *mut ListNode,
+    value: *Void,
+}
+
+func list_reverse(list: *mut LinkedList) {
+    var curr = list.head;
+    var prev: *mut ListNode = null;
+    while (curr != null) {
+        var next = curr.next;
+        curr.next = prev;
+        curr.prev = next;
+        prev = curr;
+        curr = next;
+    }
+    list.tail = list.head;
+    list.head = prev;
+}
+```
+
+**Shape Union**
+```
+enum ShapeKind {
+    Shape_Circle,
+    Shape_Square,
+}
+
+struct Circle {
+    kind: ShapeKind = Shape_Circle,
+    radius: Int,
+}
+
+struct Square {
+    kind: ShapeKind = Shape_Square,
+    side: Int,
+}
+
+union Shape {
+    kind: ShapeKind,
+    Circle: Circle,
+    Square: Square,
+}
+
+func area(shape: *Shape): Int {
+    match (shape.kind) {
+        case Shape_Circle:
+            return 3 * shape.Circle.radius * shape.Circle.radius;
+        case Shape_Square:
+            return shape.Square.side * shape.Square.side;
+        case _:
+            return -1;
+    }
+}
+```
 
 ## Bootstrapping
 

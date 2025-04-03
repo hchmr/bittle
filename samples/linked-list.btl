@@ -1,0 +1,59 @@
+//# exit = 0
+//# args = the chicken crossed the road
+//# stdout = road the crossed chicken the
+
+extern func malloc(size: Int): *Void;
+extern func printf(format: *Char, ...): Int;
+
+struct LinkedList {
+    head: *mut ListNode,
+    tail: *mut ListNode,
+}
+
+struct ListNode {
+    prev: *mut ListNode,
+    next: *mut ListNode,
+    value: *Void,
+}
+
+func list_append(list: *mut LinkedList, value: *Void): *mut ListNode {
+    var node = malloc(sizeof(ListNode)) as *mut ListNode;
+    *node = ListNode { prev: null, next: null, value: value };
+    if (list.tail != null) {
+        list.tail.next = node;
+    } else {
+        list.head = node;
+    }
+    list.tail = node;
+    return node;
+}
+
+func list_reverse(list: *mut LinkedList) {
+    var curr = list.head;
+    var prev: *mut ListNode = null;
+    while (curr != null) {
+        var next = curr.next;
+        curr.next = prev;
+        curr.prev = next;
+        prev = curr;
+        curr = next;
+    }
+    list.tail = list.head;
+    list.head = prev;
+}
+
+func main(argc: Int32, argv: **Char): Int32 {
+    var arg_list = LinkedList { head: null, tail: null };
+
+    for (var i: Int32 = 1; i < argc; i += 1) {
+        list_append(&arg_list, argv[i]);
+    }
+
+    list_reverse(&arg_list);
+
+    for (var node = arg_list.head; node != null; node = node.next) {
+        printf("%s%c", node.value, node.next ? ' ' : '\n');
+    }
+
+    return 0;
+}
