@@ -2083,7 +2083,7 @@ export class Elaborator {
         } else if (node instanceof GroupedExprNode) {
             return this.checkIfLvalue(node.exprNode);
         } else if (node instanceof NameExprNode) {
-            const sym = this.resolveName(node.identifierToken!);
+            const sym = this.getResolvedSym(node);
             if (!sym || ![SymKind.Local, SymKind.Global, SymKind.FuncParam].includes(sym.kind)) {
                 return { isLvalue: false };
             }
@@ -2127,6 +2127,12 @@ export class Elaborator {
         const type = this.nodeTypeMap.get(node.syntax);
         assert(type, `Missing type for node: ${node.syntax.type}`);
         return type;
+    }
+
+    private getResolvedSym(node: NameExprNode): Sym | undefined {
+        const qnames = this.nodeSymMap.get(node.identifierToken!) ?? [];
+        assert(qnames.length <= 1, 'Identifier should never resolve to multiple symbols in this context');
+        return qnames.length === 1 ? this.symbols.get(qnames[0]) : undefined;
     }
 
     private trackTyping(node: ExprNode | PatternNode | TypeNode, f: () => Type): Type {
