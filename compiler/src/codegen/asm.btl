@@ -3,6 +3,35 @@ module asm;
 import "../support/libc";
 import "../support/utils";
 
+/// Note: [Frame layout]
+/// ~~~~~~~~~~~~~~~~~~~~
+/// The code generator organizes the stack frame as follows:
+/// ```
+/// +-------------------+
+/// |                   |
+/// | spills            |
+/// |                   |
+/// +-------------------+ <- FP
+/// | saved x8          |
+/// +-------------------+
+/// |                   |
+/// | saved varargs     |
+/// |                   |
+/// +-------------------+
+/// |                   |
+/// | slots             |
+/// |                   |
+/// +-------------------+
+/// |                   |
+/// | scratch           |
+/// |                   |
+/// +-------------------+
+/// |                   |
+/// | outgoing args     |
+/// |                   |
+/// +-------------------+ <- SP
+/// ```
+
 enum Reg {
     Reg_X0, Reg_X1, Reg_X2, Reg_X3, Reg_X4, Reg_X5, Reg_X6, Reg_X7, Reg_X8,
     Reg_X9, Reg_X10, Reg_X11, Reg_X12, Reg_X13, Reg_X14, Reg_X15,
@@ -14,15 +43,33 @@ enum Reg {
 const N_REGS = 32;
 const N_CALLEE_SAVED_REGS = Reg_X28 - Reg_X19 + 1;
 
+struct FrameLayout {
+    total_size: Int,
+    spills_size: Int,
+    varargs_offset: Int,
+    varargs_size: Int,
+    slots_offset: Int,
+    slots_size: Int,
+    scratch_offset: Int,
+    scratch_size: Int,
+}
+
 struct AsmInstrBuilder;
 
 struct AsmFunc {
     name: *Char,
     builder: *mut AsmInstrBuilder,
-    frame_size: Int,
+    frame_layout: FrameLayout,
     n_spills: Int,
     spills: [Reg; N_REGS],
-    spills_size: Int,
+}
+
+enum FrameOffsetKind {
+    FrameStartOffset,
+    FpOffset,
+    SlotsOffset,
+    ScratchOffset,
+    SpOffset,
 }
 
 enum AsmOperandKind {
@@ -31,8 +78,8 @@ enum AsmOperandKind {
     AsmOperand_Int,
     AsmOperand_Label,
     AsmOperand_Global,
-    AsmOperand_FpFromFrameStart,
-    AsmOperand_SpFromFp,
+    AsmOperand_FpFromPoint,
+    AsmOperand_SpFromPoint,
     AsmOperand_Raw,
 }
 
@@ -80,14 +127,16 @@ struct AsmGlobalOperand: AsmOperandBase {
     counter: Int, // Only used for strings
 }
 
-struct AsmFpFromFrameStartOperand: AsmOperandBase {
-    kind = AsmOperand_FpFromFrameStart,
+struct AsmFpFromPointOperand: AsmOperandBase {
+    kind = AsmOperand_FpFromPoint,
+    offset_kind: FrameOffsetKind,
     offset: Int,
 }
 
-struct AsmSpFromFpOperand: AsmOperandBase {
-    kind = AsmOperand_SpFromFp,
-    fp_offset: Int,
+struct AsmSpFromPointOperand: AsmOperandBase {
+    kind = AsmOperand_SpFromPoint,
+    offset_kind: FrameOffsetKind,
+    offset: Int,
 }
 
 struct AsmRawOperand: AsmOperandBase {
@@ -101,8 +150,8 @@ union AsmOperand: AsmOperandBase {
     Int: AsmIntOperand,
     Label: AsmLabelOperand,
     Global: AsmGlobalOperand,
-    FpFromFrameStart: AsmFpFromFrameStartOperand,
-    SpFromFp: AsmSpFromFpOperand,
+    FpFromPoint: AsmFpFromPointOperand,
+    SpFromPoint: AsmSpFromPointOperand,
     Raw: AsmRawOperand,
 }
 
@@ -150,15 +199,17 @@ func asm_mk_global_operand(relocation_spec: *Char, prefix: *Char, suffix: Int): 
     };
 }
 
-func asm_mk_fp_from_frame_start_operand(offset: Int): AsmFpFromFrameStartOperand {
-    return AsmFpFromFrameStartOperand {
+func asm_mk_fp_from_point_operand(offset_kind: FrameOffsetKind, offset: Int): AsmFpFromPointOperand {
+    return AsmFpFromPointOperand {
+        offset_kind: offset_kind,
         offset: offset,
     };
 }
 
-func asm_mk_sp_from_fp_operand(fp_offset: Int): AsmSpFromFpOperand {
-    return AsmSpFromFpOperand {
-        fp_offset: fp_offset,
+func asm_mk_sp_from_point_operand(offset_kind: FrameOffsetKind, offset: Int): AsmSpFromPointOperand {
+    return AsmSpFromPointOperand {
+        offset_kind: offset_kind,
+        offset: offset,
     };
 }
 
@@ -184,17 +235,17 @@ func asm_mk_reg_mem_operand(reg: Reg, offset: Int): AsmMemOperand {
     return operand;
 }
 
-func asm_mk_fp_from_frame_start_mem_operand(offset: Int): AsmMemOperand {
+func asm_mk_fp_from_point_mem_operand(offset_kind: FrameOffsetKind, offset: Int): AsmMemOperand {
     var operand = asm_mk_mem_operand(2);
     operand.args[0] = asm_mk_reg_operand(8, FP);
-    operand.args[1] = asm_mk_fp_from_frame_start_operand(offset);
+    operand.args[1] = asm_mk_fp_from_point_operand(offset_kind, offset);
     return operand;
 }
 
-func asm_mk_sp_from_fp_mem_operand(fp_offset: Int): AsmMemOperand {
+func asm_mk_sp_from_point_mem_operand(offset_kind: FrameOffsetKind, offset: Int): AsmMemOperand {
     var operand = asm_mk_mem_operand(2);
     operand.args[0] = asm_mk_reg_operand(8, SP);
-    operand.args[1] = asm_mk_sp_from_fp_operand(fp_offset);
+    operand.args[1] = asm_mk_sp_from_point_operand(offset_kind, offset);
     return operand;
 }
 
@@ -306,17 +357,17 @@ func asm_write_ldrs_r(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, xs: Re
     asm_write_ldrs_ri(builder, width, xd, xs, 0);
 }
 
-// ldr {xd}, [fp, #{frame_start_from_fp + offset}]
-func asm_write_ldrs_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, offset: Int) {
+// ldr {xd}, [fp, #{???}]
+func asm_write_ldrs_r_fp_from_point(builder: *mut AsmInstrBuilder, offset_kind: FrameOffsetKind, width: Int, xd: Reg, offset: Int) {
     var dst_operand = asm_mk_reg_operand(8, xd);
-    var src_operand = asm_mk_fp_from_frame_start_mem_operand(offset);
+    var src_operand = asm_mk_fp_from_point_mem_operand(offset_kind, offset);
     asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
-// ldr {xd}, [sp, #{stack_size + fp_offset}]
-func asm_write_ldrs_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, fp_offset: Int) {
+// ldr {xd}, [sp, #{???}]
+func asm_write_ldrs_r_sp_from_point(builder: *mut AsmInstrBuilder, offset_kind: FrameOffsetKind, width: Int, xd: Reg, offset: Int) {
     var dst_operand = asm_mk_reg_operand(8, xd);
-    var src_operand = asm_mk_sp_from_fp_mem_operand(fp_offset);
+    var src_operand = asm_mk_sp_from_point_mem_operand(offset_kind, offset);
     asm_write_ldrs(builder, width, dst_operand, src_operand);
 }
 
@@ -341,11 +392,19 @@ func asm_write_str_r(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, xd: Reg
     asm_write_str_ri(builder, width, xs, xd, 0);
 }
 
-// str {xs}, [sp, #{stack_size + fp_offset}]
-func asm_write_str_r_sp_from_fp(builder: *mut AsmInstrBuilder, width: Int, xs: Reg, fp_offset: Int) {
+// str {xs}, [sp, #{???}]
+func asm_write_str_r_sp_from_point(builder: *mut AsmInstrBuilder, offset_kind: FrameOffsetKind, width: Int, xs: Reg, offset: Int) {
     var src_width = reg_width_from_size(width);
     var src_operand = asm_mk_reg_operand(src_width, xs);
-    var dst_operand = asm_mk_sp_from_fp_mem_operand(fp_offset);
+    var dst_operand = asm_mk_sp_from_point_mem_operand(offset_kind, offset);
+    asm_write_str(builder, width, src_operand, dst_operand);
+}
+
+// str {xs}, [fp, #{???}]
+func asm_write_str_r_fp_from_point(builder: *mut AsmInstrBuilder, offset_kind: FrameOffsetKind, width: Int, xs: Reg, offset: Int) {
+    var src_width = reg_width_from_size(width);
+    var src_operand = asm_mk_reg_operand(src_width, xs);
+    var dst_operand = asm_mk_fp_from_point_mem_operand(offset_kind, offset);
     asm_write_str(builder, width, src_operand, dst_operand);
 }
 
@@ -396,12 +455,12 @@ func asm_write_add_ri(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, x1: Re
     asm_write_binary_op_ri(builder, "add", xd, x1, imm);
 }
 
-// add {xd}, fp, #{frame_start_from_fp + offset}
-func asm_write_add_r_fp_from_frame_start(builder: *mut AsmInstrBuilder, width: Int, xd: Reg, offset: Int) {
+// add {xd}, fp, #{???}
+func asm_write_add_r_fp_from_point(builder: *mut AsmInstrBuilder, offset_kind: FrameOffsetKind, width: Int, xd: Reg, offset: Int) {
     var instr = asm_write_instr(builder, "add", n_args: 3);
     instr.args[0] = asm_mk_reg_operand(8, xd);
     instr.args[1] = asm_mk_reg_operand(8, FP);
-    instr.args[2] = asm_mk_fp_from_frame_start_operand(offset);
+    instr.args[2] = asm_mk_fp_from_point_operand(offset_kind, offset);
 }
 
 // add {xd}, {x1}, {x2}
@@ -578,13 +637,49 @@ func asm_print_operand(out: *mut File, fun: *AsmFunc, operand: *mut AsmOperand) 
                 fprintf(out, "%d", operand.counter);
             }
         }
-        case AsmOperand_FpFromFrameStart: {
-            var operand = &operand.FpFromFrameStart;
-            fprintf(out, "#%d", fun.spills_size + operand.offset);
+        case AsmOperand_FpFromPoint: {
+            var operand = &operand.FpFromPoint;
+            var layout = &fun.frame_layout;
+            var sp_from_fp_offset = -layout.total_size + layout.spills_size;
+            match (operand.offset_kind) {
+                case FrameStartOffset: {
+                    fprintf(out, "#%d", layout.spills_size + operand.offset);
+                }
+                case FpOffset: {
+                    fprintf(out, "#%d", operand.offset);
+                }
+                case SlotsOffset: {
+                    fprintf(out, "#%d", layout.slots_offset + operand.offset);
+                }
+                case ScratchOffset: {
+                    fprintf(out, "#%d", layout.scratch_offset + operand.offset);
+                }
+                case SpOffset: {
+                    fprintf(out, "#%d", sp_from_fp_offset + operand.offset);
+                }
+            }
         }
-        case AsmOperand_SpFromFp: {
-            var operand = &operand.SpFromFp;
-            fprintf(out, "#%d", fun.frame_size - fun.spills_size + operand.fp_offset);
+        case AsmOperand_SpFromPoint: {
+            var operand = &operand.SpFromPoint;
+            var layout = &fun.frame_layout;
+            var fp_from_sp_offset = layout.total_size - layout.spills_size;
+            match (operand.offset_kind) {
+                case FrameStartOffset: {
+                    fprintf(out, "#%d", fp_from_sp_offset + layout.spills_size + operand.offset);
+                }
+                case FpOffset: {
+                    fprintf(out, "#%d", fp_from_sp_offset + operand.offset);
+                }
+                case SlotsOffset: {
+                    fprintf(out, "#%d", fp_from_sp_offset + layout.slots_offset + operand.offset);
+                }
+                case ScratchOffset: {
+                    fprintf(out, "#%d", fp_from_sp_offset + layout.scratch_offset + operand.offset);
+                }
+                case SpOffset: {
+                    fprintf(out, "#%d", operand.offset);
+                }
+            }
         }
         case AsmOperand_Raw: {
             var operand = &operand.Raw;
@@ -622,7 +717,7 @@ func asm_print_instr(out: *mut File, fun: *AsmFunc, instr: *mut AsmInstr) {
 func asm_print_func(out: *mut File, fun: *AsmFunc) {
     var n_spills = fun.n_spills;
     var spills = fun.spills;
-    var spills_size = fun.spills_size;
+    var spills_size = fun.frame_layout.spills_size;
 
     fprintf(out, "  .text\n");
     fprintf(out, "  .align 2\n");
@@ -640,7 +735,7 @@ func asm_print_func(out: *mut File, fun: *AsmFunc) {
         }
     }
     fprintf(out, "  mov  x29, sp\n");
-    fprintf(out, "  sub  sp, sp, #%d\n", fun.frame_size - spills_size);
+    fprintf(out, "  sub  sp, sp, #%d\n", fun.frame_layout.total_size - spills_size);
 
     var instrs = fun.builder.instrs;
     var n_instrs = list_len(instrs);
@@ -651,7 +746,7 @@ func asm_print_func(out: *mut File, fun: *AsmFunc) {
 
     // epilogue
     fprintf(out, "  // epilogue\n");
-    fprintf(out, "  add  sp, sp, #%d\n", fun.frame_size - spills_size);
+    fprintf(out, "  add  sp, sp, #%d\n", fun.frame_layout.total_size - spills_size);
     for (var i = 0; i < n_spills; i += 2) {
         if (i + 1 < n_spills) {
             fprintf(out, "  ldp  x%d, x%d, [sp, #%d]\n", spills[i], spills[i + 1], i * 8);
