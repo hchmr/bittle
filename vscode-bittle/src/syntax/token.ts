@@ -83,7 +83,6 @@ export const keywords = [
     'if',
     'is',
     'import',
-    'include',
     'match',
     'module',
     'mut',

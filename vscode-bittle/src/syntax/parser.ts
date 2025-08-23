@@ -307,9 +307,7 @@ export class Parser extends ParserBase {
     // Top-level declarations
 
     topLevelDecl() {
-        if (this.match('include')) {
-            this.includeDecl();
-        } else if (this.match('module')) {
+        if (this.match('module')) {
             this.ModuleNameDecl();
         } else if (this.match('import')) {
             this.importDecl();
@@ -340,16 +338,6 @@ export class Parser extends ParserBase {
         } else {
             this.addErrorAndTryBump(`Expected 'func' or 'var' after 'extern'.`);
         }
-    }
-
-    includeDecl() {
-        this.beginNode(CompositeNodeTypes.IncludeDecl);
-        this.bump('include');
-        this.beginField('path');
-        this.expect('string_literal');
-        this.finishField('path');
-        this.expect(';');
-        this.finishNode(CompositeNodeTypes.IncludeDecl);
     }
 
     ModuleNameDecl() {
@@ -1434,7 +1422,7 @@ class TokenKindSet implements Iterable<TokenKind> {
 
 // First sets
 
-const topLevelFirst = new TokenKindSet('include', 'enum', 'struct', 'union', 'func', 'var', 'const', 'extern');
+const topLevelFirst = new TokenKindSet('enum', 'struct', 'union', 'func', 'var', 'const', 'extern');
 
 const exprFirst = new TokenKindSet(...Object.keys(nudTable) as TokenKind[]);
 

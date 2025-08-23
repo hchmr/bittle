@@ -3,7 +3,7 @@ import { CodeActionsProvider } from './features/codeActions';
 import { createCompilerErrorProvider } from './features/compilerErrors';
 import { CompletionProvider } from './features/completion';
 import { ElaborationDiagnosticProvider } from './features/elaborationDiags';
-import { ImportAndIncludeDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
+import { ImportDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { ReferenceProvider } from './features/references';
 import { SemanticTokensProvider } from './features/semanticTokens';
@@ -101,7 +101,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const nameDefinitionProvider = new NameDefinitionProvider(parsingService, semanticsService, fileGraphService);
     context.subscriptions.push(
-        vscode.languages.registerDefinitionProvider('bittle', new ImportAndIncludeDefinitionProvider(pathResolver, parsingService)),
+        vscode.languages.registerDefinitionProvider('bittle', new ImportDefinitionProvider(pathResolver, parsingService)),
         vscode.languages.registerDefinitionProvider('bittle', nameDefinitionProvider),
         vscode.languages.registerImplementationProvider('bittle', nameDefinitionProvider),
         vscode.languages.registerTypeDefinitionProvider('bittle', new TypeDefinitionProvider(parsingService, semanticsService)),

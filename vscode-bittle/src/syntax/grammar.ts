@@ -10,7 +10,6 @@ export const grammar = createGrammar({
     Root: $ => repeat($.Decl),
 
     Decl: $ => choice(
-        $.IncludeDecl,
         $.ModuleNameDecl,
         $.ImportDecl,
         $.EnumDecl,
@@ -18,12 +17,6 @@ export const grammar = createGrammar({
         $.FuncDecl,
         $.GlobalDecl,
         $.ConstDecl,
-    ),
-
-    IncludeDecl: $ => seq(
-        'include',
-        label('path', 'string_literal'),
-        ';',
     ),
 
     ModuleNameDecl: $ => seq(

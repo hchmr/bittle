@@ -17,7 +17,6 @@ export type NodeType = ValuesOf<typeof NodeTypes> | ErrorNodeType;
 
 export const TopLevelNodeTypes = {
     Module: AstNodeTypes.ModuleNameDecl,
-    Include: AstNodeTypes.IncludeDecl,
     Import: AstNodeTypes.ImportDecl,
     Enum: AstNodeTypes.EnumDecl,
     Record: AstNodeTypes.RecordDecl,

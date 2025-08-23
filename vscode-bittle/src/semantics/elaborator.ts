@@ -1,10 +1,10 @@
-import assert, { AssertionError } from 'assert';
-import { basename as pathBasename, resolve as resolvePath } from 'path';
+import assert from 'assert';
+import { basename as pathBasename } from 'path';
 import { ParsingService } from '../services/parsingService';
 import { PathResolver } from '../services/pathResolver';
 import { PointRange, SyntaxNode } from '../syntax';
 import { AstNode, TokenNode } from '../syntax/ast';
-import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, ImportDeclNode, IncludeDeclNode, IndexExprNode, IntLiteralNode, IsExprNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, ModuleNameDeclNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
+import { ArrayExprNode, ArrayTypeNode, BinaryExprNode, BlockStmtNode, BoolLiteralNode, BreakStmtNode, CallArgListNode, CallExprNode, CastExprNode, CharLiteralNode, ConstDeclNode, ContinueStmtNode, DeclNode, EnumDeclNode, EnumMemberNode, ExprNode, ExprStmtNode, FieldExprNode, FieldNode, ForStmtNode, FuncDeclNode, FuncParamNode, GlobalDeclNode, GroupedExprNode, GroupedPatternNode, GroupedTypeNode, IfStmtNode, ImportDeclNode, IndexExprNode, IntLiteralNode, IsExprNode, LiteralExprNode, LiteralNode, LiteralPatternNode, LocalDeclNode, MatchCaseNode, MatchStmtNode, ModuleNameDeclNode, NameExprNode, NamePatternNode, NameTypeNode, NeverTypeNode, NormalFuncParamNode, NullLiteralNode, OrPatternNode, PatternNode, PointerTypeNode, RangePatternNode, RecordDeclNode, RecordExprNode, RestFuncParamNode, RestParamTypeNode, ReturnStmtNode, RootNode, SizeofExprNode, StmtNode, StringLiteralNode, TernaryExprNode, TypeNode, TypeofTypeNode, UnaryExprNode, VarPatternNode, WhileStmtNode, WildcardPatternNode } from '../syntax/generated';
 import { Nullish, unreachable } from '../utils';
 import { ReactiveCache } from '../utils/reactiveCache';
 import { stream } from '../utils/stream';
@@ -12,7 +12,7 @@ import { ConstValue, ConstValueKind, mkIntConstValue } from './const';
 import { ConstEvaluator } from './constEvaluator';
 import { Scope } from './scope';
 import { ConstSym, EnumSym, FuncParamSym, FuncSym, GlobalSym, LocalSym, Origin, RecordFieldSym, RecordKind, RecordSym, Sym, SymKind } from './sym';
-import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, tryUnifyTypesWithCoercion, Type, typeCastable, typeEq, typeImplicitlyCastable, TypeKind, typeLayout, unifyTypes } from './type';
+import { canCoerce, isScalarType, isValidReturnType, mkArrayType, mkBoolType, mkEnumType, mkErrorType, mkIntType, mkNeverType, mkPointerType, mkRecordType, mkRestParamType, mkVoidType, prettyType, primitiveTypes, tryUnifyTypes, tryUnifyTypesWithCoercion, Type, typeCastable, typeEq, typeImplicitlyCastable, TypeKind, typeLayout } from './type';
 
 export type ErrorLocation = {
     file: string;
@@ -46,11 +46,6 @@ export type ElaboratorResult = {
     nodeTypeMap: WeakMap<SyntaxNode, Type>;
     references: Map<string, SymReference[]>;
     diagnostics: ElaborationDiag[];
-};
-
-type IncludedDecl = {
-    path: string;
-    node: DeclNode;
 };
 
 export class Elaborator {
@@ -704,32 +699,27 @@ export class Elaborator {
     //== Top-level
 
     private elabRoot(rootNode: RootNode) {
-        const decls: IncludedDecl[] = [];
-        this.expandIncludes(this.path, rootNode.declNodes, new Set(), decls);
-
         let hasModuleName = false;
-        if (decls[0]?.node instanceof ModuleNameDeclNode) {
+        if (rootNode.declNodes[0] instanceof ModuleNameDeclNode) {
             hasModuleName = true;
-            this.processModuleName(decls[0].node);
+            this.processModuleName(rootNode.declNodes[0]);
         }
 
-        const moduleHeadersAndImports: IncludedDecl[] = [];
-        const typesAndConsts: IncludedDecl[] = [];
-        const funcsAndGlobals: IncludedDecl[] = [];
+        const moduleHeadersAndImports: DeclNode[] = [];
+        const typesAndConsts: DeclNode[] = [];
+        const funcsAndGlobals: DeclNode[] = [];
 
-        for (const [i, decl] of decls.entries()) {
+        for (const [i, node] of rootNode.declNodes.entries()) {
             if (hasModuleName && i === 0) {
                 // Skip
-            } else if (decl.node instanceof IncludeDeclNode) {
-                // Skip
-            } else if (decl.node instanceof ModuleNameDeclNode || decl.node instanceof ImportDeclNode) {
-                moduleHeadersAndImports.push(decl);
-            } else if (decl.node instanceof RecordDeclNode || decl.node instanceof EnumDeclNode || decl.node instanceof ConstDeclNode) {
-                typesAndConsts.push(decl);
-            } else if (decl.node instanceof FuncDeclNode || decl.node instanceof GlobalDeclNode) {
-                funcsAndGlobals.push(decl);
+            } else if (node instanceof ModuleNameDeclNode || node instanceof ImportDeclNode) {
+                moduleHeadersAndImports.push(node);
+            } else if (node instanceof RecordDeclNode || node instanceof EnumDeclNode || node instanceof ConstDeclNode) {
+                typesAndConsts.push(node);
+            } else if (node instanceof FuncDeclNode || node instanceof GlobalDeclNode) {
+                funcsAndGlobals.push(node);
             } else {
-                unreachable(decl.node);
+                unreachable(node);
             }
         }
 
@@ -738,48 +728,9 @@ export class Elaborator {
         this.elabDecls(funcsAndGlobals);
     }
 
-    private elabDecls(includedDecls: IncludedDecl[]) {
-        const completionCallbacks = includedDecls.map(({ path, node }) => {
-            const complete = this.withPath(path, () => this.elabDecl(node));
-            if (!complete) {
-                return () => { /* skip */ };
-            }
-            return () => this.withPath(path, complete);
-        });
-
-        completionCallbacks.forEach((complete) => complete());
-    }
-
-    private expandIncludes(path: string, declNodes: DeclNode[], seenPaths: Set<string>, result: IncludedDecl[]) {
-        const resolvedPath = resolvePath(path);
-
-        seenPaths.add(resolvedPath);
-        for (const node of declNodes) {
-            if (node instanceof IncludeDeclNode) {
-                this.processInclude(node, seenPaths, result);
-            } else {
-                result.push({ path, node });
-            }
-        }
-    }
-
-    private processInclude(node: IncludeDeclNode, seenPaths: Set<string>, result: IncludedDecl[]) {
-        if (!node.path) {
-            return;
-        }
-
-        const resolvedPath = this.pathResolver.resolveInclude(this.path, node.path);
-        if (!resolvedPath) {
-            this.reportError(node, `Cannot resolve include.`);
-            return;
-        }
-
-        if (seenPaths.has(resolvedPath)) {
-            return;
-        }
-
-        const tree = this.parsingService.parseAsAst(resolvedPath);
-        return this.expandIncludes(resolvedPath, tree.declNodes, seenPaths, result);
+    private elabDecls(declNodes: DeclNode[]) {
+        const completionCallbacks = declNodes.map((node) => this.elabDecl(node));
+        completionCallbacks.forEach((complete) => complete?.());
     }
 
     private processModuleName(node: ModuleNameDeclNode) {
@@ -797,9 +748,7 @@ export class Elaborator {
     }
 
     private elabDecl(node: DeclNode): undefined | (() => void) {
-        if (node instanceof IncludeDeclNode) {
-            // Skip
-        } else if (node instanceof ImportDeclNode) {
+        if (node instanceof ImportDeclNode) {
             this.elabImport(node);
         } else if (node instanceof ModuleNameDeclNode) {
             this.handleBadModuleName(node);
@@ -2139,14 +2088,6 @@ export class Elaborator {
         const type = f();
         this.setType(node, type);
         return type;
-    }
-
-    private withPath<T>(path: string, callback: () => T): T {
-        const oldPath = this.path;
-        this.path = path;
-        const result = callback();
-        this.path = oldPath;
-        return result;
     }
 
     private reportDiagnostic(range: PointRange, severity: Severity, message: string) {

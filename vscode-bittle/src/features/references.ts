@@ -78,7 +78,7 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             // add definitions
             if (context.includeDeclaration) {
                 references.push(
-                    ...stream([symbol]).concat(this.getSameSymbolInIncludingFiles(symbol))
+                    ...stream([symbol])
                         .flatMap(sym => sym.origins)
                         .filterMap(origin => origin.nameNode && { file: origin.file, nameNode: origin.nameNode }),
                 );
@@ -90,26 +90,13 @@ export class ReferenceProvider implements vscode.ReferenceProvider, vscode.Renam
             );
 
             // add references in referring files
-            for (const referringFile of this.findIncludingFiles(symbol).concat(this.findImportingFiles(symbol))) {
+            for (const referringFile of this.findImportingFiles(symbol)) {
                 references.push(...this.semanticsService.references(referringFile, symbol.qualifiedName));
             }
         }
 
         return stream(references)
             .distinctBy(reference => reference.file + '|' + reference.nameNode.startIndex);
-    }
-
-    private getSameSymbolInIncludingFiles(symbol: Sym) {
-        return this.findIncludingFiles(symbol)
-            .filterMap(filePath => this.semanticsService.getSymbol(filePath, symbol.qualifiedName));
-    }
-
-    private findIncludingFiles(symbol: Sym) {
-        return stream(symbol.origins)
-            .map(origin => origin.file)
-            .distinct()
-            .flatMap(filePath => this.fileGraphService.getFinalIncludingFiles(filePath))
-            .distinct();
     }
 
     private findImportingFiles(symbol: Sym) {

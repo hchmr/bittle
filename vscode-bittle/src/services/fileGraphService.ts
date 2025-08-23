@@ -17,15 +17,6 @@ export class FileGraphService {
         private pathResolver: PathResolver,
     ) { }
 
-    getFinalIncludingFiles(filePath: string): string[] {
-        const includeGraph = this.getFileGraph(path => {
-            const tree = this.parsingService.parse(path);
-            return this.getReferencesForFile(path, tree, NodeTypes.IncludeDecl);
-        });
-        return transitiveReferences(filePath, includeGraph)
-            .filter(path => includeGraph.incoming.get(path)!.size === 0);
-    }
-
     getImportingFiles(filePath: string): string[] {
         const importGraph = this.getFileGraph(path => {
             const tree = this.parsingService.parse(path);
@@ -49,9 +40,9 @@ export class FileGraphService {
             outgoing.set(filePath, getOutgoing(filePath));
         }
 
-        for (const [filePath, includes] of outgoing) {
-            for (const include of includes) {
-                incoming.get(include)!.add(filePath);
+        for (const [filePath, references] of outgoing) {
+            for (const reference of references) {
+                incoming.get(reference)!.add(filePath);
             }
         }
 
@@ -65,11 +56,9 @@ export class FileGraphService {
             if (type) {
                 const pathNode = node.childForFieldName('path');
                 if (pathNode) {
-                    const includePath = node.type == DeclNodeTypes.IncludeDecl
-                        ? this.pathResolver.resolveInclude(path, pathNode)
-                        : this.pathResolver.resolveImport(path, pathNode);
-                    if (includePath) {
-                        references.add(includePath);
+                    const reference = this.pathResolver.resolveImport(path, pathNode);
+                    if (reference) {
+                        references.add(reference);
                     }
                 }
             }
@@ -77,27 +66,4 @@ export class FileGraphService {
 
         return references;
     }
-}
-
-// Gets all files that transitively includes the given file
-function transitiveReferences(initialNode: string, graph: FileGraph): string[] {
-    const visited = new Set<string>();
-
-    const visit = (path: string) => {
-        if (visited.has(path)) {
-            return;
-        }
-
-        visited.add(path);
-
-        for (const incoming of graph.incoming.get(path)!) {
-            visit(incoming);
-        }
-    };
-
-    visit(initialNode);
-
-    visited.delete(initialNode);
-
-    return Array.from(visited);
 }
