@@ -16,7 +16,7 @@ export class ModuleListService {
         });
     }
 
-    private *getModuleListUncached(): Iterable<string> {
+    private* getModuleListUncached(): Iterable<string> {
         for (const filePath of this.vfs.listFiles()) {
             const tree = this.parsingService.parse(filePath);
             for (const node of tree.rootNode.children) {

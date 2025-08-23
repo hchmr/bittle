@@ -36,8 +36,8 @@ class StreamImpl<T> implements Stream<T> {
     constructor(private source: Iterable<T>) { }
     concat<U>(other: Iterable<U>): Stream<T | U> {
         return new StreamImpl((function* (source1, source2) {
-            yield * source1;
-            yield * source2;
+            yield* source1;
+            yield* source2;
         })(this.source, other));
     }
 
@@ -53,7 +53,7 @@ class StreamImpl<T> implements Stream<T> {
     flatMap<U>(f: (x: T) => Iterable<U>): Stream<U> {
         return new StreamImpl((function* (source) {
             for (const x of source) {
-                yield * f(x);
+                yield* f(x);
             }
         })(this.source));
     }

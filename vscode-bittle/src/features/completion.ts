@@ -325,11 +325,11 @@ type CompletionCandidate =
     | { kind: 'static'; name: string; completionKind: vscode.CompletionItemKind };
 
 function* generateBuiltins(): Iterable<CompletionCandidate> {
-    yield * builtinValues
+    yield* builtinValues
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Constant }));
-    yield * builtinTypes
+    yield* builtinTypes
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Struct }));
-    yield * keywords
+    yield* keywords
         .filter(name => !(builtinValues as readonly string[]).includes(name))
         .map<CompletionCandidate>(name => ({ kind: 'static', name: name, completionKind: vscode.CompletionItemKind.Keyword }));
 }

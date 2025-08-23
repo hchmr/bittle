@@ -26,13 +26,13 @@ export function* childRules(rule: Rule): Generator<Rule> {
 export function* childRulesRec(rule: Rule): Generator<Rule> {
     for (const child of childRules(rule)) {
         yield child;
-        yield * childRulesRec(child);
+        yield* childRulesRec(child);
     }
 }
 
 export function* grammarRulesChildRulesRec(grammar: Grammar): Generator<Rule> {
     for (const rule of Object.values(grammar)) {
         yield rule;
-        yield * childRulesRec(rule);
+        yield* childRulesRec(rule);
     }
 }

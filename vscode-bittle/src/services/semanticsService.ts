@@ -37,12 +37,12 @@ export class SemanticsService {
         return stream(function* go(scope: Scope | Nullish): Iterable<Sym> {
             if (!scope) {
                 for (const [_, importedModule] of module.imports) {
-                    yield * stream(getSymbolsInScope(importedModule.rootScope));
+                    yield* stream(getSymbolsInScope(importedModule.rootScope));
                 }
                 return;
             }
-            yield * stream(getSymbolsInScope(scope));
-            yield * go(scope.parent);
+            yield* stream(getSymbolsInScope(scope));
+            yield* go(scope.parent);
         }(innerScope));
 
         function getSymbolsInScope(scope: Scope): Iterable<Sym> {

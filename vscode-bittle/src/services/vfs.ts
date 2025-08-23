@@ -125,7 +125,7 @@ export class VirtualFileSystemImpl implements VirtualFileSystem, vscode.Disposab
         return files;
     }
 
-    private *listFilesInWorkspaceFolder(folder: string): Iterable<string> {
+    private* listFilesInWorkspaceFolder(folder: string): Iterable<string> {
         for (const entry of fs.readdirSync(folder, { withFileTypes: true, recursive: true })) {
             if (entry.isFile() && isBittleFile(entry.name)) {
                 const filePath = path.join(entry.parentPath, entry.name);
