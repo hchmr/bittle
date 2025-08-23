@@ -6,6 +6,7 @@ import { ElaborationDiagnosticProvider } from './features/elaborationDiags';
 import { ImportDefinitionProvider, NameDefinitionProvider, TypeDefinitionProvider } from './features/gotoDefinition';
 import { HoverProvider } from './features/hover';
 import { ReferenceProvider } from './features/references';
+import { SelectionRangeProvider } from './features/selectionRange';
 import { SemanticTokensProvider } from './features/semanticTokens';
 import { SignatureHelpProvider } from './features/signatureHelp';
 import { DocumentSymbolsProvider as SymbolProvider } from './features/symbols';
@@ -123,6 +124,11 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.languages.registerReferenceProvider('bittle', referenceProvider),
         vscode.languages.registerRenameProvider('bittle', referenceProvider),
+    );
+
+    // Selection range provider
+    context.subscriptions.push(
+        vscode.languages.registerSelectionRangeProvider('bittle', new SelectionRangeProvider(parsingService)),
     );
 
     // TODO:
