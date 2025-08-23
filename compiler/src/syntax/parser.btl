@@ -14,15 +14,6 @@ struct Parser {
     lexer: *mut Lexer,
     tok: Tok,
     lookahead: Tok,
-    includes: *mut List, // List<*Char>
-}
-
-func try_add_include(self: *Parser, file_name: *Char): Bool {
-    if (string_list_contains(haystack: self.includes, needle: file_name)) {
-        return false;
-    }
-    list_push(self.includes, file_name);
-    return true;
 }
 
 func advance(self: *mut Parser) {
@@ -37,7 +28,6 @@ func peek(self: *mut Parser): *mut Tok {
 func parser_new(lexer: *mut Lexer): *mut Parser {
     var self = calloc(1, sizeof(Parser)) as *mut Parser;
     self.lexer = lexer;
-    self.includes = list_new();
     advance(self);
     advance(self);
     return self;
@@ -1274,43 +1264,9 @@ func p_decl_decl(self: *mut Parser): *mut Decl {
     }
 }
 
-func p_include(self: *mut Parser, decls: *mut List) {
-    var pos = self.tok.pos;
-    expect(self, Tok_Include);
-    var string_literal = expect_with_lexeme(self, Tok_String);
-    expect(self, Tok_Semicolon);
-
-    var path = parse_string(string_literal);
-    var curr_dir = get_dirname(pos.file);
-
-    var full_path = realpath(join_paths(curr_dir, sb_cstr(path)));
-    if (!full_path) {
-        die_at(&pos, "Could not find file to include: %s", path);
-    }
-
-    if (!try_add_include(self, full_path)) {
-        return;
-    }
-
-    var file = fopen(full_path, "r");
-    if (!file) {
-        perror("fopen");
-        exit(1);
-    }
-    var file_input = read_file(file);
-    var file_lexer = lexer_new(full_path, file_input);
-    var file_parser = parser_new(file_lexer);
-    file_parser.includes = self.includes;
-    parse_file(file_parser, decls);
-}
-
 func parse_file(self: *mut Parser, decls: *mut List) {
     while (!at_eof(self)) {
-        if (at(self, Tok_Include)) {
-            p_include(self, decls, );
-        } else {
-            list_push(decls, p_decl_decl(self));
-        }
+        list_push(decls, p_decl_decl(self));
     }
 }
 
@@ -1332,6 +1288,5 @@ func parse(file_name: *Char): *mut Ast {
     var text = read_file(file);
     var lexer = lexer_new(file_name, text);
     var parser = parser_new(lexer);
-    var ast = parser_run(parser);
-    return ast;
+    return parser_run(parser);
 }

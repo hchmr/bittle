@@ -25,7 +25,6 @@ enum TokKind {
     Tok_Func,
     Tok_If,
     Tok_Import,
-    Tok_Include,
     Tok_Is,
     Tok_Match,
     Tok_Module,
@@ -119,7 +118,6 @@ func pretty_tok_kind(kind: TokKind): *Char {
         case Tok_Func: return "'func'";
         case Tok_If: return "'if'";
         case Tok_Import: return "'import'";
-        case Tok_Include: return "'include'";
         case Tok_Is: return "'is'";
         case Tok_Match: return "'match'";
         case Tok_Module: return "'module'";
@@ -211,7 +209,6 @@ func lookup_keyword(lexeme: *Char, out: *mut TokKind): Bool {
         || try_keyword(lexeme, "func", out, Tok_Func)
         || try_keyword(lexeme, "if", out, Tok_If)
         || try_keyword(lexeme, "import", out, Tok_Import)
-        || try_keyword(lexeme, "include", out, Tok_Include)
         || try_keyword(lexeme, "is", out, Tok_Is)
         || try_keyword(lexeme, "match", out, Tok_Match)
         || try_keyword(lexeme, "module", out, Tok_Module)
