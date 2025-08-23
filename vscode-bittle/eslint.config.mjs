@@ -24,7 +24,6 @@ export default ts.config(
     ts.configs.stylistic,
     stylistic.configs.customize({
         indent: 4,
-        flat: true,
         semi: true,
         quotes: 'single',
         braceStyle: '1tbs',
